@@ -1,11 +1,4 @@
 {
   "title": "Merchant Documentation",
-  "pages": [
-    "index",
-    "get-started",
-    "payments",
-    "analytics",
-    "integrations",
-    "compliance"
-  ]
+  "pages": ["index", "get-started"]
 }

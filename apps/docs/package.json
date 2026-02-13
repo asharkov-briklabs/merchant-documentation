@@ -7,15 +7,17 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "postinstall": "fumadocs-mdx"
   },
   "dependencies": {
-    "next": "^14.0.4",
+    "next": "^14.2.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "fumadocs-ui": "^13.0.0",
-    "fumadocs-core": "^13.0.0",
+    "fumadocs-ui": "^13.4.0",
+    "fumadocs-core": "^13.4.0",
     "fumadocs-mdx": "^10.0.0",
+    "@types/mdx": "^2.0.0",
     "lucide-react": "^0.303.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
@@ -30,6 +32,6 @@
     "autoprefixer": "^10.4.16",
     "postcss": "^8.4.32",
     "eslint": "^8.56.0",
-    "eslint-config-next": "^14.0.4"
+    "eslint-config-next": "^14.2.0"
   }
 }

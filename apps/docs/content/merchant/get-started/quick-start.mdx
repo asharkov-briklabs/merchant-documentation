@@ -7,26 +7,20 @@ description: Accept your first payment with Vinr in 15 minutes
 
 This guide will walk you through creating your first payment with Vinr. By the end, you'll have processed a test transaction and be ready to integrate Vinr into your application.
 
-<Callout type="info">
-**Estimated time:** 15 minutes
-</Callout>
-
 ## Step 1: Create Your Account
 
-1. Go to [dashboard.vinr.com](https://dashboard.vinr.com)
+1. Go to dashboard.vinr.com
 2. Click "Sign Up" and complete the registration
 3. Verify your email address
 4. You'll be automatically logged into test mode
 
 ## Step 2: Get Your API Keys
 
-1. Navigate to **Settings** → **API Keys** in the dashboard
+1. Navigate to **Settings** then **API Keys** in the dashboard
 2. Click "Create New Key"
 3. Copy your **Publishable Key** and **Secret Key**
 
-<Callout type="warning">
-**Keep your Secret Key secure!** Never expose it in client-side code or public repositories.
-</Callout>
+> **Keep your Secret Key secure!** Never expose it in client-side code or public repositories.
 
 ```bash
 # Your keys will look like this:
@@ -36,115 +30,37 @@ VINR_SECRET_KEY=sk_test_xyz789...
 
 ## Step 3: Install the SDK
 
-Choose your preferred language:
-
-<Tabs items={['JavaScript', 'Python', 'PHP']}>
-  <Tab value="JavaScript">
-    ```bash
-    npm install @vinr/node-sdk
-    ```
-  </Tab>
-  
-  <Tab value="Python">
-    ```bash
-    pip install vinr
-    ```
-  </Tab>
-  
-  <Tab value="PHP">
-    ```bash
-    composer require vinr/vinr-php
-    ```
-  </Tab>
-</Tabs>
+```bash
+npm install @vinr/node-sdk
+```
 
 ## Step 4: Initialize the Client
 
-<Tabs items={['JavaScript', 'Python', 'PHP']}>
-  <Tab value="JavaScript">
-    ```javascript
-    const Vinr = require('@vinr/node-sdk');
-    
-    const vinr = new Vinr({
-      apiKey: process.env.VINR_SECRET_KEY,
-      environment: 'test' // Use 'production' for live transactions
-    });
-    ```
-  </Tab>
-  
-  <Tab value="Python">
-    ```python
-    import vinr
-    
-    vinr.api_key = os.environ.get('VINR_SECRET_KEY')
-    vinr.environment = 'test'  # Use 'production' for live
-    ```
-  </Tab>
-  
-  <Tab value="PHP">
-    ```php
-    require_once('vendor/autoload.php');
-    
-    \Vinr\Vinr::setApiKey(getenv('VINR_SECRET_KEY'));
-    \Vinr\Vinr::setEnvironment('test');
-    ```
-  </Tab>
-</Tabs>
+```javascript
+const Vinr = require('@vinr/node-sdk');
+
+const vinr = new Vinr({
+  apiKey: process.env.VINR_SECRET_KEY,
+  environment: 'test'
+});
+```
 
 ## Step 5: Create a Payment
 
-<Tabs items={['JavaScript', 'Python', 'PHP']}>
-  <Tab value="JavaScript">
-    ```javascript
-    const payment = await vinr.payments.create({
-      amount: 1000, // Amount in smallest currency unit (cents)
-      currency: 'BGN',
-      customer: {
-        email: 'customer@example.com',
-        name: 'John Doe'
-      },
-      description: 'Order #1234'
-    });
-    
-    console.log('Payment created:', payment.id);
-    console.log('Payment URL:', payment.url);
-    ```
-  </Tab>
-  
-  <Tab value="Python">
-    ```python
-    payment = vinr.Payment.create(
-        amount=1000,  # Amount in stotinki
-        currency='BGN',
-        customer={
-            'email': 'customer@example.com',
-            'name': 'John Doe'
-        },
-        description='Order #1234'
-    )
-    
-    print(f'Payment created: {payment.id}')
-    print(f'Payment URL: {payment.url}')
-    ```
-  </Tab>
-  
-  <Tab value="PHP">
-    ```php
-    $payment = \Vinr\Payment::create([
-        'amount' => 1000, // Amount in stotinki
-        'currency' => 'BGN',
-        'customer' => [
-            'email' => 'customer@example.com',
-            'name' => 'John Doe'
-        ],
-        'description' => 'Order #1234'
-    ]);
-    
-    echo 'Payment created: ' . $payment->id;
-    echo 'Payment URL: ' . $payment->url;
-    ```
-  </Tab>
-</Tabs>
+```javascript
+const payment = await vinr.payments.create({
+  amount: 1000,
+  currency: 'BGN',
+  customer: {
+    email: 'customer@example.com',
+    name: 'John Doe'
+  },
+  description: 'Order #1234'
+});
+
+console.log('Payment created:', payment.id);
+console.log('Payment URL:', payment.url);
+```
 
 ## Step 6: Test the Payment
 
@@ -154,56 +70,17 @@ Choose your preferred language:
 4. Use any 3-digit CVC (e.g., 123)
 5. Click "Pay"
 
-<Callout type="success">
-**Success!** You've processed your first Vinr payment.
-</Callout>
-
-## Step 7: Verify the Payment
-
-Check the payment status:
-
-```javascript
-const payment = await vinr.payments.retrieve(paymentId);
-console.log('Status:', payment.status); // 'succeeded'
-```
-
 ## Test Cards
 
-Use these cards in test mode:
-
 | Card Number | Description |
-|-------------|-------------|
+|---|---|
 | 4242 4242 4242 4242 | Successful payment |
 | 4000 0000 0000 0002 | Card declined |
 | 4000 0000 0000 9995 | Insufficient funds |
 
 ## Next Steps
 
-Now that you've created your first payment, you can:
-
-1. **[Set up webhooks](/merchant/developer/webhooks)** - Get real-time notifications
-2. **[Customize the payment experience](/merchant/payments/checkout)** - Match your brand
-3. **[Add more payment methods](/merchant/payments/payment-methods)** - Accept cards, bank transfers, and more
-4. **[Go live](/merchant/get-started/go-live)** - Switch to production mode
-
-## Common Issues
-
-<Accordion>
-  <AccordionItem title="'Invalid API key' error">
-    Make sure you're using your Secret Key (starts with `sk_test_`) and not your Publishable Key.
-  </AccordionItem>
-  
-  <AccordionItem title="Payment is 'pending' instead of 'succeeded'">
-    Some payment methods require additional steps. Check the `payment.next_action` field.
-  </AccordionItem>
-  
-  <AccordionItem title="Can't find my API keys">
-    Go to **Settings** → **API Keys** in your dashboard. Make sure you're in test mode.
-  </AccordionItem>
-</Accordion>
-
-## Need Help?
-
-- View [complete API reference](/api/payments)
-- Check our [troubleshooting guide](/support/troubleshooting)
-- Contact [support@vinr.com](mailto:support@vinr.com)
+- Set up webhooks for real-time notifications
+- Customize the payment experience to match your brand
+- Add more payment methods
+- Switch to production mode when ready

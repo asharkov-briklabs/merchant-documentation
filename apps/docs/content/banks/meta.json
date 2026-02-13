@@ -1,10 +1,4 @@
 {
   "title": "Bank Partner Documentation",
-  "pages": [
-    "index",
-    "get-started",
-    "white-label",
-    "integration",
-    "reporting"
-  ]
+  "pages": ["index"]
 }

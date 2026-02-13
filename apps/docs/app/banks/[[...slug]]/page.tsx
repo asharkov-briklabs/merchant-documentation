@@ -2,6 +2,7 @@ import { bankSource } from '@/lib/source';
 import type { Metadata } from 'next';
 import { DocsPage, DocsBody } from 'fumadocs-ui/page';
 import { notFound } from 'next/navigation';
+import defaultMdxComponents from 'fumadocs-ui/mdx';
 
 export default async function Page({
   params,
@@ -11,13 +12,13 @@ export default async function Page({
   const page = bankSource.getPage(params.slug);
   if (!page) notFound();
 
-  const MDX = page.data.exports.default;
+  const MDX = page.data.body;
 
   return (
-    <DocsPage toc={page.data.exports.toc} full={page.data.full}>
+    <DocsPage toc={page.data.toc} full={page.data.full}>
       <DocsBody>
         <h1>{page.data.title}</h1>
-        <MDX />
+        <MDX components={{ ...defaultMdxComponents }} />
       </DocsBody>
     </DocsPage>
   );

@@ -1,0 +1,45 @@
+---
+title: Partner API Reference
+description: API reference for Vinr bank partner endpoints
+---
+
+# Bank Partner API Reference
+
+The Partner API provides endpoints exclusively available to Vinr bank partners. These endpoints allow you to manage merchant onboarding, access aggregated reporting, and configure white-label settings.
+
+## Base URL
+
+```
+https://partner-api.vinr.com/v1
+```
+
+## Authentication
+
+Partner API requests use partner-specific API keys with enhanced permissions.
+
+```bash
+curl https://partner-api.vinr.com/v1/merchants \
+  -H "Authorization: Bearer pk_partner_your_key"
+```
+
+## Endpoints
+
+### Merchant Management
+
+- `POST /v1/merchants` - Onboard a new merchant
+- `GET /v1/merchants/:id` - Retrieve merchant details
+- `GET /v1/merchants` - List all merchants
+- `PATCH /v1/merchants/:id` - Update merchant settings
+
+### Reporting
+
+- `GET /v1/reports/transactions` - Transaction report
+- `GET /v1/reports/settlements` - Settlement report
+- `GET /v1/reports/summary` - Summary report
+
+### White-Label Configuration
+
+- `GET /v1/config/branding` - Get branding settings
+- `PUT /v1/config/branding` - Update branding settings
+- `GET /v1/config/checkout` - Get checkout configuration
+- `PUT /v1/config/checkout` - Update checkout configuration

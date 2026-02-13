@@ -1,10 +1,4 @@
 {
   "title": "Get Started",
-  "icon": "Rocket",
-  "pages": [
-    "index",
-    "quick-start",
-    "account-setup",
-    "api-keys"
-  ]
+  "pages": ["index", "quick-start"]
 }

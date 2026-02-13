@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { merchantSource } from '@/lib/source';
 
 export default function MerchantDocsPage() {
   return (
