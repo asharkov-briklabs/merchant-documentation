@@ -1,0 +1,273 @@
+---
+title: Settlement Issue Solutions
+description: Troubleshoot settlement and reconciliation problems
+---
+
+## Settlement Delays
+
+### Settlement Not Processed
+
+**Symptoms**: Settlement batch not created at expected time
+
+**Common causes**:
+- Bank holiday
+- System maintenance
+- Missing required data
+- Account on hold
+
+**Solutions**:
+
+1. **Check settlement schedule**:
+   - Verify not a bank holiday
+   - Check [status.vinr.com](https://status.vinr.com)
+
+2. **Review account status**:
+   - Dashboard → Account Status
+   - Check for holds or restrictions
+
+3. **Verify transactions captured**:
+   - Ensure transactions in "captured" state
+   - Not "authorized" only
+
+4. **Contact support** if delay >24 hours
+
+### Partial Settlement
+
+**Symptoms**: Settlement amount less than expected
+
+**Common causes**:
+- Chargebacks deducted
+- Refunds processed
+- Fee increases
+- Reserves held
+
+**Solutions**:
+
+1. **Review settlement details**:
+   ```
+   Expected: €10,000
+   Chargebacks: -€500
+   Refunds: -€200
+   Fees: -€150
+   Reserve: -€500
+   Net: €8,650
+   ```
+
+2. **Download detailed report**:
+   - CSV with all adjustments
+   - Transaction-level breakdown
+
+3. **Check chargeback notifications**:
+   - Review webhook events
+   - Check email alerts
+
+## Reconciliation Problems
+
+### Transaction Mismatch
+
+**Symptoms**: Transaction counts don't match
+
+**Solutions**:
+
+1. **Download reconciliation report**:
+   ```bash
+   curl https://api.vinr.com/v1/bank/reconciliation/daily?date=2024-03-15 \
+     -u bk_live_KEY:SECRET
+   ```
+
+2. **Compare transaction IDs**:
+   ```javascript
+   const vinrTxns = await fetchVinrTransactions(date);
+   const yourTxns = await fetchYourTransactions(date);
+   
+   const missing = vinrTxns.filter(v => 
+     !yourTxns.find(y => y.id === v.id)
+   );
+   ```
+
+3. **Check for duplicates**:
+   - Look for same transaction ID multiple times
+   - Verify idempotency handling
+
+### Amount Discrepancies
+
+**Symptoms**: Settlement amount doesn't match your records
+
+**Solutions**:
+
+1. **Verify currency conversion**:
+   - Check conversion rates used
+   - Verify calculation methodology
+
+2. **Review fee structure**:
+   - Confirm fee percentages
+   - Check for updated pricing
+
+3. **Check for adjustments**:
+   - Manual adjustments
+   - Chargeback reversals
+   - Error corrections
+
+### Missing Transactions
+
+**Symptoms**: Transactions in your system but not in settlement
+
+**Common causes**:
+- Still in "authorized" state
+- Voided before capture
+- Failed after authorization
+- Wrong date range
+
+**Solutions**:
+
+1. **Check transaction status**:
+   ```bash
+   curl https://api.vinr.com/v1/bank/transactions/txn_123 \
+     -u bk_live_KEY:SECRET
+   ```
+
+2. **Verify capture happened**:
+   - Check for capture confirmation
+   - Review webhook events
+
+3. **Check correct date range**:
+   - Settlement date ≠ authorization date
+   - Use capture date for matching
+
+## Fee Issues
+
+### Unexpected Fees
+
+**Symptoms**: Fees higher than expected
+
+**Solutions**:
+
+1. **Review fee breakdown**:
+   - Download detailed fee report
+   - Check per-transaction fees
+   - Verify monthly platform fees
+
+2. **Check for fee changes**:
+   - Review contract terms
+   - Check email for notifications
+   - Verify volume tiers
+
+3. **Calculate fees manually**:
+   ```javascript
+   const transactionFee = amount * 0.014 + 25; // 1.4% + €0.25
+   const platformFee = 500; // Monthly fee
+   const totalFees = transactionFee + platformFee;
+   ```
+
+### Missing Fee Refunds
+
+**Symptoms**: Fees not refunded after refund issued
+
+**Note**: Processing fees are not refunded
+
+**Expected**:
+- Transaction fee: Not refunded
+- Only transaction amount refunded
+
+## Reserve Problems
+
+### Reserve Increased
+
+**Symptoms**: More funds held in reserve
+
+**Common causes**:
+- Increased chargeback rate
+- Higher risk transactions
+- Merchant defaults
+- Policy changes
+
+**Solutions**:
+
+1. **Check reserve policy**:
+   - Review partner agreement
+   - Verify reserve calculation
+
+2. **Review risk factors**:
+   - Chargeback rate trending up
+   - Large value transactions
+   - New merchant onboarding
+
+3. **Request review**:
+   - Contact account manager
+   - Provide supporting data
+   - Request adjustment
+
+### Reserve Not Released
+
+**Symptoms**: Funds not released after hold period
+
+**Solutions**:
+
+1. **Verify hold period elapsed**:
+   - Check original hold date
+   - Verify correct calculation
+
+2. **Check for pending issues**:
+   - Outstanding chargebacks
+   - Unresolved disputes
+   - Merchant defaults
+
+3. **Submit release request**:
+   - Via partner dashboard
+   - Include transaction details
+
+## Payout Failures
+
+### Bank Transfer Failed
+
+**Symptoms**: Payout rejected by bank
+
+**Common causes**:
+- Incorrect bank details
+- Account closed
+- Name mismatch
+- Regulatory hold
+
+**Solutions**:
+
+1. **Verify bank details**:
+   - Account number correct
+   - IBAN format valid
+   - Bank code correct
+
+2. **Check account status**:
+   - Account still active
+   - No blocks or holds
+
+3. **Update information**:
+   - Dashboard → Bank Details
+   - Reverify account
+
+### Payout Delayed
+
+**Symptoms**: Funds not received on expected date
+
+**Timeline expectations**:
+- T+2 for standard settlement
+- +1 day for international
+- +1-2 days for holidays
+
+**Solutions**:
+
+1. **Check processing status**:
+   - Dashboard → Settlements
+   - Verify status = "completed"
+
+2. **Wait additional business day**:
+   - Bank processing delays common
+   - Especially for cross-border
+
+3. **Contact bank**:
+   - Verify funds sent
+   - Check for holds
+
+## Next Steps
+
+- [API Errors](/banks/troubleshooting/api-errors)
+- [Webhook Problems](/banks/troubleshooting/webhook-problems)
+- [Settlement FAQs](/banks/faq/settlement)

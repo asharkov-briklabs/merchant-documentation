@@ -1,0 +1,322 @@
+---
+title: Go-Live Checklist
+description: Pre-launch checklist for bank partners
+---
+
+## Overview
+
+Complete this comprehensive checklist before launching your Vinr integration to production.
+
+## Technical Requirements
+
+### API Implementation
+
+- [ ] Authorization endpoint implemented and tested
+- [ ] Capture endpoint implemented and tested
+- [ ] Refund endpoint implemented and tested
+- [ ] Void/cancel endpoint implemented
+- [ ] Settlement reporting endpoint working
+- [ ] Reconciliation endpoint operational
+- [ ] All endpoints respond within 2 seconds
+- [ ] Error handling implemented
+- [ ] Retry logic for transient failures
+- [ ] Idempotency key support
+
+### Webhook Implementation
+
+- [ ] Webhook receiver endpoint configured
+- [ ] Signature verification implemented
+- [ ] All event types handled:
+  - [ ] merchant.verified
+  - [ ] settlement.initiated
+  - [ ] chargeback.received
+  - [ ] dispute.created
+- [ ] Async processing implemented
+- [ ] Duplicate event handling
+- [ ] Failed event retry logic
+- [ ] Webhook monitoring and alerting
+
+### Security
+
+- [ ] TLS 1.2+ enforced
+- [ ] IP whitelisting configured
+- [ ] API keys securely stored
+- [ ] Webhook secrets protected
+- [ ] Request signing implemented
+- [ ] PCI DSS Level 1 compliant
+- [ ] Penetration testing completed
+- [ ] Security audit passed
+- [ ] Incident response plan documented
+- [ ] Data encryption at rest and in transit
+
+### Performance
+
+- [ ] Load testing completed (500 TPS)
+- [ ] Average response time <1 second
+- [ ] P99 response time <2 seconds
+- [ ] 99.9% uptime target configured
+- [ ] Auto-scaling configured
+- [ ] Connection pooling implemented
+- [ ] Caching strategy in place
+- [ ] Database optimized and indexed
+
+## Operational Requirements
+
+### Monitoring & Alerting
+
+- [ ] Application monitoring (APM)
+- [ ] Infrastructure monitoring
+- [ ] Log aggregation configured
+- [ ] Error tracking implemented
+- [ ] Alerts configured for:
+  - [ ] API errors (>5% error rate)
+  - [ ] Slow responses (>2 seconds)
+  - [ ] Failed authorizations spike
+  - [ ] Webhook delivery failures
+  - [ ] Settlement processing delays
+- [ ] On-call rotation established
+- [ ] Escalation procedures documented
+
+### Settlement
+
+- [ ] Daily settlement process tested
+- [ ] Batch file format validated
+- [ ] Reconciliation process automated
+- [ ] Payout accounts configured
+- [ ] Reserve calculations verified
+- [ ] Fee calculations tested
+- [ ] Chargeback handling process
+- [ ] Settlement monitoring dashboards
+
+### Compliance
+
+- [ ] AML/KYC procedures documented
+- [ ] Transaction monitoring configured
+- [ ] Fraud detection rules implemented
+- [ ] Compliance reporting configured
+- [ ] Regulatory requirements met for:
+  - [ ] Bulgaria
+  - [ ] Romania
+  - [ ] Greece
+  - [ ] Poland
+- [ ] Data retention policies configured
+- [ ] GDPR compliance verified
+
+### Support
+
+- [ ] 24/7 support coverage established
+- [ ] Incident management process
+- [ ] SLA targets configured:
+  - [ ] P1: 30 minutes
+  - [ ] P2: 2 hours
+  - [ ] P3: 8 hours
+  - [ ] P4: 24 hours
+- [ ] Support contact info shared
+- [ ] Escalation matrix created
+- [ ] Runbooks documented
+
+## Testing Requirements
+
+### Functional Testing
+
+- [ ] Successful authorization
+- [ ] Declined authorization
+- [ ] Partial capture
+- [ ] Full capture
+- [ ] Multiple partial captures
+- [ ] Full refund
+- [ ] Partial refund
+- [ ] Void authorization
+- [ ] 3D Secure flow
+- [ ] Settlement generation
+- [ ] Reconciliation matching
+
+### Error Handling
+
+- [ ] Invalid card number
+- [ ] Expired card
+- [ ] Insufficient funds
+- [ ] Card declined
+- [ ] Lost/stolen card
+- [ ] Network timeout
+- [ ] Database error
+- [ ] External service failure
+
+### Edge Cases
+
+- [ ] Minimum transaction amount
+- [ ] Maximum transaction amount
+- [ ] Duplicate requests (idempotency)
+- [ ] Concurrent requests
+- [ ] Rate limiting behavior
+- [ ] Webhook retry logic
+- [ ] Settlement boundary conditions
+- [ ] Currency conversion edge cases
+
+### Security Testing
+
+- [ ] SQL injection attempts
+- [ ] XSS attempts
+- [ ] CSRF protection
+- [ ] Invalid signatures rejected
+- [ ] Unauthorized IPs blocked
+- [ ] Rate limiting enforced
+- [ ] Session management secure
+
+## Documentation
+
+- [ ] API integration guide completed
+- [ ] Webhook documentation finalized
+- [ ] Settlement process documented
+- [ ] Error codes and messages catalogued
+- [ ] Runbooks for common issues
+- [ ] Architecture diagrams updated
+- [ ] Contact information current
+- [ ] Change management process
+
+## Pre-Production Validation
+
+### Sandbox Testing
+
+- [ ] Complete test suite passes
+- [ ] Load testing successful
+- [ ] Security testing passed
+- [ ] End-to-end flows validated
+- [ ] Webhook delivery confirmed
+- [ ] Settlement process verified
+
+### Production Environment
+
+- [ ] Production credentials received
+- [ ] Environment variables updated
+- [ ] Database migrations applied
+- [ ] Firewall rules configured
+- [ ] Load balancers configured
+- [ ] SSL certificates installed
+- [ ] Monitoring agents deployed
+- [ ] Logging configured
+
+### Business Readiness
+
+- [ ] Partnership agreement signed
+- [ ] Fee structure confirmed
+- [ ] Settlement terms agreed
+- [ ] Reserve requirements understood
+- [ ] Merchant onboarding process
+- [ ] Marketing materials prepared
+- [ ] Launch communication plan
+
+## Launch Day
+
+### Pre-Launch (T-24 hours)
+
+- [ ] Final security scan
+- [ ] Database backup verified
+- [ ] Rollback plan tested
+- [ ] Team briefed
+- [ ] Support team ready
+- [ ] Monitoring verified
+- [ ] Incident response ready
+
+### Go-Live (T-0)
+
+- [ ] Switch to production credentials
+- [ ] Update DNS/routing if needed
+- [ ] Verify first transaction
+- [ ] Monitor error rates
+- [ ] Check webhook delivery
+- [ ] Verify settlement queue
+- [ ] Team on standby
+
+### Post-Launch (T+24 hours)
+
+- [ ] Review metrics
+- [ ] Check error logs
+- [ ] Verify settlements
+- [ ] Monitor performance
+- [ ] Collect feedback
+- [ ] Document issues
+- [ ] Schedule retrospective
+
+## Success Criteria
+
+### Performance Metrics
+
+- Authorization success rate >95%
+- Average response time <1s
+- P99 response time <2s
+- Uptime >99.9%
+- Webhook delivery >99%
+
+### Business Metrics
+
+- Settlement accuracy 100%
+- Reconciliation matching >99.9%
+- Chargeback rate <0.5%
+- Support ticket resolution <2 hours
+
+## Rollback Plan
+
+If critical issues occur:
+
+1. **Immediate Actions**
+   - Switch back to previous partner
+   - Notify stakeholders
+   - Activate incident response
+
+2. **Investigation**
+   - Collect logs and metrics
+   - Identify root cause
+   - Document findings
+
+3. **Resolution**
+   - Fix issues in staging
+   - Re-test thoroughly
+   - Schedule new launch
+
+## Post-Launch Monitoring
+
+### Week 1
+- Monitor every 2 hours
+- Daily check-ins with Vinr
+- Review all error logs
+- Optimize as needed
+
+### Month 1
+- Weekly performance reviews
+- Optimize based on data
+- Refine alerting rules
+- Update documentation
+
+### Ongoing
+- Monthly business reviews
+- Quarterly capacity planning
+- Regular security audits
+- Continuous optimization
+
+## Support Contacts
+
+### During Launch
+
+- **Account Manager**: your-manager@vinr.com
+- **Technical Support**: partners@vinr.com
+- **Emergency**: +359 2 XXX XXXX (24/7)
+- **Slack**: #partner-launch channel
+
+### After Launch
+
+- **Support Email**: partners@vinr.com
+- **Phone**: +359 2 XXX XXXX
+- **Status Page**: status.vinr.com
+
+## Congratulations!
+
+Once you've completed this checklist, you're ready to go live! 🚀
+
+Remember:
+- Monitor closely during launch
+- Don't hesitate to ask for help
+- Keep documentation updated
+- Continuous improvement
+
+Good luck with your launch!

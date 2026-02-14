@@ -1,0 +1,10 @@
+{
+  "title": "Integrations",
+  "icon": "Plug",
+  "pages": [
+    "index",
+    "ecommerce",
+    "accounting",
+    "crm"
+  ]
+}

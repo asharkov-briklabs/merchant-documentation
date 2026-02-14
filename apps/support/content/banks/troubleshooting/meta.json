@@ -1,0 +1,10 @@
+{
+  "title": "Troubleshooting",
+  "icon": "Tool",
+  "pages": [
+    "index",
+    "api-errors",
+    "settlement-issues",
+    "webhook-problems"
+  ]
+}

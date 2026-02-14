@@ -1,0 +1,10 @@
+{
+  "title": "Analytics",
+  "icon": "BarChart",
+  "pages": [
+    "index",
+    "dashboard",
+    "reports",
+    "exports"
+  ]
+}

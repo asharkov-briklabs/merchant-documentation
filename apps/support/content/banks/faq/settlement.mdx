@@ -1,0 +1,279 @@
+---
+title: Settlement FAQs
+description: Questions about settlements and reconciliation
+---
+
+## Settlement Process
+
+### When are settlements processed?
+
+Daily settlement schedule:
+
+- **Cut-off time**: 23:59 UTC
+- **Batch creation**: 00:00 UTC next day
+- **Settlement initiation**: 02:00 UTC
+- **Funds transfer**: T+2 business days
+
+### What is included in a settlement batch?
+
+Each batch includes:
+
+- All captured transactions from previous day
+- Less: Refunds processed
+- Less: Chargebacks received
+- Less: Platform fees
+- Plus/Minus: Adjustments
+
+### How do I receive settlement notifications?
+
+Notifications sent via:
+
+- Webhook events
+- Email summaries
+- API polling
+- Dashboard alerts
+
+### Can I request immediate settlement?
+
+Immediate settlement is available for:
+
+- Enterprise partners only
+- Additional fee applies
+- Subject to risk assessment
+
+Contact your partner manager for details.
+
+## Reconciliation
+
+### How do I reconcile transactions?
+
+Daily reconciliation process:
+
+1. Download settlement batch report
+2. Match against your transaction records
+3. Verify amounts match
+4. Report any discrepancies
+5. Investigate unmatched items
+
+### What format are reconciliation files?
+
+Available formats:
+
+- CSV (default)
+- JSON
+- XML
+- Custom format (on request)
+
+### How long are reconciliation files available?
+
+- **Online access**: 90 days
+- **Archive**: 7 years
+- **API access**: All historical data
+
+### What if I find a discrepancy?
+
+1. Document the discrepancy
+2. Submit via partner dashboard
+3. Include:
+   - Transaction IDs
+   - Expected vs actual amounts
+   - Supporting documentation
+4. Resolution within 3 business days
+
+## Fees & Deductions
+
+### How are platform fees calculated?
+
+Fee structure:
+
+- Per-transaction fee
+- Percentage of transaction value
+- Monthly platform fee
+- Volume discounts available
+
+Specific rates in your partnership agreement.
+
+### When are fees deducted?
+
+Fees deducted:
+
+- At settlement time
+- Itemized in settlement report
+- Monthly invoicing option available
+
+### Are there fees for refunds?
+
+- Original processing fee not refunded
+- No additional fee for refund processing
+- Instant refund fees (if applicable)
+
+### How are currency conversions handled?
+
+- Settlements in merchant's currency
+- Conversion at settlement time
+- Mid-market rate used
+- Small conversion fee applied
+- Rates visible in dashboard
+
+## Chargebacks & Disputes
+
+### How are chargebacks handled?
+
+Chargeback process:
+
+1. **Notification**: Webhook + email
+2. **Deduction**: From next settlement
+3. **Dispute window**: 7-14 days
+4. **Evidence**: Submitted via API
+5. **Resolution**: 30-45 days
+
+### Are chargebacks deducted from settlements?
+
+Yes, chargebacks are:
+
+- Deducted from next available settlement
+- If insufficient balance, held from future settlements
+- Reserve account used if configured
+
+### What documentation is needed for disputes?
+
+Required evidence:
+
+- Transaction details
+- Delivery confirmation
+- Customer communication
+- Terms of service
+- IP address/device info
+
+### How often do chargebacks occur?
+
+Industry average:
+
+- **Normal**: <0.5% of transactions
+- **Warning**: 0.5-0.9%
+- **High risk**: >1.0%
+
+We monitor and alert on unusual patterns.
+
+## Reserves & Holds
+
+### What are reserve requirements?
+
+Reserves protect against:
+
+- Chargebacks
+- Refunds
+- Merchant default
+
+Typically:
+
+- 5-10% of transaction volume
+- Held for 30-90 days
+- Risk-based calculation
+
+### Can reserves be reduced?
+
+Yes, based on:
+
+- Transaction history
+- Chargeback rate
+- Business stability
+- Merchant rating
+
+Review quarterly with account manager.
+
+### How are funds released from reserve?
+
+- Rolling reserve (oldest funds released)
+- Automatic release after hold period
+- Can be accelerated for good performers
+
+### What happens if a merchant defaults?
+
+Reserve covers:
+
+- Outstanding transactions
+- Pending refunds
+- Chargebacks
+- Platform fees
+
+Remaining balance returned after settlement.
+
+## Payout Methods
+
+### How are settlements paid out?
+
+Standard methods:
+
+- Bank transfer (SEPA)
+- Wire transfer
+- ACH (where available)
+
+### Can I change payout methods?
+
+Yes, update via:
+
+- Partner dashboard
+- API call
+- Support request
+
+Verification required for changes.
+
+### Are there payout fees?
+
+- **SEPA**: Free
+- **Wire transfer**: €25 per transaction
+- **Express payout**: 1% (min €5)
+
+### What's the minimum payout amount?
+
+- **Standard**: €100
+- **Can be adjusted**: Contact support
+- **No minimum**: For daily settlement partners
+
+## Reporting
+
+### What settlement reports are available?
+
+Standard reports:
+
+- Daily settlement summary
+- Detailed transaction log
+- Fee breakdown
+- Reconciliation file
+- Monthly statements
+
+### Can I get custom reports?
+
+Yes, we can create:
+
+- Custom data fields
+- Specific groupings
+- Alternative formats
+- Automated delivery
+
+Contact your account manager.
+
+### How do I access historical settlement data?
+
+Via:
+
+- Partner dashboard (90 days)
+- API (unlimited history)
+- Support request for archives
+- Data warehouse access (Enterprise)
+
+### Can I schedule automated reports?
+
+Configure automated delivery:
+
+- Frequency: Daily, weekly, monthly
+- Format: CSV, JSON, XML, PDF
+- Delivery: Email, SFTP, API
+- Recipients: Multiple addresses
+
+## Next Steps
+
+- [Partnership FAQs](/banks/faq/partnership)
+- [Integration FAQs](/banks/faq/integration)
+- [Troubleshooting](/banks/troubleshooting)

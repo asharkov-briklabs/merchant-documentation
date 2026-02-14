@@ -1,0 +1,119 @@
+---
+title: Settlement Reports
+description: Access settlement and payout data
+---
+
+## Overview
+
+Settlement reports provide detailed information about daily settlement batches and fund transfers.
+
+## Settlement Report API
+
+```
+GET /v1/bank/reports/settlements
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `date_from` | string | Start date |
+| `date_to` | string | End date |
+| `status` | string | Settlement status |
+| `format` | string | Report format |
+
+### Example Request
+
+```bash
+curl https://api.vinr.com/v1/bank/reports/settlements \
+  -u bk_live_YOUR_KEY:YOUR_SECRET \
+  -d date_from=2024-03-01 \
+  -d date_to=2024-03-31 \
+  -d format=csv
+```
+
+## Settlement Report Fields
+
+| Field | Description |
+|-------|-------------|
+| `batch_id` | Settlement batch identifier |
+| `settlement_date` | Date of settlement |
+| `merchant_id` | Merchant identifier |
+| `transaction_count` | Number of transactions |
+| `gross_amount` | Total transaction amount |
+| `fee_amount` | Total fees |
+| `refund_amount` | Total refunds |
+| `chargeback_amount` | Total chargebacks |
+| `net_amount` | Net settlement amount |
+| `currency` | Settlement currency |
+| `status` | Settlement status |
+| `payout_date` | Actual payout date |
+
+## Settlement Summary
+
+Get aggregate settlement data:
+
+```
+GET /v1/bank/reports/settlement-summary
+```
+
+### Response
+
+```json
+{
+  "period": {
+    "from": "2024-03-01",
+    "to": "2024-03-31"
+  },
+  "summary": {
+    "total_batches": 31,
+    "total_transactions": 4567,
+    "gross_amount": 2500000,
+    "net_amount": 2450000,
+    "total_fees": 50000
+  },
+  "by_merchant": [
+    {
+      "merchant_id": "merch_123",
+      "transaction_count": 234,
+      "gross_amount": 125000,
+      "net_amount": 122500
+    }
+  ]
+}
+```
+
+## Outstanding Settlements
+
+View settlements that haven't been paid out yet:
+
+```
+GET /v1/bank/settlements/outstanding
+```
+
+## Settlement Status Tracking
+
+Track the status of settlement batches:
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Batch created, awaiting processing |
+| `processing` | Funds being transferred |
+| `completed` | Settlement completed |
+| `failed` | Settlement failed |
+| `reversed` | Settlement was reversed |
+
+## Downloading Settlement Files
+
+Download detailed settlement files:
+
+```
+GET /v1/bank/settlements/{batch_id}/download
+```
+
+Returns a detailed CSV file with all transactions in the batch.
+
+## Next Steps
+
+- [Transaction Reports](/banks/reporting/transaction-reports)
+- [Reconciliation](/banks/reporting/reconciliation)

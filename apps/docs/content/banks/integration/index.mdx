@@ -1,0 +1,128 @@
+---
+title: Integration Overview
+description: Integrate your bank systems with Vinr's platform
+---
+
+## Introduction
+
+This guide covers the technical integration between your bank and the Vinr payment platform.
+
+## Integration Architecture
+
+```
+Merchant → Vinr Platform → Bank Partner → Card Networks
+```
+
+## Core Integration Points
+
+### 1. Authorization API
+
+Process payment authorization requests from merchants.
+
+### 2. Settlement API
+
+Handle payment settlements and reconciliation.
+
+### 3. Webhook System
+
+Receive and send real-time event notifications.
+
+### 4. Reporting API
+
+Provide transaction and settlement data.
+
+## API Overview
+
+### Base URL
+
+**Production**: `https://api.vinr.com/v1/bank`
+**Sandbox**: `https://api-sandbox.vinr.com/v1/bank`
+
+### Authentication
+
+All requests require API key authentication:
+
+```bash
+Authorization: Bearer bk_live_YOUR_API_KEY
+```
+
+### Request Format
+
+All requests use JSON:
+
+```bash
+Content-Type: application/json
+```
+
+## Integration Flow
+
+### 1. Authorization Request
+
+Vinr sends authorization request to your bank:
+
+```json
+{
+  "merchant_id": "merch_123",
+  "amount": 5000,
+  "currency": "EUR",
+  "payment_method": {
+    "type": "card",
+    "card_number": "4242...4242",
+    "exp_month": 12,
+    "exp_year": 2025
+  }
+}
+```
+
+### 2. Authorization Response
+
+Your bank responds with approval or decline:
+
+```json
+{
+  "authorization_id": "auth_xyz789",
+  "status": "approved",
+  "authorization_code": "123456"
+}
+```
+
+### 3. Capture Request
+
+When merchant captures the payment:
+
+```json
+{
+  "authorization_id": "auth_xyz789",
+  "amount": 5000
+}
+```
+
+### 4. Settlement
+
+Daily settlement batch processing and reconciliation.
+
+## Error Handling
+
+Use standard HTTP status codes and error responses:
+
+```json
+{
+  "error": {
+    "code": "insufficient_funds",
+    "message": "The card has insufficient funds"
+  }
+}
+```
+
+## Security Requirements
+
+- TLS 1.2 or higher
+- IP whitelisting
+- Request signing
+- Webhook signature verification
+
+## Next Steps
+
+- [Authorization API](/banks/integration/authorization)
+- [Settlement Process](/banks/integration/settlement)
+- [Webhooks](/banks/integration/webhooks)

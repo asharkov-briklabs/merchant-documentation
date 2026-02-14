@@ -1,0 +1,348 @@
+---
+title: Webhook Problem Solutions  
+description: Troubleshoot webhook delivery and processing issues
+---
+
+## Webhook Not Received
+
+### No Events Arriving
+
+**Symptoms**: Webhook endpoint not receiving any events
+
+**Solutions**:
+
+1. **Verify endpoint configuration**:
+   - Check URL in dashboard
+   - Ensure publicly accessible
+   - Test with curl:
+     ```bash
+     curl -X POST https://your-bank.com/vinr/webhooks \
+       -H "Content-Type: application/json" \
+       -d '{"test": true}'
+     ```
+
+2. **Check firewall rules**:
+   - Allow Vinr IP addresses
+   - No rate limiting on endpoint
+   - Correct ports open (443)
+
+3. **Verify SSL certificate**:
+   - Valid certificate
+   - Not expired
+   - Proper certificate chain
+
+4. **Check webhook logs**:
+   - Dashboard → Webhooks → Logs
+   - Review delivery attempts
+   - Check HTTP status codes
+
+### Some Events Missing
+
+**Symptoms**: Receiving some events but not others
+
+**Solutions**:
+
+1. **Verify event subscriptions**:
+   - Dashboard → Webhooks → Edit
+   - Ensure subscribed to missing events
+
+2. **Check event filtering**:
+   - Review your webhook handler
+   - Verify not filtering out events
+
+3. **Look for errors**:
+   - Check application logs
+   - Review webhook logs in dashboard
+
+## Signature Verification Failed
+
+### Invalid Signature Error
+
+**Error**: Signature verification fails
+
+**Solutions**:
+
+1. **Use raw body for verification**:
+   ```javascript
+   // Express.js - use raw body
+   app.post('/webhooks',
+     express.raw({type: 'application/json'}),
+     (req, res) => {
+       const signature = req.headers['vinr-signature'];
+       const isValid = verifySignature(
+         req.body, // Raw body, not parsed
+         signature,
+         webhookSecret
+       );
+     }
+   );
+   ```
+
+2. **Correct verification algorithm**:
+   ```javascript
+   const crypto = require('crypto');
+   
+   function verifySignature(payload, signature, secret) {
+     const expectedSignature = crypto
+       .createHmac('sha256', secret)
+       .update(payload)
+       .digest('hex');
+     
+     return crypto.timingSafeEqual(
+       Buffer.from(signature),
+       Buffer.from(`sha256=${expectedSignature}`)
+     );
+   }
+   ```
+
+3. **Verify webhook secret**:
+   - Using correct secret from dashboard
+   - Not using API key (different from webhook secret)
+
+4. **Check for body modification**:
+   - No middleware modifying body
+   - No automatic JSON parsing before verification
+
+### Signature Format Issues
+
+**Problem**: Signature in unexpected format
+
+**Solution**:
+
+```javascript
+// Correct signature format
+const signature = req.headers['vinr-signature'];
+// Format: "sha256=abc123..."
+
+// Extract hash if needed
+const hash = signature.split('=')[1];
+```
+
+## Processing Errors
+
+### Handler Timeout
+
+**Symptoms**: Webhook handler times out
+
+**Timeout**: Vinr expects response within 5 seconds
+
+**Solutions**:
+
+1. **Respond immediately**:
+   ```javascript
+   app.post('/webhooks', async (req, res) => {
+     // Respond immediately
+     res.json({received: true});
+     
+     // Process asynchronously
+     processWebhookAsync(req.body);
+   });
+   ```
+
+2. **Use queue for processing**:
+   ```javascript
+   app.post('/webhooks', async (req, res) => {
+     // Add to queue
+     await queue.add('process-webhook', req.body);
+     
+     // Respond immediately
+     res.json({received: true});
+   });
+   ```
+
+3. **Optimize processing**:
+   - Remove slow operations
+   - Use async/await properly
+   - Batch database operations
+
+### Database Errors
+
+**Symptoms**: Webhook fails due to database issues
+
+**Solutions**:
+
+1. **Handle errors gracefully**:
+   ```javascript
+   try {
+     await processWebhook(event);
+     res.json({received: true});
+   } catch (error) {
+     console.error('Webhook processing failed:', error);
+     // Still return 200 to prevent retries
+     res.json({received: true, error: 'logged'});
+     
+     // Alert for manual review
+     alertTeam(error, event);
+   }
+   ```
+
+2. **Implement retry logic**:
+   ```javascript
+   async function processWithRetry(event, maxRetries = 3) {
+     for (let i = 0; i < maxRetries; i++) {
+       try {
+         return await processWebhook(event);
+       } catch (error) {
+         if (i === maxRetries - 1) throw error;
+         await sleep(Math.pow(2, i) * 1000);
+       }
+     }
+   }
+   ```
+
+## Duplicate Events
+
+### Receiving Same Event Multiple Times
+
+**Cause**: Normal - Vinr retries failed deliveries
+
+**Solutions**:
+
+1. **Implement idempotency**:
+   ```javascript
+   const processedEvents = new Set();
+   
+   app.post('/webhooks', async (req, res) => {
+     const event = req.body;
+     
+     // Check if already processed
+     if (processedEvents.has(event.id)) {
+       return res.json({received: true});
+     }
+     
+     // Process event
+     await processWebhook(event);
+     
+     // Mark as processed
+     processedEvents.add(event.id);
+     
+     res.json({received: true});
+   });
+   ```
+
+2. **Use database for deduplication**:
+   ```javascript
+   async function processWebhook(event) {
+     // Try to insert with unique constraint
+     try {
+       await db.webhookEvents.insert({
+         id: event.id,
+         processed: false
+       });
+     } catch (error) {
+       if (error.code === 'UNIQUE_VIOLATION') {
+         // Already processed
+         return;
+       }
+       throw error;
+     }
+     
+     // Process event
+     await handleEvent(event);
+     
+     // Mark as processed
+     await db.webhookEvents.update(event.id, {
+       processed: true
+     });
+   }
+   ```
+
+## Testing Issues
+
+### Can't Trigger Test Webhooks
+
+**Solutions**:
+
+1. **Use webhook testing endpoint**:
+   ```bash
+   curl https://api-sandbox.vinr.com/v1/bank/webhooks/test \
+     -u bk_sandbox_KEY:SECRET \
+     -d event_type=transaction.captured \
+     -d transaction_id=txn_test_123
+   ```
+
+2. **Check sandbox configuration**:
+   - Using sandbox webhook secret
+   - Endpoint configured in sandbox mode
+
+3. **Review test event format**:
+   - Matches production format
+   - Contains all required fields
+
+### Test Events Not in Logs
+
+**Cause**: Test events not logged same as production
+
+**Solution**: Use production webhook logs for monitoring
+
+## Performance Issues
+
+### High Latency
+
+**Symptoms**: Webhooks processing slowly
+
+**Solutions**:
+
+1. **Monitor processing time**:
+   ```javascript
+   const start = Date.now();
+   await processWebhook(event);
+   const duration = Date.now() - start;
+   
+   if (duration > 1000) {
+     console.warn(`Slow webhook processing: ${duration}ms`);
+   }
+   ```
+
+2. **Optimize database queries**:
+   - Add indexes
+   - Use connection pooling
+   - Batch updates
+
+3. **Scale horizontally**:
+   - Multiple webhook handlers
+   - Load balancer
+   - Queue-based processing
+
+## Monitoring & Alerting
+
+### Set Up Monitoring
+
+```javascript
+// Log webhook metrics
+app.post('/webhooks', async (req, res) => {
+  const start = Date.now();
+  
+  try {
+    await processWebhook(req.body);
+    
+    metrics.webhookSuccess.inc();
+    metrics.webhookDuration.observe(Date.now() - start);
+    
+    res.json({received: true});
+  } catch (error) {
+    metrics.webhookError.inc();
+    
+    // Alert on high error rate
+    if (metrics.webhookError.rate() > 0.05) {
+      alertTeam('High webhook error rate');
+    }
+    
+    res.status(500).json({error: error.message});
+  }
+});
+```
+
+### Alert Conditions
+
+Alert when:
+- Error rate > 5%
+- Processing time > 2 seconds
+- No events received in 1 hour
+- Signature verification failures > 1%
+
+## Next Steps
+
+- [API Errors](/banks/troubleshooting/api-errors)
+- [Settlement Issues](/banks/troubleshooting/settlement-issues)
+- [Webhook Documentation](/banks/integration/webhooks)

@@ -1,0 +1,10 @@
+{
+  "title": "Frequently Asked Questions",
+  "icon": "HelpCircle",
+  "pages": [
+    "index",
+    "partnership",
+    "integration",
+    "settlement"
+  ]
+}

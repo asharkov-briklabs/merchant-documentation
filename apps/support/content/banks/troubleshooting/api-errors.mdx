@@ -1,0 +1,386 @@
+---
+title: API Error Solutions
+description: Troubleshoot common API errors
+---
+
+## Authentication Errors
+
+### 401 Unauthorized
+
+**Error**: `unauthorized`
+
+**Causes**:
+- Invalid API key
+- Expired credentials
+- Missing Authorization header
+- Using test key in production
+
+**Solutions**:
+
+1. **Verify API key**:
+   ```bash
+   # Correct format
+   Authorization: Bearer bk_live_YOUR_API_KEY
+   ```
+
+2. **Check environment**:
+   - Test keys: `bk_sandbox_...`
+   - Live keys: `bk_live_...`
+
+3. **Regenerate credentials**:
+   - Dashboard → API Keys → Regenerate
+   - Update all systems with new key
+
+4. **Check key expiration**:
+   - Keys expire after 1 year
+   - Rotate before expiration
+
+### 403 Forbidden
+
+**Error**: `forbidden`
+
+**Causes**:
+- Insufficient permissions
+- IP not whitelisted
+- Account suspended
+
+**Solutions**:
+
+1. **Check IP whitelist**:
+   - Add your server IPs in dashboard
+   - Allow both IPv4 and IPv6 if needed
+
+2. **Verify permissions**:
+   - Ensure API key has required scopes
+   - Check account status
+
+3. **Contact support**:
+   - If account suspended
+   - For permission escalation
+
+## Rate Limiting
+
+### 429 Too Many Requests
+
+**Error**: `rate_limit_exceeded`
+
+**Rate Limits**:
+- 100 requests/second
+- 10,000 requests/hour
+
+**Solutions**:
+
+1. **Implement exponential backoff**:
+   ```javascript
+   async function retryWithBackoff(fn, maxRetries = 3) {
+     for (let i = 0; i < maxRetries; i++) {
+       try {
+         return await fn();
+       } catch (error) {
+         if (error.status === 429 && i < maxRetries - 1) {
+           const delay = Math.pow(2, i) * 1000;
+           await sleep(delay);
+           continue;
+         }
+         throw error;
+       }
+     }
+   }
+   ```
+
+2. **Implement rate limiting client-side**:
+   ```javascript
+   const rateLimiter = new RateLimiter({
+     tokensPerInterval: 100,
+     interval: 'second'
+   });
+   
+   await rateLimiter.removeTokens(1);
+   const response = await makeRequest();
+   ```
+
+3. **Batch requests**:
+   - Use bulk endpoints where available
+   - Combine multiple operations
+
+4. **Cache responses**:
+   - Cache frequently accessed data
+   - Use ETags for conditional requests
+
+5. **Request limit increase**:
+   - Contact partner support
+   - Provide justification and usage patterns
+
+## Request Errors
+
+### 400 Bad Request
+
+**Error**: `invalid_request`
+
+**Causes**:
+- Missing required parameters
+- Invalid parameter format
+- Malformed JSON
+
+**Solutions**:
+
+1. **Validate request body**:
+   ```javascript
+   // Check required fields
+   const required = ['amount', 'currency', 'merchant_id'];
+   for (const field of required) {
+     if (!request[field]) {
+       throw new Error(`Missing required field: ${field}`);
+     }
+   }
+   ```
+
+2. **Verify JSON syntax**:
+   ```javascript
+   try {
+     JSON.parse(requestBody);
+   } catch (e) {
+     console.error('Invalid JSON:', e);
+   }
+   ```
+
+3. **Check parameter types**:
+   - `amount`: integer (not float)
+   - `currency`: 3-letter code (uppercase)
+   - `merchant_id`: string
+
+4. **Review API documentation**:
+   - Verify all required fields included
+   - Check parameter formats
+
+### 404 Not Found
+
+**Error**: `resource_not_found`
+
+**Causes**:
+- Resource doesn't exist
+- Wrong resource ID
+- Using sandbox ID in production
+
+**Solutions**:
+
+1. **Verify resource ID format**:
+   - Transactions: `txn_...`
+   - Merchants: `merch_...`
+   - Settlements: `settle_...`
+
+2. **Check environment**:
+   - Test IDs only work in sandbox
+   - Live IDs only work in production
+
+3. **Verify resource exists**:
+   ```bash
+   # Check if resource exists
+   curl https://api.vinr.com/v1/bank/transactions/txn_123 \
+     -u bk_live_KEY:SECRET
+   ```
+
+## Timeout Errors
+
+### 408 Request Timeout
+
+**Error**: `request_timeout`
+
+**Causes**:
+- Slow network connection
+- Large request payload
+- Server under load
+
+**Solutions**:
+
+1. **Increase timeout**:
+   ```javascript
+   const client = new VinrClient({
+     timeout: 30000 // 30 seconds
+   });
+   ```
+
+2. **Retry failed requests**:
+   ```javascript
+   async function makeRequestWithRetry(url, options, maxRetries = 3) {
+     for (let i = 0; i < maxRetries; i++) {
+       try {
+         return await fetch(url, {
+           ...options,
+           timeout: 30000
+         });
+       } catch (error) {
+         if (error.name === 'TimeoutError' && i < maxRetries - 1) {
+           console.log(`Retry ${i + 1} after timeout`);
+           continue;
+         }
+         throw error;
+       }
+     }
+   }
+   ```
+
+3. **Check network connectivity**:
+   - Verify DNS resolution
+   - Check firewall rules
+   - Test network latency
+
+4. **Reduce payload size**:
+   - Paginate large requests
+   - Remove unnecessary fields
+
+### 504 Gateway Timeout
+
+**Error**: `gateway_timeout`
+
+**Cause**: Vinr servers experiencing high load
+
+**Solutions**:
+
+1. **Check status page**: [status.vinr.com](https://status.vinr.com)
+2. **Retry after delay**: Wait 30-60 seconds
+3. **Contact support**: If persists >15 minutes
+
+## Server Errors
+
+### 500 Internal Server Error
+
+**Error**: `internal_server_error`
+
+**Causes**:
+- Temporary server issue
+- Bug in API
+- Database unavailable
+
+**Solutions**:
+
+1. **Retry after delay**:
+   ```javascript
+   if (response.status === 500) {
+     await sleep(5000); // Wait 5 seconds
+     return retry();
+   }
+   ```
+
+2. **Check status page**:
+   - Verify no ongoing incidents
+
+3. **Log error details**:
+   ```javascript
+   console.error({
+     timestamp: new Date(),
+     endpoint: url,
+     requestId: response.headers['x-request-id'],
+     error: response.body
+   });
+   ```
+
+4. **Report to support**:
+   - Include request ID
+   - Provide request/response logs
+   - Steps to reproduce
+
+## Validation Errors
+
+### Invalid Amount
+
+**Error**: `invalid_amount`
+
+**Rules**:
+- Must be integer (smallest currency unit)
+- Minimum: 50 (€0.50)
+- Maximum: 2,500,000 (€25,000)
+
+**Solutions**:
+
+```javascript
+// Correct: Convert to cents
+const amount = 19.99 * 100; // 1999
+
+// Incorrect: Don't use floats
+const amount = 19.99; // ❌
+```
+
+### Invalid Currency
+
+**Error**: `invalid_currency`
+
+**Supported currencies**:
+- EUR, BGN, RON, PLN
+
+**Solutions**:
+
+```javascript
+// Use 3-letter uppercase code
+const currency = 'EUR'; // ✅
+
+// Not lowercase or symbols
+const currency = 'eur'; // ❌
+const currency = '€'; // ❌
+```
+
+### Invalid Card Data
+
+**Error**: `invalid_card`
+
+**Solutions**:
+
+1. **Validate card number**:
+   ```javascript
+   function validateCard(number) {
+     // Remove spaces
+     number = number.replace(/\s/g, '');
+     
+     // Check length
+     if (number.length < 13 || number.length > 19) {
+       return false;
+     }
+     
+     // Luhn algorithm
+     // ... validation code ...
+   }
+   ```
+
+2. **Check expiry date**:
+   ```javascript
+   function isExpired(month, year) {
+     const now = new Date();
+     const expiry = new Date(year, month - 1);
+     return expiry < now;
+   }
+   ```
+
+## Debugging Tips
+
+### Enable Debug Logging
+
+```javascript
+const client = new VinrClient({
+  apiKey: process.env.VINR_API_KEY,
+  debug: true,
+  logger: console
+});
+```
+
+### Capture Request IDs
+
+```javascript
+const response = await client.authorize(params);
+console.log('Request ID:', response.headers['x-request-id']);
+```
+
+### Test in Sandbox First
+
+```javascript
+// Always test in sandbox
+const client = new VinrClient({
+  apiKey: 'bk_sandbox_...',
+  apiBase: 'https://api-sandbox.vinr.com'
+});
+```
+
+## Next Steps
+
+- [Settlement Issues](/banks/troubleshooting/settlement-issues)
+- [Webhook Problems](/banks/troubleshooting/webhook-problems)
+- [API Documentation](/banks/integration)
