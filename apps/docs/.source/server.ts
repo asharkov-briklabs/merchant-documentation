@@ -25,14 +25,14 @@ import * as __fd_glob_12 from "../content/banks/reporting/transaction-reports.md
 import * as __fd_glob_11 from "../content/banks/reporting/settlement-reports.mdx?collection=banks"
 import * as __fd_glob_10 from "../content/banks/reporting/reconciliation.mdx?collection=banks"
 import * as __fd_glob_9 from "../content/banks/reporting/index.mdx?collection=banks"
-import * as __fd_glob_8 from "../content/banks/get-started/sandbox.mdx?collection=banks"
-import * as __fd_glob_7 from "../content/banks/get-started/onboarding.mdx?collection=banks"
-import * as __fd_glob_6 from "../content/banks/get-started/index.mdx?collection=banks"
-import * as __fd_glob_5 from "../content/banks/get-started/api-credentials.mdx?collection=banks"
-import * as __fd_glob_4 from "../content/banks/integration/webhooks.mdx?collection=banks"
-import * as __fd_glob_3 from "../content/banks/integration/settlement.mdx?collection=banks"
-import * as __fd_glob_2 from "../content/banks/integration/index.mdx?collection=banks"
-import * as __fd_glob_1 from "../content/banks/integration/authorization.mdx?collection=banks"
+import * as __fd_glob_8 from "../content/banks/integration/webhooks.mdx?collection=banks"
+import * as __fd_glob_7 from "../content/banks/integration/settlement.mdx?collection=banks"
+import * as __fd_glob_6 from "../content/banks/integration/index.mdx?collection=banks"
+import * as __fd_glob_5 from "../content/banks/integration/authorization.mdx?collection=banks"
+import * as __fd_glob_4 from "../content/banks/get-started/sandbox.mdx?collection=banks"
+import * as __fd_glob_3 from "../content/banks/get-started/onboarding.mdx?collection=banks"
+import * as __fd_glob_2 from "../content/banks/get-started/index.mdx?collection=banks"
+import * as __fd_glob_1 from "../content/banks/get-started/api-credentials.mdx?collection=banks"
 import * as __fd_glob_0 from "../content/banks/index.mdx?collection=banks"
 import { server } from 'fumadocs-mdx/runtime/server';
 import type * as Config from '../source.config';
@@ -42,6 +42,6 @@ const create = server<typeof Config, import("fumadocs-mdx/runtime/types").Intern
   }
 }>({"doc":{"passthroughs":["extractedReferences"]}});
 
-export const banks = await create.doc("banks", "content/banks", {"index.mdx": __fd_glob_0, "integration/authorization.mdx": __fd_glob_1, "integration/index.mdx": __fd_glob_2, "integration/settlement.mdx": __fd_glob_3, "integration/webhooks.mdx": __fd_glob_4, "get-started/api-credentials.mdx": __fd_glob_5, "get-started/index.mdx": __fd_glob_6, "get-started/onboarding.mdx": __fd_glob_7, "get-started/sandbox.mdx": __fd_glob_8, "reporting/index.mdx": __fd_glob_9, "reporting/reconciliation.mdx": __fd_glob_10, "reporting/settlement-reports.mdx": __fd_glob_11, "reporting/transaction-reports.mdx": __fd_glob_12, });
+export const banks = await create.doc("banks", "content/banks", {"index.mdx": __fd_glob_0, "get-started/api-credentials.mdx": __fd_glob_1, "get-started/index.mdx": __fd_glob_2, "get-started/onboarding.mdx": __fd_glob_3, "get-started/sandbox.mdx": __fd_glob_4, "integration/authorization.mdx": __fd_glob_5, "integration/index.mdx": __fd_glob_6, "integration/settlement.mdx": __fd_glob_7, "integration/webhooks.mdx": __fd_glob_8, "reporting/index.mdx": __fd_glob_9, "reporting/reconciliation.mdx": __fd_glob_10, "reporting/settlement-reports.mdx": __fd_glob_11, "reporting/transaction-reports.mdx": __fd_glob_12, });
 
 export const merchant = await create.doc("merchant", "content/merchant", {"index.mdx": __fd_glob_13, "analytics/dashboard.mdx": __fd_glob_14, "analytics/exports.mdx": __fd_glob_15, "analytics/index.mdx": __fd_glob_16, "analytics/reports.mdx": __fd_glob_17, "billing/index.mdx": __fd_glob_18, "billing/invoices.mdx": __fd_glob_19, "billing/pricing.mdx": __fd_glob_20, "billing/subscriptions.mdx": __fd_glob_21, "get-started/authentication.mdx": __fd_glob_22, "get-started/environments.mdx": __fd_glob_23, "get-started/index.mdx": __fd_glob_24, "get-started/quick-start.mdx": __fd_glob_25, "integrations/accounting.mdx": __fd_glob_26, "integrations/crm.mdx": __fd_glob_27, "integrations/ecommerce.mdx": __fd_glob_28, "integrations/index.mdx": __fd_glob_29, "payments/create-payment.mdx": __fd_glob_30, "payments/index.mdx": __fd_glob_31, "payments/payment-methods.mdx": __fd_glob_32, "payments/refunds.mdx": __fd_glob_33, "payments/webhooks.mdx": __fd_glob_34, });

@@ -4,64 +4,16 @@
 
    ▲ Next.js 15.5.12
 
-[MDX] generated files in 128.9770179999996ms
+[MDX] generated files in 128.18473399999993ms
    Creating an optimized production build ...
 <w> [webpack.cache.PackFileCacheStrategy/webpack.FileSystemInfo] Parsing of /home/user/vinrdocsmonorepo/node_modules/fumadocs-mdx/dist/load-from-file-XmVvZrXG.js for build dependencies failed at 'import(url.href)'.
 <w> Build dependencies behind this expression are ignored and might cause incorrect cache invalidation.
-<w> [webpack.cache.PackFileCacheStrategy] Skipped not serializable cache item 'Compilation/modules|javascript/auto|/home/user/vinrdocsmonorepo/node_modules/next/dist/build/webpack/loaders/next-flight-loader/index.js!/home/user/vinrdocsmonorepo/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js??ruleSet[1].rules[22].use[0]!/home/user/vinrdocsmonorepo/node_modules/fumadocs-mdx/loader-mdx.cjs??ruleSet[1].rules[22].use[1]!/home/user/vinrdocsmonorepo/apps/support/content/banks/faq/settlement.mdx?collection=banks|rsc': No serializer registered for VFileMessage
-<w> while serializing webpack/lib/cache/PackFileCacheStrategy.PackContentItems -> webpack/lib/NormalModule -> webpack/lib/ModuleBuildError -> VFileMessage
-<w> [webpack.cache.PackFileCacheStrategy] Skipped not serializable cache item 'Compilation/modules|javascript/auto|/home/user/vinrdocsmonorepo/node_modules/next/dist/build/webpack/loaders/next-flight-loader/index.js!/home/user/vinrdocsmonorepo/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js??ruleSet[1].rules[22].use[0]!/home/user/vinrdocsmonorepo/node_modules/fumadocs-mdx/loader-mdx.cjs??ruleSet[1].rules[22].use[1]!/home/user/vinrdocsmonorepo/apps/support/content/banks/faq/integration.mdx?collection=banks|rsc': No serializer registered for VFileMessage
-<w> while serializing webpack/lib/cache/PackFileCacheStrategy.PackContentItems -> webpack/lib/NormalModule -> webpack/lib/ModuleBuildError -> VFileMessage
-<w> [webpack.cache.PackFileCacheStrategy] Skipped not serializable cache item 'Compilation/modules|javascript/auto|/home/user/vinrdocsmonorepo/node_modules/next/dist/build/webpack/loaders/next-flight-loader/index.js!/home/user/vinrdocsmonorepo/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js??ruleSet[1].rules[22].use[0]!/home/user/vinrdocsmonorepo/node_modules/fumadocs-mdx/loader-mdx.cjs??ruleSet[1].rules[22].use[1]!/home/user/vinrdocsmonorepo/apps/support/content/banks/faq/partnership.mdx?collection=banks|rsc': No serializer registered for VFileMessage
-<w> while serializing webpack/lib/cache/PackFileCacheStrategy.PackContentItems -> webpack/lib/NormalModule -> webpack/lib/ModuleBuildError -> VFileMessage
-<w> [webpack.cache.PackFileCacheStrategy] Skipped not serializable cache item 'Compilation/modules|javascript/auto|/home/user/vinrdocsmonorepo/node_modules/next/dist/build/webpack/loaders/next-flight-loader/index.js!/home/user/vinrdocsmonorepo/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js??ruleSet[1].rules[22].use[0]!/home/user/vinrdocsmonorepo/node_modules/fumadocs-mdx/loader-mdx.cjs??ruleSet[1].rules[22].use[1]!/home/user/vinrdocsmonorepo/apps/support/content/banks/guides/go-live-checklist.mdx?collection=banks|rsc': No serializer registered for VFileMessage
-<w> while serializing webpack/lib/cache/PackFileCacheStrategy.PackContentItems -> webpack/lib/NormalModule -> webpack/lib/ModuleBuildError -> VFileMessage
 <w> [webpack.cache.PackFileCacheStrategy/webpack.FileSystemInfo] Parsing of /home/user/vinrdocsmonorepo/node_modules/fumadocs-mdx/dist/load-from-file-XmVvZrXG.js for build dependencies failed at 'import(url.href)'.
 <w> Build dependencies behind this expression are ignored and might cause incorrect cache invalidation.
-Failed to compile.
-
-./content/banks/faq/integration.mdx?collection=banks
-Unexpected character `1` (U+0031) before name, expected a character that can start a name, such as a letter, `$`, or `_`
-
-Import trace for requested module:
-./content/banks/faq/integration.mdx?collection=banks
-./.source/server.ts
-./lib/source.ts
-./app/merchant/layout.tsx
-
-./content/banks/faq/partnership.mdx?collection=banks
-Unexpected character `2` (U+0032) before name, expected a character that can start a name, such as a letter, `$`, or `_`
-
-Import trace for requested module:
-./content/banks/faq/partnership.mdx?collection=banks
-./.source/server.ts
-./lib/source.ts
-./app/merchant/layout.tsx
-
-./content/banks/faq/settlement.mdx?collection=banks
-Unexpected character `0` (U+0030) before name, expected a character that can start a name, such as a letter, `$`, or `_`
-
-Import trace for requested module:
-./content/banks/faq/settlement.mdx?collection=banks
-./.source/server.ts
-./lib/source.ts
-./app/merchant/layout.tsx
-
-./content/banks/guides/go-live-checklist.mdx?collection=banks
-Unexpected character `1` (U+0031) before name, expected a character that can start a name, such as a letter, `$`, or `_`
-
-Import trace for requested module:
-./content/banks/guides/go-live-checklist.mdx?collection=banks
-./.source/server.ts
-./lib/source.ts
-./app/merchant/layout.tsx
-
-
-> Build failed because of webpack errors
-npm error Lifecycle script `build` failed with error:
-npm error code 1
-npm error path /home/user/vinrdocsmonorepo/apps/support
-npm error workspace @vinr/support@1.0.0
-npm error location /home/user/vinrdocsmonorepo/apps/support
-npm error command failed
-npm error command sh -c next build
+<w> [webpack.cache.PackFileCacheStrategy/webpack.FileSystemInfo] Parsing of /home/user/vinrdocsmonorepo/node_modules/fumadocs-mdx/dist/load-from-file-XmVvZrXG.js for build dependencies failed at 'import(url.href)'.
+<w> Build dependencies behind this expression are ignored and might cause incorrect cache invalidation.
+ ✓ Compiled successfully in 24.7s
+   Skipping validation of types
+   Linting ...
+   Collecting page data ...
+uncaughtException [Error: write EPIPE] { errno: -32, code: 'EPIPE', syscall: 'write' }

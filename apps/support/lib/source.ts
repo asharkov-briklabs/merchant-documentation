@@ -4,11 +4,11 @@ import { merchant, banks } from '@/.source/server';
 // Merchant Support
 export const merchantSupportSource = loader({
   baseUrl: '/merchant',
-  source: merchant.toFumadocsSource(),
+  source: merchant,
 });
 
 // Bank Partner Support
 export const bankSupportSource = loader({
   baseUrl: '/banks',
-  source: banks.toFumadocsSource(),
+  source: banks,
 });
