@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "description": "Vinr Documentation Platform - Monorepo",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
@@ -24,8 +28,8 @@
     "turbo": "^1.11.3",
     "typescript": "^5.3.3"
   },
-  "packageManager": "pnpm@9.15.1",
   "engines": {
-    "node": "18.x"
+    "node": "18.x",
+    "npm": ">=9.0.0"
   }
 }
