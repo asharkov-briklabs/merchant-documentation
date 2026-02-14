@@ -9,3 +9,7 @@ node_modules/
 .env*.local
 .DS_Store
 .source/
+
+# Package manager lockfiles (using pnpm only)
+package-lock.json
+yarn.lock
