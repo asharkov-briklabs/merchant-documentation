@@ -1,5 +1,5 @@
 import { loader } from 'fumadocs-core/source';
-import { merchant, banks } from '@/.source';
+import { merchant, banks } from '@/.source/server';
 
 // Merchant Documentation
 export const merchantSource = loader({
