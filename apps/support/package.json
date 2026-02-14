@@ -18,7 +18,8 @@
     "fumadocs-ui": "^15.8.5",
     "fumadocs-core": "^15.8.5",
     "fumadocs-mdx": "^14.2.7",
-    "lucide-react": "^0.303.0",
+    "@fumadocs/mdx-remote": "^1.4.0",
+    "lucide-react": "^0.564.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "tailwind-merge": "^2.2.0"

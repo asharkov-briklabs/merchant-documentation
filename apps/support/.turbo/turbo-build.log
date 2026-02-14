@@ -1,0 +1,83 @@
+
+> @vinr/support@1.0.0 build
+> next build
+
+Attention: Next.js now collects completely anonymous telemetry regarding usage.
+This information is used to shape Next.js' roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+https://nextjs.org/telemetry
+
+   ▲ Next.js 15.5.12
+
+[MDX] generated files in 126.76295299999992ms
+   Creating an optimized production build ...
+Failed to fetch font `Inter`: https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap
+Please check your network connection.
+
+Retrying 1/3...
+Failed to fetch font `Inter`: https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap
+Please check your network connection.
+
+Retrying 2/3...
+Failed to fetch font `Inter`: https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap
+Please check your network connection.
+
+Retrying 3/3...
+[Error: Failed to fetch font `Inter`: https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap
+Please check your network connection.]
+<w> [webpack.cache.PackFileCacheStrategy/webpack.FileSystemInfo] Parsing of /home/user/vinrdocsmonorepo/node_modules/fumadocs-mdx/dist/load-from-file-XmVvZrXG.js for build dependencies failed at 'import(url.href)'.
+<w> Build dependencies behind this expression are ignored and might cause incorrect cache invalidation.
+<w> [webpack.cache.PackFileCacheStrategy/webpack.FileSystemInfo] Parsing of /home/user/vinrdocsmonorepo/node_modules/fumadocs-mdx/dist/load-from-file-XmVvZrXG.js for build dependencies failed at 'import(url.href)'.
+<w> Build dependencies behind this expression are ignored and might cause incorrect cache invalidation.
+Failed to compile.
+
+app/layout.tsx
+`next/font` error:
+Failed to fetch `Inter` from Google Fonts.
+
+./app/banks/layout.tsx
+Module not found: Package path ./layout is not exported from package /home/user/vinrdocsmonorepo/node_modules/fumadocs-ui (see exports field in /home/user/vinrdocsmonorepo/node_modules/fumadocs-ui/package.json)
+
+https://nextjs.org/docs/messages/module-not-found
+
+./app/merchant/layout.tsx
+Module not found: Package path ./layout is not exported from package /home/user/vinrdocsmonorepo/node_modules/fumadocs-ui (see exports field in /home/user/vinrdocsmonorepo/node_modules/fumadocs-ui/package.json)
+
+https://nextjs.org/docs/messages/module-not-found
+
+fumadocs-mdx:collections/server
+Module build failed: UnhandledSchemeError: Reading from "fumadocs-mdx:collections/server" is not handled by plugins (Unhandled scheme).
+Webpack supports "data:" and "file:" URIs by default.
+You may need an additional plugin to handle "fumadocs-mdx:" URIs.
+    at /home/user/vinrdocsmonorepo/node_modules/next/dist/compiled/webpack/bundle5.js:29:408351
+    at Hook.eval [as callAsync] (eval at create (/home/user/vinrdocsmonorepo/node_modules/next/dist/compiled/webpack/bundle5.js:14:9224), <anonymous>:6:1)
+    at Hook.CALL_ASYNC_DELEGATE [as _callAsync] (/home/user/vinrdocsmonorepo/node_modules/next/dist/compiled/webpack/bundle5.js:14:6378)
+    at Object.processResource (/home/user/vinrdocsmonorepo/node_modules/next/dist/compiled/webpack/bundle5.js:29:408276)
+    at processResource (/home/user/vinrdocsmonorepo/node_modules/next/dist/compiled/loader-runner/LoaderRunner.js:1:5308)
+    at iteratePitchingLoaders (/home/user/vinrdocsmonorepo/node_modules/next/dist/compiled/loader-runner/LoaderRunner.js:1:4667)
+    at runLoaders (/home/user/vinrdocsmonorepo/node_modules/next/dist/compiled/loader-runner/LoaderRunner.js:1:8590)
+    at NormalModule._doBuild (/home/user/vinrdocsmonorepo/node_modules/next/dist/compiled/webpack/bundle5.js:29:408138)
+    at NormalModule.build (/home/user/vinrdocsmonorepo/node_modules/next/dist/compiled/webpack/bundle5.js:29:410151)
+    at /home/user/vinrdocsmonorepo/node_modules/next/dist/compiled/webpack/bundle5.js:29:82479
+    at NormalModule.needBuild (/home/user/vinrdocsmonorepo/node_modules/next/dist/compiled/webpack/bundle5.js:29:414101)
+    at Compilation._buildModule (/home/user/vinrdocsmonorepo/node_modules/next/dist/compiled/webpack/bundle5.js:29:82196)
+    at /home/user/vinrdocsmonorepo/node_modules/next/dist/compiled/webpack/bundle5.js:29:1378123
+    at Hook.eval [as callAsync] (eval at create (/home/user/vinrdocsmonorepo/node_modules/next/dist/compiled/webpack/bundle5.js:14:9224), <anonymous>:6:1)
+    at AsyncQueue._startProcessing (/home/user/vinrdocsmonorepo/node_modules/next/dist/compiled/webpack/bundle5.js:29:1377994)
+    at AsyncQueue._ensureProcessing (/home/user/vinrdocsmonorepo/node_modules/next/dist/compiled/webpack/bundle5.js:29:1377843)
+    at process.processImmediate (node:internal/timers:485:21)
+
+Import trace for requested module:
+fumadocs-mdx:collections/server
+./lib/source.ts
+./app/merchant/layout.tsx
+
+
+> Build failed because of webpack errors
+npm error Lifecycle script `build` failed with error:
+npm error code 1
+npm error path /home/user/vinrdocsmonorepo/apps/support
+npm error workspace @vinr/support@1.0.0
+npm error location /home/user/vinrdocsmonorepo/apps/support
+npm error command failed
+npm error command sh -c next build

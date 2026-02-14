@@ -1,5 +1,5 @@
 import { merchantSupportSource } from '@/lib/source';
-import { DocsLayout } from 'fumadocs-ui/layout';
+import { DocsLayout } from 'fumadocs-ui/layouts/docs';
 import type { ReactNode } from 'react';
 
 export default function MerchantLayout({ children }: { children: ReactNode }) {
