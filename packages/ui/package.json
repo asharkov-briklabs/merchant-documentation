@@ -6,6 +6,8 @@
   "types": "./src/index.ts",
   "scripts": {
     "lint": "eslint .",
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json}\"",
+    "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,json}\"",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
