@@ -1,12 +1,19 @@
 // source.config.ts
-import { defineCollections } from "fumadocs-mdx/config";
+import { defineCollections, frontmatterSchema } from "fumadocs-mdx/config";
+import { z } from "zod";
 var merchant = defineCollections({
   type: "doc",
-  dir: "content/merchant"
+  dir: "content/merchant",
+  schema: frontmatterSchema.extend({
+    full: z.boolean().optional()
+  })
 });
 var banks = defineCollections({
   type: "doc",
-  dir: "content/banks"
+  dir: "content/banks",
+  schema: frontmatterSchema.extend({
+    full: z.boolean().optional()
+  })
 });
 export {
   banks,

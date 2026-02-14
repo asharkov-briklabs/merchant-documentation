@@ -8,10 +8,6 @@ const withMDX = createMDX({
 const nextConfig = {
   reactStrictMode: true,
   pageExtensions: ['js', 'jsx', 'ts', 'tsx', 'md', 'mdx'],
-  typescript: {
-    // Temporarily ignore type errors during build
-    ignoreBuildErrors: true,
-  },
 };
 
 export default withMDX(nextConfig);
