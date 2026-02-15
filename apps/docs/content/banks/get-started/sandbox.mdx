@@ -1,0 +1,149 @@
+---
+title: Sandbox Environment
+description: Test your integration in the Vinr sandbox
+---
+
+## Overview
+
+The sandbox environment is a complete replica of the production system for testing your integration.
+
+## Sandbox Features
+
+- Full API functionality
+- Test payment instruments
+- Webhook testing
+- Error simulation
+- No real money transactions
+
+## Sandbox Endpoints
+
+### API Base URL
+```
+https://api-sandbox.vinr.com/v1/bank
+```
+
+### Dashboard
+```
+https://dashboard-sandbox.vinr.com
+```
+
+## Test Data
+
+### Test Merchants
+
+The sandbox includes pre-configured test merchants:
+
+```
+Merchant ID: merch_test_001
+API Key: pk_test_merchant_001
+```
+
+### Test Cards
+
+Use these card numbers for testing:
+
+#### Successful Transactions
+```
+4242 4242 4242 4242  // Visa
+5555 5555 5555 4444  // Mastercard
+```
+
+#### Declined Transactions
+```
+4000 0000 0000 0002  // Generic decline
+4000 0000 0000 0069  // Expired card
+4000 0000 0000 9995  // Insufficient funds
+4000 0000 0000 9987  // Lost card
+```
+
+#### Special Scenarios
+```
+4000 0027 6000 3184  // 3D Secure required
+4000 0000 0000 3220  // Requires authorization (pending)
+```
+
+## Testing Scenarios
+
+### 1. Authorization
+
+Test payment authorization:
+
+```bash
+curl https://api-sandbox.vinr.com/v1/bank/authorize \
+  -u bk_sandbox_YOUR_KEY:YOUR_SECRET \
+  -d merchant_id=merch_test_001 \
+  -d amount=5000 \
+  -d currency=EUR \
+  -d card_number=4242424242424242
+```
+
+### 2. Capture
+
+Test payment capture:
+
+```bash
+curl https://api-sandbox.vinr.com/v1/bank/capture \
+  -u bk_sandbox_YOUR_KEY:YOUR_SECRET \
+  -d authorization_id=auth_123456
+```
+
+### 3. Refund
+
+Test refund processing:
+
+```bash
+curl https://api-sandbox.vinr.com/v1/bank/refund \
+  -u bk_sandbox_YOUR_KEY:YOUR_SECRET \
+  -d transaction_id=txn_123456 \
+  -d amount=5000
+```
+
+### 4. Webhook Testing
+
+Simulate webhook events:
+
+```bash
+curl https://api-sandbox.vinr.com/v1/bank/simulate-webhook \
+  -u bk_sandbox_YOUR_KEY:YOUR_SECRET \
+  -d event_type=transaction.completed \
+  -d transaction_id=txn_123456
+```
+
+## Error Simulation
+
+Test error handling using special amounts:
+
+| Amount | Error |
+|--------|-------|
+| €10.00 | Insufficient funds |
+| €20.00 | Card declined |
+| €30.00 | Processing error |
+| €40.00 | Network timeout |
+
+## Rate Limits
+
+Sandbox has the same rate limits as production:
+
+- 100 requests per second
+- 10,000 requests per hour
+
+## Data Retention
+
+Sandbox data is retained for 30 days, then automatically deleted.
+
+## Moving to Production
+
+Before moving to production:
+
+- [ ] Complete all test scenarios
+- [ ] Verify webhook handling
+- [ ] Test error recovery
+- [ ] Validate settlement reconciliation
+- [ ] Complete security review
+- [ ] Document integration
+
+## Next Steps
+
+- [Integration Guide](/banks/integration)
+- [API Reference](/banks/integration)
+- [Reporting](/banks/reporting)

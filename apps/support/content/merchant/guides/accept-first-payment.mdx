@@ -1,0 +1,284 @@
+---
+title: Accept Your First Payment
+description: Step-by-step guide to processing your first payment with Vinr
+---
+
+## Overview
+
+This guide shows you how to accept your first payment using Vinr's API.
+
+**Time required**: 20-30 minutes  
+**Prerequisites**: Vinr account with API keys
+
+## Step 1: Install SDK
+
+<Tabs items={['Node.js', 'Python', 'PHP', 'Ruby']}>
+  <Tab value="Node.js">
+    ```bash
+    npm install @vinr/sdk
+    ```
+  </Tab>
+  <Tab value="Python">
+    ```bash
+    pip install vinr
+    ```
+  </Tab>
+  <Tab value="PHP">
+    ```bash
+    composer require vinr/vinr-php
+    ```
+  </Tab>
+  <Tab value="Ruby">
+    ```bash
+    gem install vinr
+    ```
+  </Tab>
+</Tabs>
+
+## Step 2: Create Payment Intent (Server-side)
+
+Create a payment intent on your server:
+
+```javascript
+// server.js
+const Vinr = require('@vinr/sdk');
+const vinr = new Vinr(process.env.VINR_SECRET_KEY);
+
+app.post('/create-payment-intent', async (req, res) => {
+  try {
+    const paymentIntent = await vinr.paymentIntents.create({
+      amount: 2000, // €20.00 in cents
+      currency: 'EUR',
+      payment_method_types: ['card'],
+      description: 'Test Payment',
+    });
+
+    res.json({
+      clientSecret: paymentIntent.client_secret
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+```
+
+## Step 3: Create Payment Form (Client-side)
+
+Build a simple payment page:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Vinr Payment</title>
+  <script src="https://js.vinr.com/v1/"></script>
+  <style>
+    .payment-form { max-width: 400px; margin: 50px auto; }
+    #card-element { border: 1px solid #ccc; padding: 10px; }
+    button { margin-top: 20px; padding: 10px 20px; }
+    .error { color: red; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="payment-form">
+    <h2>Pay €20.00</h2>
+    <form id="payment-form">
+      <div id="card-element"></div>
+      <button type="submit">Pay Now</button>
+      <div id="error-message" class="error"></div>
+    </form>
+  </div>
+
+  <script src="/checkout.js"></script>
+</body>
+</html>
+```
+
+## Step 4: Handle Payment Submission
+
+```javascript
+// checkout.js
+const vinr = Vinr('pk_test_YOUR_PUBLISHABLE_KEY');
+const elements = vinr.elements();
+const cardElement = elements.create('card');
+cardElement.mount('#card-element');
+
+const form = document.getElementById('payment-form');
+const errorMessage = document.getElementById('error-message');
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+
+  // Show loading state
+  const submitButton = form.querySelector('button');
+  submitButton.disabled = true;
+  submitButton.textContent = 'Processing...';
+
+  try {
+    // Get client secret from server
+    const response = await fetch('/create-payment-intent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const { clientSecret } = await response.json();
+
+    // Confirm payment
+    const { error, paymentIntent } = await vinr.confirmCardPayment(
+      clientSecret,
+      {
+        payment_method: {
+          card: cardElement,
+          billing_details: {
+            name: 'Customer Name',
+          },
+        },
+      }
+    );
+
+    if (error) {
+      // Show error to customer
+      errorMessage.textContent = error.message;
+      submitButton.disabled = false;
+      submitButton.textContent = 'Pay Now';
+    } else if (paymentIntent.status === 'succeeded') {
+      // Payment succeeded!
+      window.location.href = '/success';
+    }
+  } catch (error) {
+    errorMessage.textContent = 'Payment failed. Please try again.';
+    submitButton.disabled = false;
+    submitButton.textContent = 'Pay Now';
+  }
+});
+```
+
+## Step 5: Handle Success
+
+Create a success page:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Payment Successful</title>
+</head>
+<body>
+  <h1>✅ Payment Successful!</h1>
+  <p>Thank you for your payment of €20.00</p>
+  <p>You will receive a confirmation email shortly.</p>
+</body>
+</html>
+```
+
+## Step 6: Set Up Webhooks
+
+Handle payment events server-side:
+
+```javascript
+// server.js
+app.post('/webhooks/vinr', async (req, res) => {
+  const event = req.body;
+
+  // Verify webhook signature
+  const signature = req.headers['vinr-signature'];
+  // ... signature verification code ...
+
+  // Handle the event
+  switch (event.type) {
+    case 'payment_intent.succeeded':
+      const paymentIntent = event.data.object;
+      console.log('Payment succeeded:', paymentIntent.id);
+      
+      // Fulfill the order
+      await fulfillOrder(paymentIntent);
+      break;
+
+    case 'payment_intent.failed':
+      console.log('Payment failed:', event.data.object.id);
+      // Notify customer
+      break;
+  }
+
+  res.json({ received: true });
+});
+
+async function fulfillOrder(paymentIntent) {
+  // Your order fulfillment logic here
+  console.log('Fulfilling order for payment:', paymentIntent.id);
+  // - Send confirmation email
+  // - Update database
+  // - Ship product
+}
+```
+
+## Step 7: Test Your Integration
+
+### Test with Success Card
+
+```
+Card Number: 4242 4242 4242 4242
+Expiry: 12/25
+CVV: 123
+```
+
+Expected: Payment succeeds ✅
+
+### Test with Declined Card
+
+```
+Card Number: 4000 0000 0000 0002
+Expiry: 12/25
+CVV: 123
+```
+
+Expected: Payment declined ❌
+
+### Verify in Dashboard
+
+1. Log in to [dashboard.vinr.com](https://dashboard.vinr.com)
+2. Go to **Payments**
+3. See your test payment
+4. Click for details
+
+## Common Issues
+
+### "Invalid API key" error
+
+- Verify you're using the correct key
+- Check for typos or extra spaces
+- Ensure using test key in test mode
+
+### Payment form not showing
+
+- Check browser console for errors
+- Verify Vinr.js script is loaded
+- Ensure publishable key is correct
+
+### Webhook not received
+
+- Verify webhook URL is publicly accessible
+- Check webhook logs in dashboard
+- Ensure endpoint returns 200 status
+
+## Next Steps
+
+### Add More Features
+
+- [Accept multiple currencies](/merchant/payments)
+- [Save cards for future use](/merchant/payments)
+- [Set up subscriptions](/merchant/billing)
+
+### Go Live
+
+- [Going Live Checklist](/merchant/guides/going-live)
+- [Security Best Practices](/merchant/get-started/authentication)
+
+### Get Help
+
+- [Troubleshooting](/merchant/troubleshooting)
+- [FAQ](/merchant/faq)
+- Email: support@vinr.com
+
+## Congratulations! 🎉
+
+You've successfully processed your first payment with Vinr!

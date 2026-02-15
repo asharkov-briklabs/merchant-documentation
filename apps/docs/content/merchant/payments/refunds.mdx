@@ -1,0 +1,38 @@
+---
+title: Refunds
+description: Learn how to process refunds and cancellations
+---
+
+## Overview
+
+Refunds allow you to return funds to customers for completed payments.
+
+## Creating a Refund
+
+```javascript
+const refund = await vinr.refunds.create({
+  payment_intent_id: 'pi_1234567890',
+  amount: 5000, // Optional: partial refund
+  reason: 'customer_request',
+});
+```
+
+## Refund Types
+
+### Full Refund
+
+Refund the entire payment amount.
+
+### Partial Refund
+
+Refund only a portion of the payment amount.
+
+## Refund Timing
+
+- **Card payments**: 5-10 business days
+- **Bank transfers**: 3-5 business days
+
+## Next Steps
+
+- [Create Payment](/merchant/payments/create-payment)
+- [Webhooks](/merchant/payments/webhooks)

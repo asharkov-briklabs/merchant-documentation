@@ -4,7 +4,7 @@
   "pages": [
     "index",
     "quick-start",
-    "account-setup",
-    "api-keys"
+    "authentication",
+    "environments"
   ]
 }

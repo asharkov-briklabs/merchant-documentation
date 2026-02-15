@@ -1,0 +1,10 @@
+{
+  "title": "Reporting",
+  "icon": "FileText",
+  "pages": [
+    "index",
+    "transaction-reports",
+    "settlement-reports",
+    "reconciliation"
+  ]
+}

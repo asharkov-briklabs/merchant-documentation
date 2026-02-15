@@ -1,0 +1,20 @@
+import { defineCollections, frontmatterSchema } from 'fumadocs-mdx/config';
+import { z } from 'zod';
+
+// Merchant Documentation
+export const merchant = defineCollections({
+  type: 'doc',
+  dir: 'content/merchant',
+  schema: frontmatterSchema.extend({
+    full: z.boolean().optional(),
+  }),
+});
+
+// Bank Partner Documentation
+export const banks = defineCollections({
+  type: 'doc',
+  dir: 'content/banks',
+  schema: frontmatterSchema.extend({
+    full: z.boolean().optional(),
+  }),
+});

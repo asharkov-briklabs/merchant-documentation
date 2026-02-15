@@ -1,0 +1,269 @@
+---
+title: Getting Started Guide
+description: Complete guide to setting up your Vinr account
+---
+
+## Introduction
+
+This guide will walk you through everything you need to start accepting payments with Vinr.
+
+**Time required**: 30-45 minutes
+
+## Step 1: Create Your Account
+
+### Sign Up
+
+1. Go to [vinr.com/signup](https://vinr.com/signup)
+2. Enter your business email
+3. Create a password
+4. Verify your email address
+
+### Business Information
+
+Provide your business details:
+
+- Legal business name
+- Business type (company, sole trader, etc.)
+- Registration number
+- Business address
+- Tax ID
+
+**Tip**: Have your business registration documents ready.
+
+## Step 2: Complete Verification
+
+### Required Documents
+
+Upload the following:
+
+#### Business Documents
+- Certificate of incorporation
+- Business license (if applicable)
+- Tax registration certificate
+
+#### Identity Documents
+- Passport or national ID (directors/owners)
+- Proof of address (utility bill, bank statement)
+
+### Upload Tips
+
+- **Format**: PDF, JPG, or PNG
+- **Size**: Max 10MB per file
+- **Quality**: Clear and legible
+- **Valid**: Not expired
+
+### Verification Timeline
+
+- **Standard**: 1-2 business days
+- **With clarifications**: 3-5 business days
+
+You'll receive email updates on your verification status.
+
+## Step 3: Set Up Banking
+
+### Add Bank Account
+
+1. Navigate to **Settings** → **Bank Account**
+2. Select your country
+3. Enter bank details:
+   - Account holder name
+   - IBAN / Account number
+   - BIC/SWIFT code (if required)
+
+### Verify Bank Account
+
+- **Micro-deposits**: We'll send small amounts to verify
+- **Instant verification**: Available in some countries
+- **Timeline**: 1-2 business days
+
+## Step 4: Get API Keys
+
+### Access Your Keys
+
+1. Go to **Settings** → **API Keys**
+2. You'll see two sets of keys:
+   - **Test keys**: For development (`pk_test_...`, `sk_test_...`)
+   - **Live keys**: For production (`pk_live_...`, `sk_live_...`)
+
+### Security Best Practices
+
+```bash
+# Store in environment variables
+export VINR_SECRET_KEY="sk_test_YOUR_KEY"
+
+# Never commit to version control
+echo "VINR_SECRET_KEY=sk_test_YOUR_KEY" >> .env
+echo ".env" >> .gitignore
+```
+
+## Step 5: Choose Your Integration
+
+### Option A: Pre-built Plugins
+
+**Best for**: E-commerce platforms
+
+Available for:
+- WooCommerce
+- Shopify
+- Magento
+- PrestaShop
+
+[View Plugin Guides →](/merchant/integrations)
+
+### Option B: Custom Integration
+
+**Best for**: Custom applications
+
+Choose your language:
+- [Node.js](/merchant/get-started)
+- [Python](/merchant/get-started)
+- [PHP](/merchant/get-started)
+- [Ruby](/merchant/get-started)
+
+### Option C: No-Code Solution
+
+**Best for**: Simple payment links
+
+1. Go to **Payments** → **Payment Links**
+2. Create a payment link
+3. Share with customers
+4. Get paid!
+
+## Step 6: Test Your Integration
+
+### Use Test Mode
+
+Always test in sandbox environment first:
+
+```javascript
+// Use test API keys
+const vinr = new Vinr('pk_test_YOUR_KEY');
+```
+
+### Test Cards
+
+Use these cards in test mode:
+
+#### Successful Payment
+```
+4242 4242 4242 4242
+Exp: Any future date
+CVV: Any 3 digits
+```
+
+#### Declined Payment
+```
+4000 0000 0000 0002
+```
+
+### Test Scenarios
+
+- ✅ Successful payment
+- ❌ Declined payment
+- 🔒 3D Secure authentication
+- 💰 Refund processing
+- 📧 Webhook delivery
+
+## Step 7: Configure Webhooks
+
+### Why Webhooks?
+
+Webhooks notify your system when payment events occur:
+
+- Payment succeeded
+- Payment failed
+- Refund completed
+- Chargeback received
+
+### Set Up Webhook
+
+1. Go to **Settings** → **Webhooks**
+2. Click **Add Endpoint**
+3. Enter your URL: `https://yoursite.com/webhooks/vinr`
+4. Select events to receive
+5. Save webhook secret
+
+### Test Webhook
+
+```bash
+# Vinr will send a test event
+POST https://yoursite.com/webhooks/vinr
+
+# Verify you receive it correctly
+```
+
+## Step 8: Go Live
+
+### Pre-Launch Checklist
+
+Before switching to live keys:
+
+- [ ] Tested all payment flows
+- [ ] Webhook handling works
+- [ ] Error handling implemented
+- [ ] SSL certificate valid
+- [ ] Terms & conditions displayed
+- [ ] Privacy policy published
+
+### Switch to Live Keys
+
+```javascript
+// Update from test to live keys
+const vinr = new Vinr('pk_live_YOUR_KEY');
+```
+
+### Start with Small Transactions
+
+Test with real small-value transactions first:
+
+1. Process a €1 payment
+2. Verify it appears in dashboard
+3. Check webhook delivery
+4. Test refund process
+
+## Next Steps
+
+### Monitor Your Payments
+
+- Check your dashboard daily
+- Set up payment notifications
+- Review transaction reports
+
+### Optimize Your Integration
+
+- [Accept First Payment Guide](/merchant/guides/accept-first-payment)
+- [Going Live Checklist](/merchant/guides/going-live)
+- [Best Practices](/merchant/payments)
+
+### Get Support
+
+- **Email**: support@vinr.com
+- **Chat**: Available in dashboard
+- **Documentation**: [docs.vinr.com](/merchant)
+
+## Common Questions
+
+### How long until I can accept payments?
+
+- Account creation: Immediate
+- Verification: 1-2 business days
+- Bank verification: 1-2 business days
+- **Total**: 2-4 business days
+
+### What if verification takes longer?
+
+Check your email for document requests. Contact support if no update after 5 business days.
+
+### Can I accept payments before verification?
+
+You can test in sandbox mode, but need full verification for live payments.
+
+### What are the transaction fees?
+
+See our [pricing page](/merchant/billing/pricing) for current fees.
+
+## Congratulations!
+
+You're now ready to start accepting payments with Vinr! 🎉
+
+[Accept Your First Payment →](/merchant/guides/accept-first-payment)

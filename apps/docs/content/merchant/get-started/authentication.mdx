@@ -1,0 +1,45 @@
+---
+title: Authentication
+description: Learn how to authenticate your API requests with Vinr
+---
+
+## Authentication Overview
+
+Vinr uses API keys to authenticate requests. Your API keys carry many privileges, so be sure to keep them secure!
+
+## API Keys
+
+All API requests must include your API key in the request header:
+
+```bash
+curl https://api.vinr.com/v1/payments \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Key Types
+
+### Live Keys
+
+Used for production transactions. Live keys start with `pk_live_` for publishable keys and `sk_live_` for secret keys.
+
+### Test Keys
+
+Used for testing and development. Test keys start with `pk_test_` for publishable keys and `sk_test_` for secret keys.
+
+## Managing API Keys
+
+You can manage your API keys from the [Vinr Dashboard](https://dashboard.vinr.com/settings/api-keys).
+
+## Security Best Practices
+
+- **Rotate keys regularly** - Update your API keys periodically
+- **Use environment variables** - Never hardcode keys in your source code
+- **Restrict key permissions** - Use the principle of least privilege
+- **Monitor key usage** - Regularly review API key activity
+- **Revoke compromised keys** - Immediately disable any exposed keys
+
+## Next Steps
+
+- [Quick Start Guide](/merchant/get-started/quick-start)
+- [Environments](/merchant/get-started/environments)
+- [Making Your First Payment](/merchant/payments)

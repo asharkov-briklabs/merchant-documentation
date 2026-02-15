@@ -1,0 +1,10 @@
+{
+  "title": "Troubleshooting",
+  "icon": "Tool",
+  "pages": [
+    "index",
+    "payment-errors",
+    "integration-issues",
+    "account-issues"
+  ]
+}
