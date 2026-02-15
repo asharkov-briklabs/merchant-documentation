@@ -27,6 +27,8 @@ export async function generateStaticParams() {
   return merchantSupportSource.generateParams();
 }
 
+export const dynamicParams = false;
+
 export async function generateMetadata(props: {
   params: Promise<{ slug?: string[] }>;
 }): Promise<Metadata> {
