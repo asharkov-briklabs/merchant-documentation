@@ -1,0 +1,10 @@
+{
+  "title": "Integration",
+  "icon": "Code",
+  "pages": [
+    "index",
+    "authorization",
+    "settlement",
+    "webhooks"
+  ]
+}

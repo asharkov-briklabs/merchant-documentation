@@ -4,8 +4,8 @@
     "index",
     "get-started",
     "payments",
+    "billing",
     "analytics",
-    "integrations",
-    "compliance"
+    "integrations"
   ]
 }

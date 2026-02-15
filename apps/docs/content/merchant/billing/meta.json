@@ -1,0 +1,10 @@
+{
+  "title": "Billing",
+  "icon": "Receipt",
+  "pages": [
+    "index",
+    "invoices",
+    "subscriptions",
+    "pricing"
+  ]
+}

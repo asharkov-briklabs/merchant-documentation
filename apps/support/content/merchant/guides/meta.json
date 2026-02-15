@@ -1,0 +1,10 @@
+{
+  "title": "Guides",
+  "icon": "Book",
+  "pages": [
+    "index",
+    "getting-started",
+    "accept-first-payment",
+    "going-live"
+  ]
+}

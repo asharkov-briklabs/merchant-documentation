@@ -1,0 +1,58 @@
+---
+title: Environments
+description: Understanding Vinr's test and live environments
+---
+
+## Overview
+
+Vinr provides two separate environments to help you build and test your integration before processing live payments.
+
+## Test Environment
+
+The test environment is a complete replica of the live environment, allowing you to test without processing real transactions.
+
+### Test API Endpoint
+```
+https://api-test.vinr.com/v1/
+```
+
+## Live Environment
+
+The live environment is used for processing real payments with actual money.
+
+### Live API Endpoint
+```
+https://api.vinr.com/v1/
+```
+
+## Testing Cards
+
+In the test environment, use these test card numbers:
+
+### Successful Payments
+```
+4242 4242 4242 4242  // Visa
+5555 5555 5555 4444  // Mastercard
+```
+
+### Declined Payments
+```
+4000 0000 0000 0002  // Card declined
+4000 0000 0000 9995  // Insufficient funds
+```
+
+## Switching Between Environments
+
+Use environment variables to switch between environments:
+
+```javascript
+const VINR_API_URL = process.env.NODE_ENV === 'production'
+  ? 'https://api.vinr.com/v1'
+  : 'https://api-test.vinr.com/v1';
+```
+
+## Next Steps
+
+- [Authentication](/merchant/get-started/authentication)
+- [Quick Start Guide](/merchant/get-started/quick-start)
+- [Payments](/merchant/payments)

@@ -1,0 +1,154 @@
+---
+title: Authorization API
+description: Process payment authorization requests
+---
+
+## Overview
+
+The Authorization API allows you to approve or decline payment requests from merchants.
+
+## Authorization Endpoint
+
+```
+POST /v1/bank/authorize
+```
+
+## Request Format
+
+```json
+{
+  "merchant_id": "merch_123",
+  "transaction_id": "txn_abc123",
+  "amount": 5000,
+  "currency": "EUR",
+  "payment_method": {
+    "type": "card",
+    "card_number": "4242424242424242",
+    "exp_month": 12,
+    "exp_year": 2025,
+    "cvv": "123",
+    "cardholder_name": "John Doe"
+  },
+  "billing_address": {
+    "line1": "123 Main St",
+    "city": "Sofia",
+    "postal_code": "1000",
+    "country": "BG"
+  },
+  "metadata": {
+    "order_id": "order_123",
+    "customer_email": "customer@example.com"
+  }
+}
+```
+
+## Response Format
+
+### Approved Authorization
+
+```json
+{
+  "authorization_id": "auth_xyz789",
+  "status": "approved",
+  "authorization_code": "123456",
+  "amount": 5000,
+  "currency": "EUR",
+  "expires_at": "2024-03-15T23:59:59Z",
+  "risk_score": 25,
+  "processor_response": {
+    "code": "00",
+    "message": "Approved"
+  }
+}
+```
+
+### Declined Authorization
+
+```json
+{
+  "authorization_id": "auth_xyz789",
+  "status": "declined",
+  "decline_reason": "insufficient_funds",
+  "processor_response": {
+    "code": "51",
+    "message": "Insufficient funds"
+  }
+}
+```
+
+## Authorization Statuses
+
+| Status | Description |
+|--------|-------------|
+| `approved` | Authorization approved |
+| `declined` | Authorization declined |
+| `pending` | Requires additional verification |
+| `expired` | Authorization has expired |
+
+## Decline Reasons
+
+| Reason | Description |
+|--------|-------------|
+| `insufficient_funds` | Insufficient funds in account |
+| `invalid_card` | Invalid card number |
+| `expired_card` | Card has expired |
+| `card_declined` | Card declined by issuer |
+| `suspected_fraud` | Suspected fraudulent transaction |
+| `lost_card` | Card reported lost |
+| `stolen_card` | Card reported stolen |
+
+## Capture Endpoint
+
+```
+POST /v1/bank/capture
+```
+
+## Capture Request
+
+```json
+{
+  "authorization_id": "auth_xyz789",
+  "amount": 5000,
+  "final": true
+}
+```
+
+## Capture Response
+
+```json
+{
+  "capture_id": "cap_abc123",
+  "status": "completed",
+  "amount": 5000,
+  "currency": "EUR",
+  "settlement_date": "2024-03-16"
+}
+```
+
+## Void Authorization
+
+```
+POST /v1/bank/void
+```
+
+## Void Request
+
+```json
+{
+  "authorization_id": "auth_xyz789"
+}
+```
+
+## Best Practices
+
+- Validate card data before processing
+- Implement fraud detection
+- Respond within 3 seconds
+- Log all authorization attempts
+- Handle partial captures correctly
+
+## Next Steps
+
+- [Settlement Process](/banks/integration/settlement)
+- [Webhooks](/banks/integration/webhooks)
+- [Reporting](/banks/reporting)
