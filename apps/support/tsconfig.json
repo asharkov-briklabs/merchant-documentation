@@ -14,16 +14,12 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
+    "types": ["@react-router/node", "@react-router/serve", "vite/client"],
     "paths": {
       "@/*": ["./*"],
       "fumadocs-mdx:collections/*": ["./.source/*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "include": ["**/*.ts", "**/*.tsx", ".react-router/types/**/*.ts"],
   "exclude": ["node_modules"]
 }

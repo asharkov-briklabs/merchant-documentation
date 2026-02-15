@@ -3,27 +3,32 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
+    "dev": "react-router dev",
+    "build": "react-router build",
+    "start": "react-router-serve build/client",
+    "typecheck": "react-router typegen && tsc",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,md,mdx}\"",
     "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,json,css,md,mdx}\"",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "next": "^16.1.6",
+    "@react-router/node": "^7.6.1",
+    "@react-router/serve": "^7.6.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "react-router": "^7.6.1",
     "fumadocs-ui": "^16.6.1",
     "fumadocs-core": "^16.6.1",
     "fumadocs-mdx": "^14.2.7",
     "lucide-react": "^0.564.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
+    "isbot": "^5.1.21",
     "tailwind-merge": "^2.2.0"
   },
   "devDependencies": {
+    "@react-router/dev": "^7.6.1",
+    "@types/mdx": "^2.0.13",
     "@types/node": "^20.10.6",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
@@ -32,7 +37,7 @@
     "@tailwindcss/postcss": "^4.0.0",
     "autoprefixer": "^10.4.16",
     "postcss": "^8.4.32",
-    "eslint": "^8.56.0",
-    "eslint-config-next": "^15.5.12"
+    "vite": "^6.0.11",
+    "vite-tsconfig-paths": "^5.1.4"
   }
 }
