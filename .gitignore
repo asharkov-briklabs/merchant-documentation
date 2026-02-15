@@ -10,17 +10,6 @@ node_modules/
 .DS_Store
 .source/
 
-# Vite (if accidentally added, we use Next.js)
-dist/
-*.local
-vite.config.*
-.vite/
-
-# React Router (if accidentally added, we use Next.js)
-build/
-react-router.config.ts
-routes.ts
-
 # Package manager lockfiles (using pnpm only)
 package-lock.json
 yarn.lock
