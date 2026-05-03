@@ -1,0 +1,55 @@
+---
+title: Compliance
+description: KYC, AML, PCI DSS, and regulatory requirements for VINR merchants.
+---
+
+## Overview
+
+As a regulated payment institution, VINR maintains strict compliance standards. This section helps you understand your obligations as a merchant.
+
+## PCI DSS
+
+Your PCI compliance level depends on your integration type:
+
+| Integration | PCI Level | Requirement |
+|---|---|---|
+| Hosted Checkout | SAQ-A | Minimal — VINR handles all card data |
+| Embedded Components | SAQ-A EP | Moderate — card data touches your page |
+| Direct API | SAQ-D | Full — you handle raw card data |
+
+<Callout type="warn">
+Most merchants should use Hosted Checkout or Embedded Components to minimize PCI scope.
+</Callout>
+
+## KYC Requirements
+
+VINR performs KYC on all merchants during onboarding:
+
+- **Business verification** — Company registration documents
+- **Identity verification** — Directors and beneficial owners (UBOs)
+- **Address verification** — Proof of business address
+- **Website review** — Active website with clear product/service description
+
+## AML Monitoring
+
+VINR's transaction monitoring system flags:
+
+- Unusual transaction patterns
+- High-risk geographic activity
+- Velocity anomalies
+- Structuring patterns
+
+Flagged transactions may be held for review. Respond to information requests within 48 hours to avoid processing delays.
+
+## Data Protection (GDPR)
+
+- VINR acts as a data processor for payment data
+- A Data Processing Agreement (DPA) is included in your merchant agreement
+- Customer payment data is retained per regulatory requirements (5 years minimum)
+- You can request data deletion for non-regulatory data via the API
+
+## Guides
+
+- [PCI Compliance Guide](/docs/compliance/pci) — Detailed PCI requirements by integration type
+- [KYC Onboarding](/docs/compliance/kyc) — Document requirements and timelines
+- [GDPR & Data](/docs/compliance/gdpr) — Data handling and customer rights

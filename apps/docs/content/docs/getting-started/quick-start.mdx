@@ -1,0 +1,116 @@
+---
+title: Quick Start
+description: Make your first payment with VINR in 5 minutes.
+---
+
+## Overview
+
+This guide walks you through creating your first payment using the VINR API. By the end, you'll have a working integration in your test environment.
+
+<Steps>
+
+### Get Your API Keys
+
+Log in to your [VINR Dashboard](https://dashboard.vinr.com) and navigate to **Settings → API Keys**. You'll find:
+
+- **Public Key** — Used client-side for checkout initialization
+- **Secret Key** — Used server-side for API calls (never expose this)
+
+### Install the SDK
+
+```bash
+# Node.js
+npm install @vinr/sdk
+
+# Python
+pip install vinr
+
+# PHP
+composer require vinr/vinr-php
+```
+
+Your project structure should look like this:
+
+<Files>
+  <Folder name="src" defaultOpen>
+    <File name="app.ts" />
+    <File name="payments.ts" />
+    <File name="webhooks.ts" />
+  </Folder>
+  <Folder name="config">
+    <File name=".env" />
+  </Folder>
+  <File name="package.json" />
+</Files>
+
+### Create a Payment
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({
+  secretKey: process.env.VINR_SECRET_KEY,
+});
+
+const payment = await vinr.payments.create({
+  amount: 1000, // Amount in minor units (€10.00)
+  currency: 'EUR',
+  description: 'Order #1234',
+  returnUrl: 'https://yoursite.com/payment/complete',
+  metadata: {
+    orderId: '1234',
+  },
+});
+
+// Redirect the customer to payment.checkoutUrl
+console.log(payment.checkoutUrl);
+```
+
+### Handle the Webhook
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({
+  secretKey: process.env.VINR_SECRET_KEY,
+});
+
+// In your webhook endpoint handler
+export async function POST(req: Request) {
+  const payload = await req.text();
+  const signature = req.headers.get('x-vinr-signature');
+
+  const event = vinr.webhooks.verify(payload, signature);
+
+  switch (event.type) {
+    case 'payment.completed':
+      // Mark order as paid
+      await fulfillOrder(event.data.metadata.orderId);
+      break;
+    case 'payment.failed':
+      // Handle failure
+      await handleFailedPayment(event.data);
+      break;
+  }
+
+  return new Response('OK', { status: 200 });
+}
+```
+
+### Test Your Integration
+
+Use these test card numbers in the sandbox environment:
+
+| Card Number | Result |
+|---|---|
+| `4242 4242 4242 4242` | Successful payment |
+| `4000 0000 0000 0002` | Declined |
+| `4000 0000 0000 3220` | 3D Secure authentication |
+
+</Steps>
+
+## Next Steps
+
+- [Authentication](/docs/getting-started/authentication) — Secure your API keys
+- [Webhooks](/docs/integration/webhooks) — Set up reliable webhook handling
+- [Payment Methods](/docs/payments/payment-methods) — Explore all supported methods

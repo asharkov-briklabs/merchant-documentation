@@ -1,0 +1,44 @@
+---
+title: Operations
+description: Settlement, reconciliation, monitoring, and daily operational processes.
+---
+
+## Settlement
+
+VINR settles funds to your bank account on a regular schedule:
+
+| Plan | Settlement Frequency | Delay |
+|---|---|---|
+| Standard | Daily | T+2 business days |
+| Fast | Daily | T+1 business days |
+| Instant | On-demand | Same day (fee applies) |
+
+Settlement reports are available in the dashboard and via API.
+
+## Reconciliation
+
+Match VINR transactions with your internal records:
+
+1. **Download settlement report** (CSV/JSON via dashboard or API)
+2. **Match by reference** — Use `metadata.orderId` or payment ID
+3. **Verify amounts** — Account for fees and currency conversion
+4. **Flag discrepancies** — Report within 30 days
+
+## Monitoring & Alerts
+
+Configure alerts in **Dashboard → Settings → Notifications**:
+
+- Payment failure rate exceeds threshold
+- Settlement delay detected
+- Webhook delivery failures
+- Dispute opened
+- Account balance below threshold
+
+## Dashboard
+
+The VINR Merchant Dashboard provides:
+
+- **Real-time transaction feed** — Live payment status
+- **Analytics** — Conversion rates, payment method breakdown, geographic distribution
+- **Financial reports** — Settlement summaries, fee breakdowns, tax reports
+- **Team management** — Role-based access for your team

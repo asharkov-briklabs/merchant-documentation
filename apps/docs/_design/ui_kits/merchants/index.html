@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VINR Barracuda Merchants</title>
+<meta name="viewport" content="width=1440">
+<link rel="stylesheet" href="../../colors_and_type.css">
+<style>
+  html, body { margin:0; padding:0; height:100%; background:#fafafa; font-family:'Inter', sans-serif; color:#0b3b45; }
+  #app { height:100vh; display:flex; }
+  .main { flex:1; display:flex; flex-direction:column; min-width:0; overflow:auto; }
+  /* override btn defaults to match VINR sizing */
+  .btn { font-family:'Inter', sans-serif; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="text/babel" src="Sidebar.jsx"></script>
+<script type="text/babel" src="Topbar.jsx"></script>
+<script type="text/babel" src="KpiCard.jsx"></script>
+<script type="text/babel" src="DataTable.jsx"></script>
+<script type="text/babel" src="Drawer.jsx"></script>
+<script type="text/babel" src="HomeView.jsx"></script>
+<script type="text/babel" src="CustomersView.jsx"></script>
+<script type="text/babel" src="InvoicesView.jsx"></script>
+<script type="text/babel" src="PlaceholderView.jsx"></script>
+
+<script type="text/babel">
+function App() {
+  const [route, setRoute] = React.useState('home');
+  const [drawer, setDrawer] = React.useState(null); // {kind, data}
+  const [testMode, setTestMode] = React.useState(false);
+
+  const TITLES = {
+    home: 'Home', transactions: 'Transactions', customers: 'Customers',
+    balances: 'Balances', products: 'Products', orders: 'Orders',
+    billing:'Billing', invoices:'Invoices', quotes:'Quotes',
+    subscriptions:'Subscriptions', plans:'Plans',
+    reports:'Reports', data:'Data', settings:'Settings',
+  };
+
+  const breadcrumb = (() => {
+    if (route === 'home') return ['Home'];
+    if (['products','orders'].includes(route)) return ['Catalog', TITLES[route]];
+    if (['billing','invoices','quotes','subscriptions','plans'].includes(route)) return ['Billing', TITLES[route]];
+    if (['reports','data'].includes(route)) return ['Reports', TITLES[route]];
+    return [TITLES[route]];
+  })();
+
+  return (
+    <>
+      <div data-screen-label={`merchants/${route}`} style={{display:'flex', height:'100vh'}}>
+        <Sidebar active={route} onSelect={setRoute}/>
+        <div className="main">
+          <Topbar
+            breadcrumb={breadcrumb}
+            testMode={testMode}
+            onTestModeToggle={() => setTestMode(v=>!v)}
+          />
+          <div style={{flex:1, overflow:'auto'}}>
+            {route === 'home' && <HomeView onOpenTxn={(t)=>setDrawer({kind:'txn', data:t})}/>}
+            {route === 'customers' && <CustomersView onOpenCustomer={(c)=>setDrawer({kind:'customer', data:c})}/>}
+            {route === 'invoices' && <InvoicesView onOpenInvoice={(i)=>setDrawer({kind:'invoice', data:i})}/>}
+            {!['home','customers','invoices'].includes(route) && (
+              <PlaceholderView
+                title={TITLES[route]}
+                description={`Sketched in the Figma but not built out in this prototype. Use the sidebar to jump to Home, Customers, or Invoices.`}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+
+      <Drawer
+        open={!!drawer}
+        onClose={() => setDrawer(null)}
+        title={drawer?.kind === 'invoice' ? drawer.data.id : drawer?.kind === 'customer' ? drawer.data.name : drawer?.data?.id}
+        subtitle={drawer?.kind === 'invoice' ? `Issued ${drawer.data.issued}` : drawer?.kind === 'customer' ? drawer.data.email : drawer?.data?.date}
+        footer={drawer && (
+          <>
+            <button className="btn btn-outline btn-sm">Export</button>
+            <button className="btn btn-primary btn-sm">{drawer.kind === 'invoice' ? 'Send reminder' : drawer.kind === 'customer' ? 'Edit customer' : 'View receipt'}</button>
+          </>
+        )}
+      >
+        {drawer && <DrawerBody drawer={drawer}/>}
+      </Drawer>
+    </>
+  );
+}
+
+function DrawerBody({ drawer }) {
+  const Row = ({ k, v, mono }) => (
+    <div style={{display:'flex', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid #f4f6f6', fontSize:13}}>
+      <span style={{color:'#7f8182'}}>{k}</span>
+      <span style={{color:'#0b3b45', fontFamily: mono ? 'Roboto Mono, monospace' : 'Inter', fontWeight:500}}>{v}</span>
+    </div>
+  );
+  if (drawer.kind === 'invoice') {
+    const i = drawer.data;
+    return (
+      <div>
+        <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:16}}>
+          <StatusBadge status={i.status}/>
+          <span style={{fontSize:12, color:'#7f8182'}}>· {i.due} due</span>
+        </div>
+        <div style={{fontSize:32, fontWeight:600, color:'#0b3b45', letterSpacing:'-.01em'}}>{i.amount}</div>
+        <div style={{marginTop:24}}>
+          <Row k="Customer" v={i.customer}/>
+          <Row k="Invoice ID" v={i.id} mono/>
+          <Row k="Issued" v={i.issued}/>
+          <Row k="Due" v={i.due}/>
+          <Row k="Currency" v="USD" mono/>
+          <Row k="Method" v="Card · ending 4242"/>
+        </div>
+        <h4 style={{margin:'24px 0 10px', fontSize:13, fontWeight:600, color:'#0b3b45'}}>Line items</h4>
+        <div style={{border:'1px solid #f4f6f6', borderRadius:8, overflow:'hidden'}}>
+          <div style={{display:'flex', justifyContent:'space-between', padding:'12px 14px', borderBottom:'1px solid #f4f6f6', fontSize:13}}>
+            <span>Pro plan · Apr 2025</span>
+            <span style={{fontFamily:'Roboto Mono, monospace', fontWeight:500}}>{i.amount}</span>
+          </div>
+          <div style={{display:'flex', justifyContent:'space-between', padding:'10px 14px', fontSize:13, color:'#7f8182'}}>
+            <span>Tax (0%)</span><span style={{fontFamily:'Roboto Mono, monospace'}}>$0.00</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (drawer.kind === 'customer') {
+    const c = drawer.data;
+    return (
+      <div>
+        <div style={{display:'flex', alignItems:'center', gap:14, marginBottom:20}}>
+          <div style={{width:56, height:56, borderRadius:'50%', background:'linear-gradient(135deg, #2a9d90, #0b3b45)', color:'#fff', display:'grid', placeItems:'center', fontSize:18, fontWeight:600}}>
+            {c.name.split(' ').map(s=>s[0]).join('').slice(0,2)}
+          </div>
+          <div>
+            <div style={{fontSize:18, fontWeight:600, color:'#0b3b45'}}>{c.name}</div>
+            <div style={{fontSize:13, color:'#7f8182'}}>{c.email}</div>
+          </div>
+        </div>
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:20}}>
+          <div style={{padding:'12px 14px', background:'#fafafa', borderRadius:8}}>
+            <div style={{fontSize:11, color:'#7f8182'}}>Total spend</div>
+            <div style={{fontSize:18, fontWeight:600, color:'#0b3b45', marginTop:2}}>{c.spend}</div>
+          </div>
+          <div style={{padding:'12px 14px', background:'#fafafa', borderRadius:8}}>
+            <div style={{fontSize:11, color:'#7f8182'}}>Invoices</div>
+            <div style={{fontSize:18, fontWeight:600, color:'#0b3b45', marginTop:2}}>{c.invoices}</div>
+          </div>
+        </div>
+        <Row k="Status" v={<StatusBadge status={c.status}/>}/>
+        <Row k="Customer ID" v={c.id} mono/>
+        <Row k="Country" v={c.country} mono/>
+        <Row k="Joined" v={c.joined}/>
+      </div>
+    );
+  }
+  // transaction
+  const t = drawer.data;
+  return (
+    <div>
+      <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:16}}>
+        <StatusBadge status={t.status}/>
+        <span style={{fontSize:12, color:'#7f8182'}}>· {t.date}</span>
+      </div>
+      <div style={{fontSize:32, fontWeight:600, color:'#0b3b45'}}>{t.amount}</div>
+      <div style={{marginTop:24}}>
+        <Row k="Customer" v={t.customer}/>
+        <Row k="Transaction ID" v={t.id} mono/>
+        <Row k="Method" v={t.method}/>
+        <Row k="Currency" v="USD" mono/>
+        <Row k="Risk score" v="3 / 100 (Normal)"/>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('app')).render(<App/>);
+</script>
+</body>
+</html>

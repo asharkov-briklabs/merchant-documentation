@@ -1,0 +1,16 @@
+{
+  "root": true,
+  "title": "VINR Docs",
+  "pages": [
+    "---Start here---",
+    "getting-started",
+    "---Products---",
+    "payments",
+    "integration",
+    "operations",
+    "compliance",
+    "---Reference---",
+    "api-reference",
+    "troubleshooting"
+  ]
+}

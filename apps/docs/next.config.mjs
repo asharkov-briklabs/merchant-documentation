@@ -1,13 +1,17 @@
-import { createMDX } from 'fumadocs-mdx/next';
+import { createMDX } from "fumadocs-mdx/next";
 
-const withMDX = createMDX({
-  configPath: './source.config.ts',
-});
+const withMDX = createMDX();
 
 /** @type {import('next').NextConfig} */
-const nextConfig = {
+const config = {
   reactStrictMode: true,
-  pageExtensions: ['js', 'jsx', 'ts', 'tsx', 'md', 'mdx'],
 };
 
-export default withMDX(nextConfig);
+const finalConfig = withMDX(config);
+
+// Disable Turbopack in dev - incompatible with fumadocs-ui client components
+if (finalConfig.experimental) {
+  delete finalConfig.experimental.turbo;
+}
+
+export default finalConfig;

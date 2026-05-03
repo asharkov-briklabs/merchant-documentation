@@ -1,0 +1,411 @@
+---
+title: Session reference
+description: Complete field reference for the VINR Checkout session API — request, response, statuses, and errors.
+category: "integration"
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-05-03"
+---
+
+Every field accepted by `POST /checkout/session`. Only `amount`, `currency`, `successUrl`, and `cancelUrl` are required. The rest unlock cart UI, promo codes, delivery, and branding.
+
+## Endpoint summary
+
+| | |
+|---|---|
+| **Method** | `POST` |
+| **Path** | `/checkout/session` |
+| **Base URL** | `https://api.vinr.com` |
+| **Authentication** | `X-Api-Key: <merchant-api-key>` header |
+| **Content-Type** | `application/json` |
+| **Idempotency** | Pass `Idempotency-Key: <uuid>` to safely retry on network failure |
+
+## Top-level fields
+
+<TypeTable
+  type={{
+    amount: {
+      description: "Payment amount in minor units (e.g. 5000 = €50.00).",
+      type: "integer",
+      required: true,
+    },
+    currency: {
+      description: "ISO 4217 three-letter currency code, e.g. \"EUR\".",
+      type: "string",
+      required: true,
+    },
+    successUrl: {
+      description: "HTTPS URL VINR redirects the customer to after a successful payment. Receives ?sessionId= query param.",
+      type: "string",
+      required: true,
+    },
+    cancelUrl: {
+      description: "HTTPS URL VINR redirects the customer to when they click Cancel.",
+      type: "string",
+      required: true,
+    },
+    customer: {
+      description: "Pre-fill customer details. Omit entirely for guest checkout.",
+      type: "Customer",
+      required: false,
+    },
+    cartItems: {
+      description: "Line items rendered in the checkout UI. Does not affect the charged amount — that is controlled by amount.",
+      type: "CartItem[]",
+      required: false,
+    },
+    supportedCurrencies: {
+      description: "Array of ISO 4217 codes the customer can switch to. Defaults to [currency] if omitted.",
+      type: "string[]",
+      required: false,
+    },
+    configId: {
+      description: "Branding / configuration preset defined in the dashboard.",
+      type: "string",
+      default: "\"default-config\"",
+      required: false,
+    },
+    metadata: {
+      description: "Controls UI behaviors: mode, shipping address collection, promo codes, delivery options. See Metadata below.",
+      type: "Metadata",
+      required: false,
+    },
+  }}
+/>
+
+## Customer object
+
+<TypeTable
+  type={{
+    customerId: {
+      description: "Your internal customer ID. Stored for reconciliation.",
+      type: "string",
+      required: false,
+    },
+    email: {
+      description: "Pre-fills the email field on the checkout page.",
+      type: "string",
+      required: false,
+    },
+    name: {
+      description: "Customer full name.",
+      type: "string",
+      required: false,
+    },
+    phone: {
+      description: "E.164 format phone number.",
+      type: "string",
+      required: false,
+    },
+  }}
+/>
+
+## Cart item
+
+<TypeTable
+  type={{
+    id: {
+      description: "Your internal product / SKU identifier.",
+      type: "string",
+      required: true,
+    },
+    name: {
+      description: "Product name shown in the cart UI.",
+      type: "string",
+      required: true,
+    },
+    description: {
+      description: "Short product description shown below the name.",
+      type: "string",
+      required: false,
+    },
+    price: {
+      description: "Unit price in minor units (e.g. 2500 = €25.00).",
+      type: "integer",
+      required: true,
+    },
+    quantity: {
+      description: "Number of units. Must be >= 1.",
+      type: "integer",
+      required: true,
+    },
+    image: {
+      description: "Absolute HTTPS URL for the product thumbnail.",
+      type: "string",
+      required: false,
+    },
+    maxQuantity: {
+      description: "Maximum quantity the customer can select in the cart UI.",
+      type: "integer",
+      required: false,
+    },
+  }}
+/>
+
+## Metadata
+
+The `metadata` object controls optional checkout behaviors. All fields are optional.
+
+#### Mode and branding
+
+| Field | Type | Description |
+|---|---|---|
+| `mode` | `"payment" \| "subscription"` | Displays payment or subscription UI language. Defaults to `"payment"`. |
+| `merchantName` | string | Overrides the merchant display name shown on the checkout page. |
+
+#### Shipping address
+
+| Field | Type | Description |
+|---|---|---|
+| `shippingAddressHandling` | `"Collect" \| "Skip"` | `"Collect"` shows a shipping address form. `"Skip"` omits it. |
+
+#### Promo codes
+
+<TypeTable
+  type={{
+    "metadata.promoCode.enabled": {
+      description: "Show a promo code entry field on the checkout page.",
+      type: "boolean",
+      default: "false",
+      required: false,
+    },
+    "metadata.promoCode.availableCodes": {
+      description: "Array of valid promo code objects. See sub-fields below.",
+      type: "PromoCode[]",
+      required: false,
+    },
+  }}
+/>
+
+Each entry in `availableCodes`:
+
+| Field | Type | Description |
+|---|---|---|
+| `code` | string | The code the customer enters, e.g. `"SAVE20"`. |
+| `discount` | number | Discount value. Interpret with `discountType`. |
+| `discountType` | `"percentage" \| "fixed"` | `"percentage"`: 0–100. `"fixed"`: minor units. |
+| `description` | string | Human-readable label shown after the code is applied. |
+
+#### Delivery
+
+<TypeTable
+  type={{
+    "metadata.delivery.enabled": {
+      description: "Enable the delivery step in the checkout flow.",
+      type: "boolean",
+      default: "false",
+      required: false,
+    },
+    "metadata.delivery.options.shipping.methods": {
+      description: "Array of shipping methods shown to the customer.",
+      type: "ShippingMethod[]",
+      required: false,
+    },
+    "metadata.delivery.options.pickup.locations": {
+      description: "Array of pickup location objects.",
+      type: "PickupLocation[]",
+      required: false,
+    },
+  }}
+/>
+
+Each `ShippingMethod`:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Your internal method identifier. |
+| `name` | string | Display name, e.g. `"UPS Standard"`. |
+| `price` | integer | Cost in minor units. |
+| `currency` | string | ISO 4217 code for the shipping cost. |
+| `estimatedDays.min` | integer | Minimum estimated delivery days. |
+| `estimatedDays.max` | integer | Maximum estimated delivery days. |
+
+## Full example payload
+
+```json
+{
+  "amount": 5000,
+  "currency": "EUR",
+  "successUrl": "https://yoursite.com/order/success",
+  "cancelUrl": "https://yoursite.com/cart",
+  "customer": {
+    "customerId": "cust_abc123",
+    "email": "jane@example.com",
+    "name": "Jane Smith",
+    "phone": "+12125551234"
+  },
+  "cartItems": [
+    {
+      "id": "item_001",
+      "name": "Wireless headphones",
+      "description": "Over-ear, noise cancelling",
+      "price": 5000,
+      "quantity": 1,
+      "image": "https://yoursite.com/images/headphones.jpg",
+      "maxQuantity": 5
+    }
+  ],
+  "supportedCurrencies": ["EUR", "USD", "GBP"],
+  "configId": "default-config",
+  "metadata": {
+    "mode": "payment",
+    "merchantName": "Demo Store",
+    "shippingAddressHandling": "Collect",
+    "promoCode": {
+      "enabled": true,
+      "availableCodes": [
+        {
+          "code": "SAVE20",
+          "discount": 20,
+          "discountType": "percentage",
+          "description": "20% off your order"
+        }
+      ]
+    },
+    "delivery": {
+      "enabled": true,
+      "options": {
+        "shipping": {
+          "methods": [
+            {
+              "id": "ups_standard",
+              "name": "UPS Standard",
+              "price": 599,
+              "currency": "EUR",
+              "estimatedDays": { "min": 3, "max": 5 }
+            },
+            {
+              "id": "ups_express",
+              "name": "UPS Express",
+              "price": 1299,
+              "currency": "EUR",
+              "estimatedDays": { "min": 1, "max": 2 }
+            }
+          ]
+        },
+        "pickup": {
+          "locations": [
+            { "id": "loc_berlin_mitte", "name": "Berlin Mitte Store" }
+          ]
+        }
+      }
+    }
+  }
+}
+```
+
+## Response object
+
+The response from `POST /checkout/session`:
+
+<TypeTable
+  type={{
+    id: {
+      description: "Session ID. Also referred to as sessionId elsewhere in the docs.",
+      type: "string",
+    },
+    accountId: {
+      description: "Your VINR merchant account ID.",
+      type: "string",
+    },
+    amount: {
+      description: "Confirmed amount in minor units.",
+      type: "integer",
+    },
+    currency: {
+      description: "Confirmed currency.",
+      type: "string",
+    },
+    status: {
+      description: "Always \"pending\" immediately after creation.",
+      type: "string",
+      default: "\"pending\"",
+    },
+    customer: {
+      description: "Echo of the customer object you passed in.",
+      type: "Customer",
+    },
+    cartItems: {
+      description: "Echo of the cart items you passed in.",
+      type: "CartItem[]",
+    },
+    metadata: {
+      description: "Echo of the metadata object you passed in.",
+      type: "Metadata",
+    },
+    checkoutUrl: {
+      description: "The URL to redirect your customer to. Format: https://checkout.vinr.com/checkout/{id}",
+      type: "string",
+    },
+  }}
+/>
+
+## Verify a session result
+
+Use this endpoint after the customer returns to `successUrl` to confirm the payment status before fulfilling an order.
+
+**`GET /checkout/session/{sessionId}/result`** — same `X-Api-Key` header.
+
+```ts
+interface SessionResult {
+  sessionId: string;
+  status:
+    | 'pending'
+    | 'authentication_required'
+    | 'completed'
+    | 'failed'
+    | 'canceled'
+    | 'expired';
+  amount: number;
+  currency: string;
+  customer?: {
+    customerId?: string;
+    email?: string;
+    name?: string;
+  };
+}
+
+async function verifySession(sessionId: string): Promise<SessionResult> {
+  const res = await fetch(
+    `${process.env.INTENT_API_URL}/checkout/session/${sessionId}/result`,
+    { headers: { 'X-Api-Key': process.env.VINR_API_KEY! } }
+  );
+  if (!res.ok) throw new Error(`Unexpected status ${res.status}`);
+  return res.json();
+}
+
+const result = await verifySession(sessionId);
+
+if (result.status === 'completed') {
+  await fulfillOrder(result);
+} else if (result.status === 'failed') {
+  await notifyCustomerOfFailure(result);
+} else if (result.status === 'expired') {
+  await redirectToNewSession();
+} else if (result.status === 'canceled') {
+  await redirectToCart();
+} else if (result.status === 'authentication_required') {
+  // 3DS is still in progress — poll again shortly or wait for the webhook
+}
+```
+
+## Status reference
+
+| Status | Meaning | Recommended action |
+|---|---|---|
+| `pending` | Session created; customer has not completed payment. | Wait or poll. |
+| `authentication_required` | 3DS challenge in progress. | Poll until status changes. |
+| `completed` | Payment captured successfully. | Fulfill the order. |
+| `failed` | Payment declined or error during processing. | Prompt the customer to retry with a new session. |
+| `canceled` | Customer clicked Cancel on the hosted page. | Return the customer to their cart. |
+| `expired` | Session was not completed within the 5-minute window. | Create a new session. |
+
+## Errors
+
+| HTTP status | Meaning |
+|---|---|
+| `400` | Invalid request parameters — check field types and required fields. |
+| `401` | Missing or invalid `X-Api-Key`. |
+| `404` | Session ID not found. |
+| `410` | Session has expired. Create a new session. |
+| `429` | Rate limit exceeded — back off and retry with exponential delay. |

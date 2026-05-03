@@ -1,0 +1,44 @@
+---
+title: Payments
+description: Understanding payment methods, flows, and transaction lifecycle on VINR.
+---
+
+## Payment Methods
+
+VINR supports a comprehensive range of payment methods across European markets:
+
+### Cards
+- Visa, Mastercard, Amex
+- 3D Secure 2.0 authentication
+- Tokenization for recurring payments
+
+### Bank Transfers
+- SEPA Direct Debit
+- SEPA Credit Transfer
+- Instant SEPA (SCT Inst)
+
+### Local Methods
+- iDEAL (Netherlands)
+- Bancontact (Belgium)
+- Giropay (Germany)
+- Przelewy24 (Poland)
+
+### Alternative
+- Stablecoin payments (USDC, USDT)
+- Open Banking (PSD2)
+
+## Payment Lifecycle
+
+```
+Created → Processing → Completed
+                    ↘ Failed
+                    ↘ Expired
+```
+
+Every payment moves through a defined state machine. Subscribe to [webhooks](/docs/integration/webhooks) to track state changes in real-time.
+
+## Guides
+
+- [Payment Methods](/docs/payments/payment-methods) — Detailed method-specific guides
+- [Refunds](/docs/payments/refunds) — Processing refunds
+- [Recurring Payments](/docs/payments/recurring) — Subscriptions and tokenization

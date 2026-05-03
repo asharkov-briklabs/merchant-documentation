@@ -1,0 +1,406 @@
+---
+title: Elements integration guide
+description: Embed VINR card fields in your React app, collect an encrypted token, and process payments from your backend.
+category: "integration"
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-05-03"
+---
+
+VINR Elements is a React SDK for collecting card data on your own page without taking on PCI scope. Card details are entered in iframes hosted by VINR, encrypted in the browser with your public key, and returned as a token your backend can charge.
+
+## When to use Elements
+
+- You want a custom checkout UX on your own domain.
+- You need full control over form layout, step flow, and design.
+- You want lower PCI scope than a direct API integration — card data stays in VINR iframes, so SAQ-A EP applies.
+
+<Callout type="info">
+Don't need full UX control? [Hosted Checkout](/docs/integration/checkout) is faster to ship.
+</Callout>
+
+## Architecture at a glance
+
+<Steps>
+
+### Backend creates a payment intent
+
+Your server calls `POST /intent/create` and returns the `publicKey` and intent details to your frontend.
+
+### Your React app initializes the SDK
+
+Pass `merchantId`, `publicKey`, and `secureFormsUrl` to `useAsparyxSDK`. The hook establishes a secure channel with VINR's iframe host.
+
+### Customer fills the form
+
+Card number, expiry, CVC, and any billing fields are typed directly into VINR-hosted iframes. Your JavaScript never sees the raw values.
+
+### SDK encrypts the card and emits a token
+
+When the customer submits, the SDK encrypts the card data with your public key and fires `token_received`. You POST the encrypted payload to your backend.
+
+</Steps>
+
+## Install
+
+```bash
+npm install @vinr/elements
+```
+
+Requires React 18 or later as a peer dependency.
+
+## Quickstart
+
+<Steps>
+
+### Create a payment intent (backend)
+
+Add an Express endpoint that calls VINR and returns the intent to your frontend.
+
+```ts
+import express from 'express';
+
+const router = express.Router();
+const INTENT_API_URL = process.env.INTENT_API_URL ?? 'https://api.vinr.com';
+
+router.post('/api/payment/intent', async (_req, res) => {
+  const intentRes = await fetch(`${INTENT_API_URL}/intent/create`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Api-Key': process.env.VINR_API_KEY!,
+    },
+    body: JSON.stringify({
+      amount: 5000,
+      currency: 'EUR',
+    }),
+  });
+
+  if (!intentRes.ok) {
+    const err = await intentRes.json();
+    return res.status(intentRes.status).json(err);
+  }
+
+  const intent = await intentRes.json();
+  // intent: { id, accountId, publicKey, amount, currency }
+  res.json(intent);
+});
+
+export default router;
+```
+
+### Wrap your app
+
+Wrap the component tree that needs access to the SDK with `AsparyxProvider`.
+
+```tsx
+import { AsparyxProvider } from '@vinr/elements';
+
+export default function App() {
+  return (
+    <AsparyxProvider>
+      <Checkout />
+    </AsparyxProvider>
+  );
+}
+```
+
+### Initialize the SDK
+
+Call `useAsparyxSDK` inside a component that is a descendant of `AsparyxProvider`. Pass the intent details returned from your backend.
+
+```tsx
+const { sdk, status } = useAsparyxSDK({
+  merchantId: intent.accountId,
+  publicKey: intent.publicKey,
+  secureFormsUrl: 'https://elements.vinr.com',
+  appearance: {
+    theme: 'default',
+    styles: { colorPrimary: '#0b3b45', borderRadius: '8px' },
+  },
+  enabled: !!intent,
+});
+```
+
+`status` progresses from `"initializing"` → `"ready"`. Render the Pay button only when `status === "ready"`.
+
+### Mount a payment element
+
+Attach a `ref` to the container `div` and pass it to `useAsparyxElement`. The SDK injects the iframe-based form into that container.
+
+```tsx
+const containerRef = useRef<HTMLDivElement>(null);
+
+const { element, error } = useAsparyxElement(sdk, 'full-payment', {
+  container: containerRef,
+  amount: intent.amount,
+  currency: intent.currency,
+  showBillingAddress: true,
+});
+```
+
+```tsx
+<div ref={containerRef} style={{ minHeight: 550 }} />
+```
+
+The container must have a non-zero height before the element mounts — add an explicit `minHeight` if the container would otherwise be empty.
+
+### Capture the encrypted token
+
+Register `useTokenReceived` before calling `submit()`. The callback fires once the SDK has encrypted the card.
+
+```tsx
+useTokenReceived(sdk, async (data) => {
+  const result = await fetch('/api/process-payment', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      intentId: intent.id,
+      paymentMethod: {
+        card: { payload: data.payload.card.payload },
+      },
+      billingDetails: data.payload.billingDetails,
+    }),
+  }).then(r => r.json());
+
+  if (result.status === 'succeeded') {
+    navigate('/success');
+  } else if (result.nextAction?.type === 'challenge') {
+    handle3ds(result.nextAction);
+  }
+});
+```
+
+### Submit on Pay click
+
+```tsx
+const handlePay = async () => {
+  await sdk.submit(intent.amount, intent.currency);
+};
+```
+
+`submit()` is idempotent — calling it twice while a submission is in flight has no additional effect.
+
+### Process on the backend
+
+Your `/api/process-payment` endpoint forwards the encrypted token to VINR and returns the result envelope to the frontend.
+
+```ts
+router.post('/api/process-payment', async (req, res) => {
+  const { intentId, paymentMethod, billingDetails } = req.body;
+
+  const processRes = await fetch(
+    `${INTENT_API_URL}/checkout/intent/${intentId}/process`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Api-Key': process.env.VINR_API_KEY!,
+      },
+      body: JSON.stringify({ paymentMethod, billingDetails }),
+    }
+  );
+
+  const result = await processRes.json();
+  // result: { status, nextAction? }
+  res.status(processRes.status).json(result);
+});
+```
+
+</Steps>
+
+## Full working example
+
+```tsx
+import { useRef, useState, useEffect } from 'react';
+import {
+  useAsparyxSDK,
+  useAsparyxElement,
+  useTokenReceived,
+} from '@vinr/elements';
+
+interface Intent {
+  id: string;
+  accountId: string;
+  publicKey: string;
+  amount: number;
+  currency: string;
+}
+
+export default function Checkout() {
+  const [intent, setIntent] = useState<Intent | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetch('/api/payment/intent', { method: 'POST' })
+      .then(r => r.json())
+      .then(setIntent);
+  }, []);
+
+  const { sdk, status } = useAsparyxSDK({
+    merchantId: intent?.accountId ?? '',
+    publicKey: intent?.publicKey ?? '',
+    secureFormsUrl: 'https://elements.vinr.com',
+    appearance: {
+      theme: 'default',
+      styles: { colorPrimary: '#0b3b45', borderRadius: '8px' },
+    },
+    enabled: !!intent,
+  });
+
+  const { element } = useAsparyxElement(sdk, 'full-payment', {
+    container: containerRef,
+    amount: intent?.amount ?? 0,
+    currency: intent?.currency ?? 'EUR',
+    showBillingAddress: true,
+  });
+
+  useTokenReceived(sdk, async (data) => {
+    setProcessing(true);
+    try {
+      const result = await fetch('/api/process-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          intentId: intent!.id,
+          paymentMethod: { card: { payload: data.payload.card.payload } },
+          billingDetails: data.payload.billingDetails,
+        }),
+      }).then(r => r.json());
+
+      if (result.status === 'succeeded') {
+        window.location.href = '/success';
+      } else if (result.nextAction?.type === 'challenge') {
+        handle3ds(result.nextAction);
+      }
+    } finally {
+      setProcessing(false);
+    }
+  });
+
+  const handlePay = async () => {
+    if (!sdk || processing) return;
+    await sdk.submit(intent!.amount, intent!.currency);
+  };
+
+  return (
+    <div>
+      <div ref={containerRef} style={{ minHeight: 550 }} />
+      <button
+        onClick={handlePay}
+        disabled={processing || status !== 'ready' || !element}
+      >
+        {processing ? 'Processing...' : `Pay €${((intent?.amount ?? 0) / 100).toFixed(2)}`}
+      </button>
+    </div>
+  );
+}
+```
+
+## What you get back
+
+The `data` argument passed to `useTokenReceived` has this shape:
+
+```ts
+interface TokenPayload {
+  payload: {
+    card: {
+      payload: string; // base64-encoded RSA-OAEP ciphertext of { pan, expiry, cvv2, cardholderName }
+    };
+    billingDetails?: {
+      name?: string;
+      email?: string;
+      phone?: string;
+      address?: {
+        line1: string;
+        line2?: string;
+        city: string;
+        state?: string;
+        postalCode: string;
+        country: string; // ISO 3166-1 alpha-2
+      };
+    };
+  };
+}
+```
+
+`data.payload.card.payload` is base64-encoded RSA-OAEP ciphertext of `{ pan, expiry, cvv2, cardholderName }`. Your backend decrypts it using the matching RSA private key.
+
+<Callout type="warn">
+Your backend needs the matching RSA private key to decrypt the payload. Public/private key pairs are managed in the VINR Dashboard. Never expose the private key to the browser or commit it to source control.
+</Callout>
+
+## 3DS handling
+
+The backend process response can return `status: "requires_3ds"` with a `nextAction` object:
+
+```ts
+interface NextAction {
+  type: 'challenge';
+  redirectUrl: string;
+  threeDSServerTransID: string;
+}
+```
+
+To handle a 3DS challenge:
+
+1. Open a hidden iframe pointing to `nextAction.redirectUrl`.
+2. Listen for a `message` event with `event.data.type === '3DS-authentication-complete'`.
+3. POST to `${INTENT_API_URL}/checkout/intent/{intentId}/confirm` with `{ threeDSServerTransID: nextAction.threeDSServerTransID }`.
+
+```ts
+function handle3ds(nextAction: NextAction): void {
+  const iframe = document.createElement('iframe');
+  iframe.src = nextAction.redirectUrl;
+  iframe.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;z-index:9999';
+  document.body.appendChild(iframe);
+
+  window.addEventListener('message', async function onMessage(e) {
+    if (e.data?.type !== '3DS-authentication-complete') return;
+    window.removeEventListener('message', onMessage);
+    iframe.remove();
+
+    await fetch(`/api/payment/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ intentId: intent.id,
+        threeDSServerTransID: nextAction.threeDSServerTransID }),
+    });
+  });
+}
+```
+
+## Browser support
+
+Chrome, Firefox, Safari, and Edge (current and previous major version). Requires:
+
+- Web Crypto API (`crypto.subtle`) — available in all modern browsers and secure contexts (HTTPS).
+- `postMessage` — used for iframe communication.
+- ES2020+ — if you need to support older environments, add a transpile step in your build config.
+
+## Common issues
+
+<Accordions>
+<Accordion title="SDK status stays 'initializing'">
+Check that `secureFormsUrl` (`https://elements.vinr.com`) is reachable from the browser and that neither `merchantId` nor `publicKey` is an empty string. Both must be non-empty before the SDK tries to connect.
+</Accordion>
+<Accordion title="Element doesn't render">
+Ensure the container `div` has a non-zero height at mount time. If the container is empty, the browser gives it zero height and the iframe has nowhere to render. Also check the browser console for origin-rejection errors — your page must be served over HTTPS.
+</Accordion>
+<Accordion title="submit() resolves but no token comes back">
+You must register `useTokenReceived` before calling `submit()`. The hook wires the listener on mount — if it is registered after `submit()` fires, the event is missed. Move the `useTokenReceived` call higher in the component body.
+</Accordion>
+<Accordion title="Encrypted payload rejected by backend">
+The public key used to encrypt and the private key used to decrypt must be the same pair. If you recently rotated keys in the dashboard, ensure your backend is using the updated private key. Mismatched keys produce a decryption error.
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Elements reference" href="/docs/integration/elements/elements" description="All available element types, options, instance methods, and SDK events." />
+  <Card title="Theming guide" href="/docs/integration/elements/theming" description="Control colors, typography, and radius to match your brand." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Receive async payment events after the token is processed." />
+  <Card title="Compliance" href="/docs/compliance" description="PCI scope, SAQ-A EP eligibility, and data handling." />
+</Cards>

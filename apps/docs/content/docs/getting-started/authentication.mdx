@@ -1,0 +1,60 @@
+---
+title: Authentication
+description: How to authenticate with the VINR API and manage your API keys securely.
+---
+
+## API Keys
+
+VINR uses API keys to authenticate requests. You can manage your keys from the [Merchant Dashboard](https://dashboard.vinr.com).
+
+### Key Types
+
+| Key Type | Prefix | Usage |
+|---|---|---|
+| Public Key | `pk_live_` / `pk_test_` | Client-side checkout initialization |
+| Secret Key | `sk_live_` / `sk_test_` | Server-side API calls |
+
+<Callout type="warn">
+Never expose your secret key in client-side code, public repositories, or browser network requests.
+</Callout>
+
+## Authentication Header
+
+Include your secret key in the `Authorization` header:
+
+```bash
+curl -X POST https://api.vinr.com/v1/payments \
+  -H "Authorization: Bearer sk_live_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{"amount": 1000, "currency": "EUR"}'
+```
+
+## Key Rotation
+
+Rotate keys regularly for security:
+
+1. Generate a new key in the dashboard
+2. Update your application to use the new key
+3. Verify the new key works in production
+4. Revoke the old key
+
+## IP Allowlisting
+
+For additional security, restrict API access to specific IP addresses:
+
+1. Go to **Settings → Security → IP Allowlist**
+2. Add your server's IP addresses
+3. Enable the allowlist
+
+Requests from non-allowlisted IPs will be rejected with a `403 Forbidden` response.
+
+## Rate Limits
+
+| Endpoint | Limit |
+|---|---|
+| Payment creation | 100 req/min |
+| Payment status | 300 req/min |
+| Refunds | 50 req/min |
+| General | 1000 req/min |
+
+Rate-limited responses return `429 Too Many Requests` with a `Retry-After` header.

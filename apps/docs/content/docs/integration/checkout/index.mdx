@@ -1,0 +1,242 @@
+---
+title: Checkout integration guide
+description: Redirect customers to a hosted, PCI-compliant payment page and verify the result from your backend.
+category: "integration"
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-05-03"
+---
+
+VINR Checkout is a hosted, PCI-compliant payment page. Create a session from your backend, redirect the customer, and we handle cards, Apple Pay, Google Pay, Click-to-Pay, and 3DS. The customer comes back to your `successUrl` with a session ID you can verify.
+
+## When to use Checkout
+
+- No engineering effort on payment UI — VINR renders and maintains the page.
+- Lowest PCI scope: SAQ-A applies because card data never touches your servers.
+- Works in any backend language — the only requirement is a single REST call.
+
+<Callout type="info">
+Need to keep customers on your own page? Use [Elements](/docs/integration/elements) instead.
+</Callout>
+
+## How it works
+
+<Steps>
+
+### Create a session from your backend
+
+POST to `/checkout/session` with the order amount, currency, and redirect URLs. The response includes a `checkoutUrl`.
+
+```ts
+const res = await fetch(`${process.env.INTENT_API_URL}/checkout/session`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Api-Key': process.env.VINR_API_KEY!,
+  },
+  body: JSON.stringify({ amount: 5000, currency: 'EUR',
+    successUrl: 'https://yoursite.com/success',
+    cancelUrl: 'https://yoursite.com/cancel' }),
+});
+const { sessionId, checkoutUrl } = await res.json();
+```
+
+### Redirect your customer
+
+```ts
+window.location.href = checkoutUrl;
+```
+
+### Customer pays on the hosted page
+
+The customer completes payment at `https://checkout.vinr.com/checkout/{sessionId}`. VINR handles card entry, wallet payments, and 3DS challenges.
+
+### Verify the result on your backend
+
+When the customer lands on `successUrl?sessionId=...`, fetch the session result to confirm payment status before fulfilling the order.
+
+```ts
+const result = await fetch(
+  `${process.env.INTENT_API_URL}/checkout/session/${sessionId}/result`,
+  { headers: { 'X-Api-Key': process.env.VINR_API_KEY! } }
+).then(r => r.json());
+```
+
+</Steps>
+
+## Quickstart
+
+<Steps>
+
+### Get your API key
+
+Log in to the VINR Dashboard and copy your merchant API key from [Settings → API Keys](/docs/getting-started/authentication).
+
+Store it as `VINR_API_KEY` in your environment. Never commit it to source control.
+
+### Create the session (backend)
+
+Add an endpoint to your server that creates a Checkout session and returns the `checkoutUrl` to your frontend.
+
+```ts
+import express from 'express';
+
+const router = express.Router();
+
+const INTENT_API_URL = process.env.INTENT_API_URL ?? 'https://api.vinr.com';
+
+router.post('/api/checkout/start', async (req, res) => {
+  const sessionRes = await fetch(`${INTENT_API_URL}/checkout/session`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Api-Key': process.env.VINR_API_KEY!,
+    },
+    body: JSON.stringify({
+      amount: 5000,
+      currency: 'EUR',
+      customer: {
+        customerId: 'cust_abc123',
+        email: 'jane@example.com',
+        name: 'Jane Smith',
+      },
+      cartItems: [
+        {
+          id: 'item_001',
+          name: 'Wireless headphones',
+          description: 'Over-ear, noise cancelling',
+          price: 5000,
+          quantity: 1,
+          image: 'https://yoursite.com/images/headphones.jpg',
+        },
+      ],
+      successUrl: 'https://yoursite.com/order/success',
+      cancelUrl: 'https://yoursite.com/cart',
+    }),
+  });
+
+  if (!sessionRes.ok) {
+    const err = await sessionRes.json();
+    return res.status(sessionRes.status).json(err);
+  }
+
+  const { sessionId, checkoutUrl } = await sessionRes.json();
+  res.json({ sessionId, checkoutUrl });
+});
+
+export default router;
+```
+
+### Redirect the customer (frontend)
+
+Call your backend endpoint, then redirect to the hosted page.
+
+```ts
+async function startCheckout(): Promise<void> {
+  const { checkoutUrl } = await fetch('/api/checkout/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cartId: 'cart_xyz' }),
+  }).then(r => r.json());
+
+  window.location.href = checkoutUrl;
+}
+```
+
+### Verify on the success page (backend)
+
+Read the `sessionId` query parameter VINR appends to `successUrl`, fetch the result, and branch on `status`.
+
+```ts
+router.get('/order/success', async (req, res) => {
+  const sessionId = req.query.sessionId as string;
+
+  if (!sessionId) {
+    return res.status(400).send('Missing sessionId');
+  }
+
+  const result = await fetch(
+    `${INTENT_API_URL}/checkout/session/${sessionId}/result`,
+    { headers: { 'X-Api-Key': process.env.VINR_API_KEY! } }
+  ).then(r => r.json());
+
+  if (result.status === 'completed') {
+    await fulfillOrder(result);
+    return res.render('order-confirmed', { result });
+  }
+
+  if (result.status === 'failed') {
+    return res.redirect('/cart?error=payment_failed');
+  }
+
+  if (result.status === 'canceled') {
+    return res.redirect('/cart');
+  }
+
+  res.redirect('/cart?error=unknown');
+});
+```
+
+### (Optional) Listen for webhooks
+
+Polling the result endpoint is fine for simple flows. For reliable async notifications — especially when the customer closes the tab — set up a [webhook endpoint](/docs/integration/webhooks) and listen for `payment.completed`.
+
+</Steps>
+
+## Configuration options
+
+The table below covers the most commonly used fields. See the [full session reference](/docs/integration/checkout/session-reference) for every field including cart items, promo codes, delivery options, and metadata.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `amount` | integer | Yes | Amount in minor units (e.g. 5000 = €50.00) |
+| `currency` | string | Yes | ISO 4217 code, e.g. `"EUR"` |
+| `successUrl` | string | Yes | HTTPS URL to redirect after successful payment |
+| `cancelUrl` | string | Yes | HTTPS URL to redirect when customer cancels |
+| `customer` | object | No | Pre-fill customer details; enables guest checkout if omitted |
+| `cartItems` | array | No | Line items shown in the checkout UI |
+| `supportedCurrencies` | string[] | No | Let the customer switch currency; defaults to `currency` only |
+| `configId` | string | No | Branding/config preset (default: `"default-config"`) |
+| `metadata` | object | No | Controls UI behaviors: mode, shipping, promo codes, delivery |
+
+## Payment methods
+
+| Method | Coverage |
+|---|---|
+| Cards (Visa / Mastercard / Amex) | Global |
+| Apple Pay | Safari and Apple devices |
+| Google Pay | Chrome and Android |
+| Click-to-Pay | Mastercard SRC |
+
+3DS authentication is handled automatically — you don't need to write any challenge logic.
+
+## Security and PCI scope
+
+<Callout type="info">
+Card data never touches your servers. Because customers enter card details on a VINR-hosted domain, SAQ-A is the applicable PCI self-assessment questionnaire. The hosted page sets `frame-ancestors 'none'` so it cannot be embedded in an iframe. For a full overview of your compliance obligations, see [Compliance](/docs/compliance).
+</Callout>
+
+## Common issues
+
+<Accordions>
+<Accordion title="Customer never comes back to successUrl">
+Check that `successUrl` is an HTTPS URL and its domain is listed in the allowed redirect domains in your VINR Dashboard (Settings → Checkout → Allowed Domains). HTTP and `localhost` URLs are blocked in production.
+</Accordion>
+<Accordion title="Session expired before the customer paid">
+Sessions have a 5-minute completion window. Create a new session and redirect the customer again. You can extend the expiry by setting `metadata.sessionTimeout` — see the [session reference](/docs/integration/checkout/session-reference).
+</Accordion>
+<Accordion title="Webhook never arrived">
+Confirm your endpoint is registered, returns HTTP 2xx within 5 seconds, and your server is publicly reachable. See [Webhooks](/docs/integration/webhooks) for the retry schedule and signature verification.
+</Accordion>
+<Accordion title="Wrong currency displayed on the checkout page">
+Set `supportedCurrencies` to an array of ISO codes (e.g. `["EUR", "USD", "GBP"]`) and VINR will display a currency picker. If you pass only `currency`, the page locks to that currency.
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Session reference" href="/docs/integration/checkout/session-reference" description="Every request field, response field, and status code for the Checkout session API." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Receive async payment events — essential for orders where the tab might close." />
+  <Card title="Elements" href="/docs/integration/elements" description="Embed card fields directly in your React app instead of redirecting." />
+</Cards>

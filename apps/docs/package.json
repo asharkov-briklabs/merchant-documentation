@@ -1,38 +1,43 @@
 {
   "name": "@vinr/docs",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "fumadocs-mdx",
     "dev": "next dev",
+    "prebuild": "fumadocs-mdx",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,md,mdx}\"",
-    "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,json,css,md,mdx}\"",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "generate": "fumadocs-mdx"
   },
   "dependencies": {
-    "next": "^16.1.6",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "fumadocs-ui": "^16.6.1",
-    "fumadocs-core": "^16.6.1",
-    "fumadocs-mdx": "^14.2.7",
-    "lucide-react": "^0.564.0",
+    "@ai-sdk/anthropic": "^1.0.0",
+    "ai": "^4.0.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
-    "tailwind-merge": "^2.2.0"
+    "fumadocs-core": "^13.4.0",
+    "fumadocs-mdx": "^10.0.0",
+    "fumadocs-ui": "^13.4.0",
+    "lucide-react": "^0.400.0",
+    "next": "^14.2.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "react-markdown": "^10.1.0",
+    "tailwind-merge": "^2.3.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@types/node": "^20.10.6",
-    "@types/react": "^18.3.18",
-    "@types/react-dom": "^18.3.5",
-    "typescript": "^5.3.3",
-    "tailwindcss": "^4.0.0",
-    "@tailwindcss/postcss": "^4.0.0",
-    "autoprefixer": "^10.4.16",
-    "postcss": "^8.4.32",
-    "eslint": "^8.56.0",
-    "eslint-config-next": "^15.5.12"
+    "@types/mdx": "^2.0.0",
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.0",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^14.2.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.5.0"
   }
 }

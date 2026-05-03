@@ -1,0 +1,28 @@
+# VINR Documentation
+# https://vinr.com/docs
+
+# Machine-readable documentation index for AI agents
+# See: https://llmstxt.org/
+
+## Docs
+
+- [Getting Started](/docs/getting-started): Quick start guides, authentication, and test environment setup
+- [Integration](/docs/integration): SDKs, webhooks, error handling, and integration patterns
+- [Payments](/docs/payments): Payment methods, flows, lifecycle, refunds, and recurring payments
+- [Compliance](/docs/compliance): KYC, AML, PCI DSS, GDPR, and regulatory requirements
+- [Operations](/docs/operations): Settlement, reconciliation, monitoring, and dashboard guides
+- [API Reference](/docs/api-reference): Complete REST API documentation with examples
+- [Troubleshooting](/docs/troubleshooting): Common issues, error codes, and debugging guides
+
+## AI Assistant
+
+- [Ask VINR](/ask): AI-powered conversational assistant for instant documentation answers
+
+## Personas
+
+- [Developer](/personas/developer): API references, SDKs, integration guides
+- [Finance Manager](/personas/finance-manager): Settlement, reconciliation, fees
+- [Operations](/personas/operations): Dashboard, monitoring, alerts
+- [Compliance Officer](/personas/compliance-officer): KYC/AML, PCI, GDPR
+- [Business Owner](/personas/business-owner): Overview, pricing, strategy
+- [Partner](/personas/partner): Bank partner integration guides

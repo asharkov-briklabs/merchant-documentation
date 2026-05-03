@@ -1,0 +1,50 @@
+---
+title: Integration
+description: Choose your integration path and connect VINR to your application.
+category: "integration"
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-05-03"
+---
+
+## Integration options
+
+VINR offers multiple integration paths depending on your needs:
+
+<Tabs items={["Hosted Checkout", "Embedded Components", "Direct API"]}>
+<Tab value="Hosted Checkout">
+
+The fastest way to accept payments. VINR handles the entire checkout UI — you redirect customers and receive webhook notifications.
+
+**Best for:** Quick setup, PCI compliance simplification
+
+Read the [Checkout integration guide](/docs/integration/checkout).
+
+</Tab>
+<Tab value="Embedded Components">
+
+Drop-in UI components that render inside your application. Full control over the checkout experience while VINR handles sensitive card data.
+
+**Best for:** Custom checkout experiences, SPAs
+
+Read the [Elements integration guide](/docs/integration/elements).
+
+</Tab>
+<Tab value="Direct API">
+
+Full control over the payment flow. Build your own UI and call VINR APIs directly. Requires PCI DSS SAQ-D compliance for card payments.
+
+**Best for:** Complex flows, marketplace platforms
+
+Read the [API reference](/docs/api-reference).
+
+</Tab>
+</Tabs>
+
+## Guides
+
+<Cards>
+  <Card title="Checkout" href="/docs/integration/checkout" description="Redirect to a hosted, PCI-compliant payment page — no frontend code required." />
+  <Card title="Elements" href="/docs/integration/elements" description="Embed card fields in your React app while VINR handles all sensitive data." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Receive real-time notifications for payment events." />
+</Cards>

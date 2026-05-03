@@ -1,0 +1,155 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* VINR teal scale */
+    --vinr-teal-50:  #f7fdfc;
+    --vinr-teal-100: #e7f7f7;
+    --vinr-teal-200: #c6e8e8;
+    --vinr-teal-300: #97d1d1;
+    --vinr-teal-500: #2a9d90;
+    --vinr-teal-700: #0b3b45;
+    --vinr-teal-800: #082d35;
+    --vinr-teal-900: #05191d;
+
+    /* VINR lime */
+    --vinr-lime-500: #6da544;
+    --vinr-lime-700: #496e2d;
+    --vinr-lime-900: #225f47;
+
+    /* VINR blue */
+    --vinr-blue-500: #338af3;
+    --vinr-blue-700: #0052b4;
+
+    /* VINR accent colors */
+    --vinr-purple:   #9747ff;
+    --vinr-yellow:   #ffda44;
+    --vinr-red:      #d80027;
+    --vinr-red-deep: #a2001d;
+
+    /* Zinc neutrals */
+    --zinc-50:   #fafafa;
+    --zinc-100:  #f8f9f9;
+    --zinc-200:  #f4f6f6;
+    --zinc-300:  #eff2f2;
+    --zinc-400:  #eceff0;
+    --zinc-500:  #e7ebec;
+    --zinc-600:  #d2d6d7;
+    --zinc-700:  #a4a7a8;
+    --zinc-800:  #7f8182;
+    --zinc-900:  #616363;
+    --zinc-1000: #2c2e2e;
+
+    /* Shadows */
+    --shadow-xs: 0 1px 2px 0 rgba(0,0,0,0.05);
+    --shadow-sm: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+
+    /* Radii */
+    --radius-sm:   4px;
+    --radius-md:   6px;
+    --radius-lg:   8px;
+    --radius-xl:   12px;
+    --radius-full: 9999px;
+
+    /* Spacing */
+    --space-1:  4px;
+    --space-2:  8px;
+    --space-3:  12px;
+    --space-4:  16px;
+    --space-5:  20px;
+    --space-6:  24px;
+    --space-8:  32px;
+    --space-10: 40px;
+    --space-12: 48px;
+    --space-16: 64px;
+    --space-24: 96px;
+    --space-32: 128px;
+
+    /* Font families */
+    --font-sans:    var(--font-inter, "Inter"), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono:    var(--font-roboto-mono, "Roboto Mono"), ui-monospace, Menlo, Consolas, monospace;
+    --font-display: "Caveat", cursive;
+    --font-script:  "Caveat", "Comic Sans MS", cursive;
+
+    /* fumadocs overrides — light mode (HSL triplets, no hsl() wrapper) */
+    /* #ffffff  → 0 0% 100% */
+    --fd-background:        0 0% 100%;
+    /* #0b3b45  → 193 67% 16% */
+    --fd-foreground:        193 67% 16%;
+    /* #f7fdfc  → 168 80% 97% */
+    --fd-muted:             168 80% 97%;
+    /* #a4a7a8  → 183 2% 65% */
+    --fd-muted-foreground:  183 2% 65%;
+    /* #ffffff */
+    --fd-popover:           0 0% 100%;
+    --fd-popover-foreground: 193 67% 16%;
+    /* #ffffff */
+    --fd-card:              0 0% 100%;
+    --fd-card-foreground:   193 67% 16%;
+    /* #e7ebec  → 187 7% 91% */
+    --fd-border:            187 7% 91%;
+    /* #0b3b45 */
+    --fd-primary:           193 67% 16%;
+    /* #f7fdfc */
+    --fd-primary-foreground: 168 80% 97%;
+    /* #f4f6f6  → 180 7% 96% */
+    --fd-secondary:         180 7% 96%;
+    /* #f4f6f6 */
+    --fd-accent:            180 7% 96%;
+    /* #0b3b45 */
+    --fd-accent-foreground: 193 67% 16%;
+    /* #0b3b45 */
+    --fd-ring:              193 67% 16%;
+  }
+
+  .dark {
+    /* fumadocs overrides — dark mode */
+    /* #05191d  → 190 68% 7% */
+    --fd-background:        190 68% 7%;
+    /* #f7fdfc */
+    --fd-foreground:        168 80% 97%;
+    /* #0b3b45 */
+    --fd-muted:             193 67% 16%;
+    /* #97d1d1  → 180 37% 70% */
+    --fd-muted-foreground:  180 37% 70%;
+    /* #082d35  → 191 66% 12% */
+    --fd-popover:           191 66% 12%;
+    --fd-popover-foreground: 168 80% 97%;
+    --fd-card:              191 66% 12%;
+    --fd-card-foreground:   168 80% 97%;
+    /* rgba white/7 on dark → approximate border */
+    --fd-border:            190 30% 15%;
+    /* #f7fdfc */
+    --fd-primary:           168 80% 97%;
+    /* #05191d */
+    --fd-primary-foreground: 190 68% 7%;
+    --fd-secondary:         193 67% 16%;
+    --fd-accent:            193 67% 16%;
+    --fd-accent-foreground: 168 80% 97%;
+    --fd-ring:              168 80% 97%;
+  }
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Ticker + pulse animations */
+@keyframes tickerScroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .4; }
+}
+

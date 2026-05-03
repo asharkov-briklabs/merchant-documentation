@@ -1,0 +1,130 @@
+---
+title: Theming guide
+description: Control the visual appearance of VINR Elements using the appearance option — themes, custom style tokens, and runtime updates.
+category: "integration"
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-05-03"
+---
+
+Elements live in iframes, so they don't inherit your page CSS. Style them through the `appearance` option — VINR posts the styles into the iframe and applies them safely without exposing arbitrary CSS to the card capture context.
+
+## Themes
+
+<Tabs items={["Default", "Dark"]}>
+<Tab value="Default">
+
+Light surface, teal-700 primary, zinc neutrals. Good for most checkout pages and the recommended starting point before applying custom tokens.
+
+```ts
+appearance: { theme: 'default' }
+```
+
+</Tab>
+<Tab value="Dark">
+
+Dark surface (#1a1a1a background), off-white labels, same teal-700 primary. Use when your page has a dark background to avoid a jarring white iframe.
+
+```ts
+appearance: { theme: 'dark' }
+```
+
+</Tab>
+</Tabs>
+
+## Custom styles
+
+Override individual design tokens with the `styles` object. All tokens are optional — unspecified tokens fall back to the active theme.
+
+<TypeTable
+  type={{
+    colorPrimary: {
+      description: "Primary action color applied to focused inputs, the Pay button, and selection highlights.",
+      type: "string",
+      required: false,
+    },
+    colorSuccess: {
+      description: "Color used for success states and validation ticks.",
+      type: "string",
+      required: false,
+    },
+    colorError: {
+      description: "Color used for error borders, error messages, and invalid field states.",
+      type: "string",
+      required: false,
+    },
+    borderRadius: {
+      description: "Border radius applied to inputs and the Pay button. Accepts any CSS length value.",
+      type: "string",
+      required: false,
+    },
+    fontFamily: {
+      description: "Font stack for all text inside the element. Use a system font or one already loaded on the page.",
+      type: "string",
+      required: false,
+    },
+    fontSize: {
+      description: "Base font size. Other sizes scale relative to this.",
+      type: "string",
+      required: false,
+    },
+    spacingUnit: {
+      description: "Base spacing scale. Padding and gap values are multiples of this unit.",
+      type: "string",
+      required: false,
+    },
+  }}
+/>
+
+Combining `theme` with `styles` overrides only the tokens you specify — the theme provides the rest:
+
+```ts
+appearance: {
+  theme: 'default',
+  styles: {
+    colorPrimary: '#0b3b45',
+    colorError: '#d80027',
+    borderRadius: '8px',
+    fontFamily: 'Inter, system-ui, sans-serif',
+  },
+}
+```
+
+Pass this object to `useAsparyxSDK` as the SDK-level default, or pass it directly to `useAsparyxElement` to scope the override to a single element.
+
+## Updating styles at runtime
+
+Both the SDK and individual elements support in-place style updates. No remount occurs and the customer's typed input is preserved.
+
+**SDK-wide** — updates all mounted elements:
+
+```ts
+sdk.updateAppearance({ theme: 'dark' });
+```
+
+**Per-element** — overrides appearance for one element only:
+
+```ts
+element.update({
+  appearance: {
+    styles: { colorPrimary: '#000000' },
+  },
+});
+```
+
+This is useful for dark-mode toggles: listen for your application's theme change event, then call `sdk.updateAppearance()` to keep the elements in sync.
+
+## What you can't do
+
+<Callout type="warn">
+For PCI safety, custom CSS rules, fonts loaded by external URL, and arbitrary HTML are not supported inside the iframes. Stick to the `styles` tokens described above. Anything beyond that — layout overrides, custom animations, injected markup — must live on your own page wrapping the element container.
+</Callout>
+
+## Brand-matching tips
+
+- Set `colorPrimary` to your brand's primary action color. This is the most visible token — it affects the focused input border, the Pay button, and any interactive highlight.
+- Align `borderRadius` with the inputs on the rest of your form. If your inputs use `4px` radius, set Elements to `4px`; a mismatch is immediately visible.
+- Use the font already loaded on your page (e.g. `"Inter, system-ui, sans-serif"`) so there is no flash of a different typeface as the iframe renders.
+- If you support both light and dark modes, call `sdk.updateAppearance()` when your app's color scheme changes rather than remounting the elements.
+
+For a complete list of element types and mount options, see the [Elements reference](/docs/integration/elements/elements).

@@ -1,0 +1,52 @@
+---
+title: Troubleshooting
+description: Common issues, error codes, and debugging guides for VINR integrations.
+---
+
+## Common Issues
+
+<Accordions>
+<Accordion title='Payments failing with "authentication_required"'>
+
+**Cause:** The card requires 3D Secure authentication but your integration doesn't handle it.
+
+**Fix:** Ensure your checkout flow redirects to `payment.authenticationUrl` when status is `requires_authentication`.
+
+</Accordion>
+<Accordion title="Webhooks not receiving events">
+
+**Checklist:**
+1. Endpoint URL is HTTPS (HTTP is rejected)
+2. Endpoint returns `200` within 30 seconds
+3. Firewall allows requests from VINR IPs
+4. Webhook is active (not paused) in dashboard
+
+</Accordion>
+<Accordion title="Settlement amounts don't match expected">
+
+**Common causes:**
+- Fees deducted from settlement (check fee schedule)
+- Currency conversion applied
+- Refunds processed between capture and settlement
+- Chargebacks deducted
+
+</Accordion>
+<Accordion title="API returning 401 Unauthorized">
+
+**Checklist:**
+1. Using correct key (live vs test)
+2. Key hasn't been revoked
+3. Header format: `Authorization: Bearer sk_live_...`
+4. No trailing whitespace in key
+
+</Accordion>
+</Accordions>
+
+## Getting Help
+
+If you can't resolve an issue:
+
+1. Check the [status page](https://status.vinr.com) for platform incidents
+2. Use the [AI Assistant](/ask) for instant answers
+3. Contact support: support@vinr.com
+4. Emergency line (production down): Listed in your merchant agreement

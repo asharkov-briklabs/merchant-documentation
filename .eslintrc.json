@@ -10,6 +10,7 @@
     "out/",
     "build/",
     "dist/",
-    ".source/"
+    ".source/",
+    "apps/docs/"
   ]
 }

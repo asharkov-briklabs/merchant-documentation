@@ -1,0 +1,242 @@
+---
+title: Elements reference
+description: Every available VINR element type, configuration options, instance methods, and SDK events.
+category: "integration"
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-05-03"
+---
+
+Elements come in two flavors: drop-in payment forms (full layouts) and individual fields you compose yourself.
+
+## Drop-in elements
+
+Drop-in elements render a complete, opinionated payment form in a single call. Use them when you want fast integration with minimal layout work.
+
+| Element type | Method | Includes |
+|---|---|---|
+| `full-payment` | `useAsparyxElement(sdk, 'full-payment', opts)` | Card fields + email + billing address |
+| `standard-payment` | `useAsparyxElement(sdk, 'standard-payment', opts)` | Card number, expiry, CVC, cardholder |
+| `two-step-payment` | `useAsparyxElement(sdk, 'two-step-payment', opts)` | Billing address first, then card fields |
+| `express-payment` | `useAsparyxElement(sdk, 'express-payment', opts)` | Apple Pay / Google Pay quick checkout |
+
+### full-payment
+
+<TypeTable
+  type={{
+    container: {
+      description: "Ref or HTMLElement to mount the form into.",
+      type: "RefObject<HTMLElement> | HTMLElement",
+      required: true,
+    },
+    amount: {
+      description: "Display amount shown in the form header (minor units).",
+      type: "number",
+      required: false,
+    },
+    currency: {
+      description: "ISO 4217 currency code used for display.",
+      type: "string",
+      required: false,
+    },
+    showBillingAddress: {
+      description: "Show the billing address fieldset.",
+      type: "boolean",
+      default: "true",
+      required: false,
+    },
+  }}
+/>
+
+### standard-payment
+
+<TypeTable
+  type={{
+    container: {
+      description: "Ref or HTMLElement to mount the form into.",
+      type: "RefObject<HTMLElement> | HTMLElement",
+      required: true,
+    },
+    amount: {
+      description: "Display amount in minor units.",
+      type: "number",
+      required: false,
+    },
+    currency: {
+      description: "ISO 4217 currency code.",
+      type: "string",
+      required: false,
+    },
+  }}
+/>
+
+### two-step-payment
+
+<TypeTable
+  type={{
+    container: {
+      description: "Ref or HTMLElement to mount the form into.",
+      type: "RefObject<HTMLElement> | HTMLElement",
+      required: true,
+    },
+    amount: {
+      description: "Display amount in minor units.",
+      type: "number",
+      required: false,
+    },
+    currency: {
+      description: "ISO 4217 currency code.",
+      type: "string",
+      required: false,
+    },
+    startStep: {
+      description: "Which step to show first.",
+      type: "'billing' | 'card'",
+      default: "'billing'",
+      required: false,
+    },
+  }}
+/>
+
+### express-payment
+
+<TypeTable
+  type={{
+    container: {
+      description: "Ref or HTMLElement to mount the wallet buttons into.",
+      type: "RefObject<HTMLElement> | HTMLElement",
+      required: true,
+    },
+    amount: {
+      description: "Display amount in minor units.",
+      type: "number",
+      required: false,
+    },
+    currency: {
+      description: "ISO 4217 currency code.",
+      type: "string",
+      required: false,
+    },
+    methods: {
+      description: "Wallet methods to show. VINR hides any method the browser does not support.",
+      type: "Array<'applePay' | 'googlePay'>",
+      default: "['applePay', 'googlePay']",
+      required: false,
+    },
+  }}
+/>
+
+## Compound elements (custom layouts)
+
+Compound elements let you build your own form layout. Mount each field individually, then call `sdk.submit()` to coordinate them all.
+
+| Element | Captures |
+|---|---|
+| `card-number` | Card number and auto-detected brand icon |
+| `expiry-date` | MM/YY expiry |
+| `cvv` | 3–4 digit security code |
+| `card-holder` | Cardholder name |
+| `billing-address` | Full billing address |
+| `shipping-address` | Full shipping address |
+| `email` | Email address |
+| `phone-number` | Phone number (validated via libphonenumber) |
+| `zip-code` | Postal code only |
+
+### Composing your own form
+
+Mount each element into its own container ref, then trigger submission with a single `sdk.submit()` call. A hidden coordinator iframe synchronises the fields before encryption — you don't need to wire them together manually.
+
+```tsx
+import { useRef } from 'react';
+import { useAsparyxSDK, useAsparyxElement } from '@vinr/elements';
+
+export function CustomCardForm({ intent }: { intent: Intent }) {
+  const cardNumberRef = useRef<HTMLDivElement>(null);
+  const expiryRef     = useRef<HTMLDivElement>(null);
+  const cvvRef        = useRef<HTMLDivElement>(null);
+  const holderRef     = useRef<HTMLDivElement>(null);
+
+  const { sdk, status } = useAsparyxSDK({
+    merchantId: intent.accountId,
+    publicKey: intent.publicKey,
+    secureFormsUrl: 'https://elements.vinr.com',
+    enabled: true,
+  });
+
+  useAsparyxElement(sdk, 'card-number', { container: cardNumberRef });
+  useAsparyxElement(sdk, 'expiry-date', { container: expiryRef });
+  useAsparyxElement(sdk, 'cvv',         { container: cvvRef });
+  useAsparyxElement(sdk, 'card-holder', { container: holderRef });
+
+  return (
+    <form onSubmit={e => { e.preventDefault(); sdk?.submit(intent.amount, intent.currency); }}>
+      <label>Card number<div ref={cardNumberRef} style={{ minHeight: 44 }} /></label>
+      <label>Expiry<div ref={expiryRef} style={{ minHeight: 44 }} /></label>
+      <label>CVC<div ref={cvvRef} style={{ minHeight: 44 }} /></label>
+      <label>Name on card<div ref={holderRef} style={{ minHeight: 44 }} /></label>
+      <button type="submit" disabled={status !== 'ready'}>Pay</button>
+    </form>
+  );
+}
+```
+
+## Common element options
+
+These options apply to every element type.
+
+| Option | Type | Description |
+|---|---|---|
+| `container` | `RefObject<HTMLElement> \| HTMLElement` | Where the element mounts. Required for all element types. |
+| `appearance` | `AppearanceOptions` | Per-element style override. Merges with SDK-level appearance. See [Theming](/docs/integration/elements/theming). |
+| `config` | `object` | Element-specific configuration. See each element's options above. |
+
+## Element instance methods
+
+`useAsparyxElement` returns an `element` object with these methods.
+
+| Method | Description |
+|---|---|
+| `element.update({ appearance?, config? })` | Apply new options in place. No remount; user input is preserved. |
+| `element.unmount()` | Remove the element from the DOM and clean up listeners. |
+| `element.focus()` | Programmatically focus the first input inside the element. |
+| `element.clear()` | Clear all field values without unmounting. |
+
+## SDK events
+
+Subscribe to SDK-level events using the `useTokenReceived` hook (recommended in React) or `sdk.on()` (imperative API).
+
+| Event | When it fires |
+|---|---|
+| `token_received` | Card has been encrypted; the payload is ready to POST to your backend. |
+| `error` | An encryption or validation error occurred. |
+| `change` | One or more field validity states changed. |
+| `payment_method_selected` | Customer selected a wallet method inside an `express-payment` element. |
+
+## Imperative API
+
+For non-React environments, use `AsparyxSDK` directly. The React hooks are the recommended interface — use this only when hooks are not available.
+
+```ts
+import { AsparyxSDK } from '@vinr/elements';
+
+const sdk = new AsparyxSDK({
+  merchantId: 'acct_xyz',
+  publicKey: 'pk_test_1a2b3c4d5e6f',
+  secureFormsUrl: 'https://elements.vinr.com',
+});
+
+const el = sdk.createFullPaymentElement(document.getElementById('card-container')!, {
+  amount: 5000,
+  currency: 'EUR',
+});
+
+sdk.on('token_received', async (data) => {
+  await postTokenToBackend(data.payload);
+});
+
+document.getElementById('pay-btn')!.addEventListener('click', () => {
+  sdk.submit(5000, 'EUR');
+});
+```
+
+For a complete React walkthrough, see the [Elements integration guide](/docs/integration/elements).
