@@ -1,26 +1,14 @@
 {
-  "name": "vinr-docs-monorepo",
-  "version": "1.0.0",
+  "name": "vinr-docs",
   "private": true,
-  "description": "Vinr Documentation Platform - Monorepo",
   "workspaces": [
     "apps/docs"
   ],
   "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build",
-    "lint": "turbo run lint",
-    "format": "turbo run format",
-    "format:check": "turbo run format:check",
-    "type-check": "turbo run type-check",
-    "clean": "turbo run clean && rm -rf node_modules",
-    "prepare": "husky"
-  },
-  "devDependencies": {
-    "husky": "^9.0.0",
-    "lint-staged": "^15.2.0",
-    "prettier": "^3.1.1",
-    "turbo": "^1.11.3"
+    "dev": "pnpm --filter @vinr/docs dev",
+    "build": "pnpm --filter @vinr/docs build",
+    "lint": "pnpm --filter @vinr/docs lint",
+    "type-check": "pnpm --filter @vinr/docs type-check"
   },
   "packageManager": "pnpm@9.1.0",
   "engines": {
