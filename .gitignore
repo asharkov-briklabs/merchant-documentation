@@ -6,9 +6,11 @@ __v0_jsx-dev-runtime.ts
 # Common ignores
 node_modules/
 .next/
+.turbo/
 .env*.local
 .DS_Store
 .source/
+*.tsbuildinfo
 
 # Package manager lockfiles (using pnpm only)
 package-lock.json
