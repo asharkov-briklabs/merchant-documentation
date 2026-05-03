@@ -1,9 +1,8 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { createI18nMiddleware } from "fumadocs-core/i18n";
+import { i18n } from "@/lib/i18n";
 
-export default function middleware(_request: NextRequest) {
-  return NextResponse.next();
-}
+export default createI18nMiddleware(i18n);
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|favicon.png).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|favicon.png|api/).*)"],
 };
