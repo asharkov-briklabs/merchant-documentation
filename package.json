@@ -4,8 +4,7 @@
   "private": true,
   "description": "Vinr Documentation Platform - Monorepo",
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "apps/docs"
   ],
   "scripts": {
     "dev": "turbo run dev",
@@ -18,17 +17,10 @@
     "prepare": "husky"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.0.0",
-    "@types/node": "^20.10.6",
-    "@types/react": "^18.2.46",
-    "@types/react-dom": "^18.2.18",
     "husky": "^9.0.0",
     "lint-staged": "^15.2.0",
     "prettier": "^3.1.1",
-    "prettier-plugin-tailwindcss": "^0.5.9",
-    "tailwindcss": "^4.0.0",
-    "turbo": "^1.11.3",
-    "typescript": "^5.3.3"
+    "turbo": "^1.11.3"
   },
   "packageManager": "pnpm@9.1.0",
   "engines": {

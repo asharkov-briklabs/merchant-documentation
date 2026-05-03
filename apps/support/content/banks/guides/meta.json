@@ -1,9 +1,0 @@
-{
-  "title": "Guides",
-  "icon": "Book",
-  "pages": [
-    "index",
-    "integration-guide",
-    "go-live-checklist"
-  ]
-}
