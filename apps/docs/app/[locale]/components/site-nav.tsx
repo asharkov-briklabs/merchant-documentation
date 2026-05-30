@@ -20,34 +20,38 @@ export function SiteNav({ t, locale, activeKey }: SiteNavProps) {
       className="sticky top-0 z-40 h-14 border-b border-white/[0.07] bg-[#05191d] px-10"
       style={{ height: 56 }}
     >
-      <div className="flex h-full w-full max-w-[1200px] mx-auto items-center gap-0">
-        <Link href={localeHref(locale, "/")} className="flex items-center">
-          <VinrWordmark height={18} fill="#F7FDFC" />
-        </Link>
-
-        <div className="mx-6 h-[18px] w-px bg-white/[0.15]" />
-
-        <div className="flex items-center gap-1">
-          <Link
-            href={localeHref(locale, "/docs")}
-            className={[
-              "hidden h-8 items-center rounded-md px-3 text-[13px] font-medium transition-colors duration-[120ms] md:flex",
-              activeKey === "docs"
-                ? "text-[#f7fdfc]"
-                : "text-[rgba(247,253,252,0.72)] hover:bg-white/[0.08] hover:text-[#f7fdfc]",
-            ].join(" ")}
-          >
-            {t.docs}
+      <div className="grid h-full w-full max-w-[1200px] mx-auto grid-cols-[auto_1fr_auto] items-center gap-4 md:gap-8">
+        {/* Left: logo + categories */}
+        <div className="flex items-center">
+          <Link href={localeHref(locale, "/")} className="flex items-center">
+            <VinrWordmark height={18} fill="#F7FDFC" />
           </Link>
-          <CategoryMenu t={t} locale={locale} />
+
+          <div className="mx-5 hidden h-[18px] w-px bg-white/[0.15] md:block" />
+
+          <div className="flex items-center gap-1">
+            <Link
+              href={localeHref(locale, "/docs")}
+              className={[
+                "hidden h-8 items-center rounded-md px-3 text-[13px] font-medium transition-colors duration-[120ms] md:flex",
+                activeKey === "docs"
+                  ? "text-[#f7fdfc]"
+                  : "text-[rgba(247,253,252,0.72)] hover:bg-white/[0.08] hover:text-[#f7fdfc]",
+              ].join(" ")}
+            >
+              {t.docs}
+            </Link>
+            <CategoryMenu t={t} locale={locale} />
+          </div>
         </div>
 
-        <div className="flex-1" />
-
-        <div className="mr-3">
-          <SearchTrigger placeholder={t.searchShort} variant="nav" />
+        {/* Center: prominent search box */}
+        <div className="flex justify-end md:mx-auto md:w-full md:max-w-[440px] md:justify-center">
+          <SearchTrigger placeholder={t.searchPlaceholder} variant="nav" />
         </div>
 
+        {/* Right: utilities */}
+        <div className="flex items-center justify-end">
         <Link
           href={localeHref(locale, "/ask")}
           className={[
@@ -69,10 +73,11 @@ export function SiteNav({ t, locale, activeKey }: SiteNavProps) {
 
         <Link
           href={localeHref(altLocale, "/")}
-          className="ml-3 flex h-8 items-center gap-1 rounded-md border border-white/[0.12] px-2.5 text-[12px] text-[rgba(247,253,252,0.55)] transition-colors hover:text-[#f7fdfc]"
+          className="ml-3 hidden h-8 items-center gap-1 rounded-md border border-white/[0.12] px-2.5 text-[12px] text-[rgba(247,253,252,0.55)] transition-colors hover:text-[#f7fdfc] sm:flex"
         >
           {altLabel} ▾
         </Link>
+        </div>
       </div>
     </nav>
   );
