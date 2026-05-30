@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "pretype-check": "fumadocs-mdx",
     "type-check": "tsc --noEmit",
     "generate": "fumadocs-mdx"
   },
