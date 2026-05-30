@@ -1,0 +1,10 @@
+{
+  "title": "Payment methods",
+  "pages": [
+    "index",
+    "cards",
+    "bank-transfers",
+    "stablecoins",
+    "local-methods"
+  ]
+}

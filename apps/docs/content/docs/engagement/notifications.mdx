@@ -1,0 +1,160 @@
+---
+title: Notifications & messaging
+description: Keep members informed and engaged.
+persona: ["developer", "operations"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Notifications turn engagement events into messages: a member earns points, climbs a tier, sees a balance about to expire, or unlocks an offer. VINR listens to the same events that drive loyalty and dispatches the right message on the right channel — so you never have to poll for state or hand-roll your own send loop.
+
+## Notification triggers
+
+Every notification starts from an [engagement event](/docs/engagement/how-engagement-works). You attach a notification rule to a trigger, and VINR evaluates it the moment the event fires.
+
+| Trigger | Typical message |
+|---|---|
+| `loyalty.points.earned` | "You earned 250 points on your purchase." |
+| `loyalty.tier.changed` | "Welcome to Gold — here's what's new." |
+| `loyalty.points.expiring` | "1,200 points expire in 14 days." |
+| `reward.unlocked` | "You can now redeem a free coffee." |
+| `redemption.completed` | "Your reward is applied — enjoy." |
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// Notify members 14 days before points lapse.
+const rule = await vinr.notifications.rules.create({
+  trigger: 'loyalty.points.expiring',
+  leadTime: '14d',            // anticipatory triggers fire ahead of the event
+  channels: ['email', 'push'],
+  template: 'points-expiring',
+});                            // "we_..." style id under the hood
+```
+
+<Callout type="info">
+Anticipatory triggers like `loyalty.points.expiring` are evaluated by VINR on a daily schedule against each member's balance and expiry window — you don't run the cron. Reactive triggers (`loyalty.points.earned`) fire in near real time.
+</Callout>
+
+## Channels
+
+A rule can fan out to one or more channels. VINR resolves the member's contact details from the linked [customer](/docs/payments/customers) and respects per-channel opt-in.
+
+| Channel | Address source | Notes |
+|---|---|---|
+| `email` | `customer.email` | Always available; supports rich templates. |
+| `sms` | `customer.phone` | Requires verified phone; short body only. |
+| `push` | Registered device tokens | Mobile/web push via your app. |
+| `webhook` | Your endpoint | Dispatch to your own messaging stack. |
+
+For full control, route a notification to your own systems with the `webhook` channel and send through any provider you already operate:
+
+```typescript
+// Verify the dispatch, then send via your provider of choice.
+export async function POST(req: Request) {
+  const sig = req.headers.get('x-vinr-signature') ?? '';
+  const event = vinr.webhooks.verify(await req.text(), sig);
+
+  if (event.type === 'notification.dispatched') {
+    const { channel, member, payload } = event.data;
+    await myMailer.send(payload.to, payload.subject, payload.html);
+  }
+  return new Response(null, { status: 200 });
+}
+```
+
+## Templates & personalization
+
+Templates separate copy from logic. Each template is a named, versioned document with merge fields drawn from the triggering event and the member's profile.
+
+```typescript
+await vinr.notifications.templates.create({
+  name: 'points-earned',
+  subject: 'You earned {{points}} points',
+  body: 'Hi {{member.firstName}}, your {{currencyName}} balance is now {{balance}}.',
+  locales: ['en', 'de', 'fr'],   // VINR picks by customer.locale, falls back to en
+});
+```
+
+Merge fields resolve against a typed context, so a missing or misspelled field fails validation at create time rather than rendering blank in production.
+
+<TypeTable
+  type={{
+    "member.firstName": { type: "string", description: "From the linked customer." },
+    points: { type: "integer", description: "Points awarded by the event.", default: "0" },
+    balance: { type: "integer", description: "Member balance after the event." },
+    currencyName: { type: "string", description: "Display name of the loyalty currency." },
+    tier: { type: "string", description: "Current tier name, when relevant.", default: "null" },
+  }}
+/>
+
+## Quiet hours & preferences
+
+Members control how and when they hear from you. VINR enforces preferences and quiet hours before any send — a suppressed message is recorded as `skipped`, never silently dropped.
+
+<Steps>
+
+### Set member preferences
+
+Store per-channel opt-in on the loyalty account. Honor unsubscribe links automatically on the `email` channel.
+
+```typescript
+await vinr.loyalty.accounts.update('loy_abc123', {
+  notificationPrefs: { email: true, sms: false, push: true },
+});
+```
+
+### Define quiet hours
+
+Quiet hours defer non-urgent messages into a member's local daytime window, computed from `customer.timezone`.
+
+```typescript
+await vinr.notifications.settings.update({
+  quietHours: { start: '21:00', end: '08:00' },  // member-local time
+  deferToleranceHours: 12,                        // drop if still suppressed after this
+});
+```
+
+### Reserve transactional sends
+
+Mark a rule `transactional: true` to bypass marketing opt-out and quiet hours — use only for messages a member must receive, such as a `redemption.completed` confirmation.
+
+</Steps>
+
+<Callout type="warn">
+Quiet hours and opt-out apply to engagement and marketing messages. Keep them off transactional rules, but never use `transactional: true` to evade an unsubscribe — that undermines deliverability and member trust.
+</Callout>
+
+## Delivery reporting
+
+Every dispatch produces a record you can query and that emits follow-up events: `notification.dispatched`, `notification.delivered`, `notification.bounced`, and `notification.skipped`.
+
+```typescript
+const recent = await vinr.notifications.deliveries.list({
+  member: 'loy_abc123',
+  status: 'bounced',
+  limit: 20,
+});
+
+for (const d of recent.data) {
+  console.log(d.channel, d.template, d.failureReason);
+}
+```
+
+| Status | Meaning |
+|---|---|
+| `dispatched` | Handed to the channel provider. |
+| `delivered` | Confirmed delivery (where the channel reports it). |
+| `bounced` | Permanent failure; address may be suppressed. |
+| `skipped` | Suppressed by opt-out or quiet hours. |
+
+Subscribe to `notification.bounced` to clean stale addresses, and watch your `skipped` rate as a signal that triggers are too aggressive. See [Webhooks](/docs/integration/webhooks) for verification and retry behavior.
+
+## Next steps
+
+<Cards>
+  <Card title="How engagement works" href="/docs/engagement/how-engagement-works" description="The events behind every notification." />
+  <Card title="Tiers & status" href="/docs/engagement/tiers-and-status" description="Trigger messages on tier changes." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Receive delivery events reliably." />
+</Cards>

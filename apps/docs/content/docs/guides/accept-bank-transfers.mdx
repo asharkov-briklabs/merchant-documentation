@@ -1,0 +1,175 @@
+---
+title: Accept bank transfers
+description: Accept bank transfers — a runnable, end-to-end guide verified against the VINR sandbox.
+category: "payments"
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Bank transfers settle directly from a customer's bank account — low fees, no chargebacks, and high limits, at the cost of being asynchronous. This guide takes you from creating a transfer request to reconciling the incoming funds, runnable against the VINR sandbox.
+
+## Overview
+
+Unlike a card charge, a bank transfer completes when the money actually arrives — which can be seconds (instant rails) or one to three business days (standard rails). VINR gives the customer payment instructions, then watches the banking network and emits a webhook once funds match.
+
+```
+your server          VINR              customer            bank
+    │  create payment  │                   │                 │
+    │─────────────────►│                   │                 │
+    │  instructions    │                   │                 │
+    │◄─────────────────│  IBAN + reference │                 │
+    │──────────────────────────────────────►│  initiates xfer │
+    │                  │                   │────────────────►│
+    │  payment.completed (webhook)          │   funds settle  │
+    │◄─────────────────│◄──────────────────────────────────────│
+    │  fulfil order    │                   │                 │
+```
+
+Because settlement is asynchronous, fulfilment **always** happens on the webhook — never on the redirect.
+
+## Supported rails
+
+VINR auto-selects the rail from the customer's country and your currency. You can also pin one with `paymentMethod`.
+
+| Rail | `paymentMethod` | Region | Settlement | Refundable |
+|---|---|---|---|---|
+| SEPA Credit Transfer | `sepa_credit_transfer` | EU / EEA | 1–2 business days | Yes |
+| SEPA Instant | `sepa_instant` | EU / EEA | Seconds | Yes |
+| Faster Payments | `faster_payments` | UK | Minutes | Yes |
+| ACH Credit | `ach_credit` | US | 1–3 business days | Yes |
+
+<Callout type="info">
+Bank transfers are a push method: the customer initiates the transfer from their banking app using the IBAN and reference VINR returns. Amounts are integers in minor units — `1000` is EUR 10.00.
+</Callout>
+
+## Create a transfer request
+
+On your backend, create a payment with the bank-transfer method and read the `bankTransfer` instructions from the response.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+export async function POST(req: Request) {
+  const { orderId } = await req.json();
+
+  const payment = await vinr.payments.create(
+    {
+      amount: 250000,                  // €2,500.00
+      currency: 'EUR',
+      paymentMethod: 'sepa_credit_transfer',
+      description: `Invoice ${orderId}`,
+      metadata: { orderId },
+    },
+    { idempotencyKey: `transfer-${orderId}` },   // safe to retry
+  );
+
+  // payment.status === 'pending' until funds arrive
+  return Response.json({
+    iban: payment.bankTransfer.iban,
+    reference: payment.bankTransfer.reference,   // customer MUST include this
+    amount: payment.amount,
+  });
+}
+```
+
+The customer must include the exact `reference` in their transfer — that's how VINR matches incoming funds to this `pay_…`. Surface it prominently in your UI and any emailed instructions.
+
+<Callout type="warn">
+A bank transfer starts in `pending` and may stay there for days. Do not block the customer or expire their order prematurely — set generous timeouts and reconcile on the webhook.
+</Callout>
+
+## Reconciling incoming funds
+
+Fulfil from the webhook so it happens exactly once, regardless of when the money lands. See the [payment lifecycle](/docs/payments/payment-lifecycle) for every event.
+
+```typescript
+export async function POST(req: Request) {
+  const event = vinr.webhooks.verify(
+    await req.text(),
+    req.headers.get('x-vinr-signature'),
+  );
+
+  switch (event.type) {
+    case 'payment.completed':
+      // full amount matched the reference — release the order
+      await fulfillOrder(event.data.metadata.orderId);
+      break;
+    case 'payment.partially_paid':
+      // underpayment: ask the customer to send the remainder
+      await requestRemainder(event.data);
+      break;
+    case 'payment.expired':
+      // no funds within the window — cancel or follow up
+      await cancelOrder(event.data.metadata.orderId);
+      break;
+  }
+  return new Response('OK', { status: 200 });
+}
+```
+
+To reconcile in bulk — for accounting exports or a back-office dashboard — list payments by status and rail:
+
+```typescript
+const pending = await vinr.payments.list({
+  status: 'pending',
+  paymentMethod: 'sepa_credit_transfer',
+  limit: 100,
+});
+```
+
+## Refunds & returns
+
+Because there's no card to reverse, a refund pushes funds back to the originating account VINR captured during settlement — no customer action needed.
+
+```typescript
+const refund = await vinr.refunds.create({
+  payment: 'pay_3xK9...',
+  amount: 250000,            // omit for a full refund
+  reason: 'order_canceled',
+});
+// refund.id → re_… , refund.status === 'pending' until the return settles
+```
+
+A refund settles on the same rail as the original transfer; watch `refund.completed` to confirm. Bank-initiated **returns** (closed account, recall) arrive as a `payment.returned` event after the funds had already completed — treat these like a clawback and reverse fulfilment.
+
+## Test it
+
+The sandbox simulates settlement so you don't have to wait. After creating a transfer, trigger an outcome from the [Dashboard](/docs/getting-started/authentication) test panel or with the SDK:
+
+```bash
+curl -X POST https://sandbox.api.vinr.com/v1/test/bank_transfers/settle \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -d payment=pay_3xK9... \
+  -d outcome=completed   # or: partially_paid | expired | returned
+```
+
+Each outcome fires the matching webhook within a few seconds, so you can exercise your reconciliation logic end-to-end.
+
+## Go live
+
+<Steps>
+
+### Swap to live keys
+
+Replace your sandbox `VINR_SECRET_KEY` with the live key from the [Dashboard](/docs/getting-started/authentication).
+
+### Register your production webhook
+
+Point a [webhook endpoint](/docs/api-reference/webhook-endpoints) at your live URL and subscribe to `payment.completed`, `payment.partially_paid`, `payment.expired`, and `payment.returned`.
+
+### Walk the go-live checklist
+
+Confirm timeouts, partial-payment handling, and return handling with the [go-live checklist](/docs/getting-started/go-live-checklist).
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="Accept a one-time payment" href="/docs/guides/accept-a-payment" description="The card-and-wallet flow with hosted checkout." />
+  <Card title="Payment lifecycle" href="/docs/payments/payment-lifecycle" description="Every status and event a payment can emit." />
+  <Card title="Payouts & settlement" href="/docs/operations/payouts" description="How collected funds reach your bank." />
+</Cards>

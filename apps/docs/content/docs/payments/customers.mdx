@@ -1,0 +1,125 @@
+---
+title: Customers & stored methods
+description: Represent buyers and securely store their payment methods for reuse.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+A `customer` object groups one buyer's identity, billing details, payment history, and any payment methods they've saved with you. Storing a method once lets you charge it again later — for one-click checkout, subscriptions, and loyalty payouts — without ever touching raw card data.
+
+## The customer object
+
+A customer is a long-lived record keyed by `cust_`. Create one when a buyer first registers or completes their first purchase, then reuse the same ID forever.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const customer = await vinr.customers.create({
+  email: 'ada@example.com',
+  name: 'Ada Lovelace',
+  metadata: { internalId: 'user_8821' },
+});
+
+// customer.id → "cust_9Kp2v..."
+```
+
+<TypeTable
+  type={{
+    id: { type: "string", description: "Unique customer ID, prefixed cust_." },
+    email: { type: "string", description: "Primary contact and receipt address." },
+    name: { type: "string", description: "Display name on receipts and disputes." },
+    defaultMethodId: { type: "string | null", description: "Method charged when none is specified.", default: "null" },
+    metadata: { type: "object", description: "Up to 50 key/value pairs of your own data.", default: "{}" },
+  }}
+/>
+
+<Callout type="info">
+Look customers up by your own key with `vinr.customers.list({ email })` or by storing your user ID in `metadata`. Avoid creating duplicate customers for the same buyer — stored methods do not transfer between them.
+</Callout>
+
+## Saving a payment method
+
+Raw card numbers never reach your server. The customer enters details on a VINR-hosted surface, VINR vaults them, and you receive a method token (`pm_`) attached to the customer. The simplest path is to run a setup flow.
+
+```typescript
+const setup = await vinr.customers.setupMethod({
+  customerId: customer.id,
+  returnUrl: 'https://yoursite.com/wallet/saved',
+});
+
+// Redirect the buyer to setup.checkoutUrl to enter and verify their card.
+// On return, the verified method is attached to the customer.
+```
+
+You can also save the method used during a normal payment by passing `savePaymentMethod: true` when you create the payment. Either way, the stored method captures only what's needed to reuse it — brand, last four digits, and expiry — never the full PAN.
+
+<Callout type="warn">
+In sandbox, drive these flows with the test cards: `4242 4242 4242 4242` succeeds, `4000 0000 0000 0002` is declined, and `4000 0000 0000 3220` forces a 3DS challenge so you can exercise the authentication path.
+</Callout>
+
+## Reusing stored methods
+
+Once a method is attached, charge it server-side with no buyer interaction by referencing the customer and method on a new payment.
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 2500,                 // €25.00
+  currency: 'EUR',
+  customerId: customer.id,
+  paymentMethodId: 'pm_4Tz9q...',  // omit to use the customer's default
+  offSession: true,             // buyer is not present
+  description: 'Order #4471',
+});
+```
+
+`offSession: true` signals that the buyer isn't in the checkout flow. Some cards still require a fresh authentication — when that happens the payment returns status `requires_action` rather than completing, and you should fall back to an on-session flow. See [authentication & 3DS](/docs/payments/authentication) for handling that branch.
+
+## Updating, listing & detaching
+
+Manage the methods on a customer without recreating the customer.
+
+<Steps>
+
+### Set a default
+
+```typescript
+await vinr.customers.update(customer.id, {
+  defaultMethodId: 'pm_4Tz9q...',
+});
+```
+
+### List saved methods
+
+```typescript
+const methods = await vinr.customers.listMethods(customer.id);
+// → [{ id: 'pm_4Tz9q...', brand: 'visa', last4: '4242', expMonth: 12, expYear: 2028 }]
+```
+
+### Detach a method
+
+```typescript
+await vinr.customers.detachMethod(customer.id, 'pm_4Tz9q...');
+```
+
+</Steps>
+
+Detaching is immediate and irreversible — the token can no longer be charged. Detach a method as soon as a buyer removes a card from their wallet, and prompt for a new one before their stored card's `expYear` passes.
+
+<Callout type="info">
+Listen for `payment_method.expiring` to email buyers before a saved card lapses, and `payment_method.updated` when a network auto-updater refreshes a card on file. Verify every event with `vinr.webhooks.verify(payload, signature)` using the `x-vinr-signature` header.
+</Callout>
+
+## Shared with Billing & Engagement
+
+The customer is a single object across all three pillars. A method saved during a one-off payment is the same method a [subscription](/docs/billing/subscriptions) bills against each cycle, and the customer's `id` is what links a buyer to their [loyalty account](/docs/engagement/loyalty-accounts) so points earned at checkout map to the right person. Store the buyer once, reuse everywhere.
+
+## Next steps
+
+<Cards>
+  <Card title="Authentication & 3DS" href="/docs/payments/authentication" description="Handle requires_action on off-session charges." />
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="Bill a stored method on a recurring schedule." />
+  <Card title="Loyalty accounts" href="/docs/engagement/loyalty-accounts" description="Tie a customer to points and rewards." />
+</Cards>

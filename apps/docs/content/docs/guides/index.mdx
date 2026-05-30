@@ -1,0 +1,138 @@
+---
+title: Guides
+description: Task-oriented, end-to-end recipes across VINR products.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Guides are goal-driven walkthroughs: start to finish, copy-paste runnable, and verified against the sandbox. Each one solves a single real task — accept a payment, meter usage, award loyalty points — without making you stitch the pieces together yourself. For the why behind a feature see the product sections; for field-level detail see the [API Reference](/docs/api-reference).
+
+## How guides are organized
+
+Every guide follows the same shape so you always know where to look:
+
+- **Overview** — a short diagram or summary of the flow and which systems talk to each other.
+- **Steps** — numbered, server-first, with runnable `@vinr/sdk` snippets you can paste into a backend handler.
+- **Test it** — sandbox cards or fixtures that exercise success and failure paths.
+- **Go live** — the swap from sandbox to live keys plus the checks that matter in production.
+- **Next steps** — links to the guides and concepts you'll likely reach for next.
+
+Guides are intentionally narrow. When a topic needs deep explanation (how settlement timing works, what a dispute lifecycle looks like) the guide links out to the relevant concept page instead of repeating it.
+
+<Callout type="info">
+Every snippet assumes you've set `VINR_SECRET_KEY` to a sandbox key. Sandbox calls never move real money and never touch live customer data, so run them freely.
+</Callout>
+
+## Prerequisites
+
+Before you start any guide, have the following in place:
+
+<Steps>
+
+### Get your API keys
+
+Grab a sandbox secret key from the Dashboard and export it. All server-side calls authenticate with it.
+
+```bash
+export VINR_SECRET_KEY=sk_sandbox_...
+```
+
+See [Authentication](/docs/getting-started/authentication) for key types, rotation, and scoping.
+
+### Install the SDK
+
+The TypeScript SDK wraps the REST API and ships typed models for every resource.
+
+```bash
+npm install @vinr/sdk
+```
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+```
+
+### Be able to receive webhooks
+
+Most guides fulfil work on a webhook, not on a redirect. Expose a public URL (use a tunnel like `ngrok` in development) and verify every payload:
+
+```typescript
+const event = vinr.webhooks.verify(
+  await req.text(),
+  req.headers.get('x-vinr-signature'),
+);
+```
+
+See [Webhooks](/docs/integration/webhooks) for endpoint registration and the [event catalog](/docs/api-reference/events).
+
+</Steps>
+
+<Callout type="warn">
+Prefer raw REST? Every SDK call maps to `https://sandbox.api.vinr.com` with an `X-Api-Key: <key>` header. Amounts are always integers in minor units — `1000` means EUR 10.00.
+</Callout>
+
+## Browse by product
+
+Pick the pillar that matches what you're building. Each guide is self-contained and runnable.
+
+### Payments
+
+Accept money, handle SCA, and reconcile the result.
+
+<Cards>
+  <Card title="Accept a one-time payment" href="/docs/guides/accept-a-payment" description="Create a payment, present checkout, confirm via webhook." />
+  <Card title="Save & reuse cards" href="/docs/guides/save-and-reuse-cards" description="Charge returning customers in one click." />
+  <Card title="Handle 3D Secure" href="/docs/guides/handle-3d-secure" description="Complete SCA challenges where required." />
+  <Card title="Refund a payment" href="/docs/guides/refund-a-payment" description="Issue full or partial refunds and track status." />
+</Cards>
+
+### Billing
+
+Sell subscriptions, meter usage, and collect on invoices.
+
+<Cards>
+  <Card title="Launch a subscription" href="/docs/guides/launch-a-subscription" description="Define a price, subscribe a customer, dunning included." />
+  <Card title="Meter usage-based billing" href="/docs/guides/meter-usage" description="Record usage events and bill on a metered price." />
+  <Card title="Customize invoices" href="/docs/guides/customize-invoices" description="Add line items, tax, and branding before finalizing." />
+</Cards>
+
+### Engagement
+
+Reward customers and tie loyalty to real transactions.
+
+<Cards>
+  <Card title="Earn loyalty at checkout" href="/docs/guides/earn-loyalty-at-checkout" description="Award points on a completed payment." />
+  <Card title="Redeem a reward" href="/docs/guides/redeem-a-reward" description="Spend points and apply the discount to an order." />
+  <Card title="Build a tiered program" href="/docs/guides/build-a-tiered-program" description="Configure tiers and earn multipliers." />
+</Cards>
+
+## A guide at a glance
+
+To see the pattern before you commit, here's the shape almost every guide shares — create a resource server-side with an idempotency key, then react to the authoritative webhook:
+
+```typescript
+// 1. create (idempotent — safe to retry)
+const payment = await vinr.payments.create(
+  { amount: 2500, currency: 'EUR', metadata: { orderId: 'A-1' } },
+  { idempotencyKey: 'order-A-1' },
+);
+
+// 2. fulfil on the verified event, never on the redirect
+function onEvent(event) {
+  if (event.type === 'payment.completed') {
+    fulfill(event.data.metadata.orderId); // runs exactly once
+  }
+}
+```
+
+If you internalize that pattern, every guide on this site will feel familiar.
+
+## Next steps
+
+<Cards>
+  <Card title="Quickstart" href="/docs/getting-started" description="Set up keys and make your first API call." />
+  <Card title="Accept a payment" href="/docs/guides/accept-a-payment" description="The canonical end-to-end payments recipe." />
+  <Card title="API Reference" href="/docs/api-reference" description="Field-level detail for every resource." />
+</Cards>

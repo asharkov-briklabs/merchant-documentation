@@ -1,0 +1,153 @@
+---
+title: Coupons & discounts
+description: Apply percentage or fixed discounts to invoices and subscriptions.
+persona: ["developer", "finance-manager"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Coupons reduce the amount owed on an invoice or subscription — once or on a recurring basis, with optional redemption limits and expiry. A coupon is a reusable template; attaching it to a customer or subscription creates a *discount* that VINR applies automatically when each invoice finalizes.
+
+## How discounts apply
+
+A coupon never touches money on its own. It becomes active only when attached, and VINR resolves it during the **finalize** step of the [billing cycle](/docs/billing/how-billing-works) — after line items are gathered but before [tax](/docs/billing/tax) is computed. The discount reduces the taxable subtotal, never the tax itself, and an invoice can never go below zero.
+
+| Term | Meaning |
+|---|---|
+| `coupon` | The reusable template — percentage or fixed amount, plus duration rules. |
+| Discount | A coupon *attached* to a customer or subscription. |
+| `redemption` | One concrete application of a coupon to a finalized invoice (`rdm_...`). |
+
+## Creating a coupon
+
+A coupon is either a percentage off or a fixed amount off. Amounts are always integers in minor units, and a fixed coupon is bound to a single currency.
+
+<Tabs items={["SDK", "REST"]}>
+<Tab value="SDK">
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// 25% off for the first three invoices.
+const coupon = await vinr.coupons.create({
+  name: 'Launch 25',
+  percentOff: 25,
+  duration: 'repeating',
+  durationInPeriods: 3,
+  maxRedemptions: 500,           // across all customers
+  redeemBy: '2026-09-30T23:59:59Z',
+});                              // -> "cpn_..."
+```
+
+</Tab>
+<Tab value="REST">
+
+```bash
+curl https://api.vinr.com/v1/coupons \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Flat 10 EUR",
+    "amountOff": 1000,
+    "currency": "EUR",
+    "duration": "once"
+  }'
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="warn">
+Set exactly one of `percentOff` or `amountOff`. A fixed `amountOff` requires a `currency`; VINR rejects the coupon for any invoice in a different currency rather than converting.
+</Callout>
+
+## Percentage vs. fixed
+
+Choose based on how you want the discount to scale with the bill.
+
+- **Percentage** (`percentOff`) scales with the subtotal — 25% off €20 is €5, 25% off €80 is €20. Currency-agnostic, so it works on any subscription.
+- **Fixed** (`amountOff`) removes a flat sum in one currency. On a multi-line invoice it applies to the subtotal, and if the subtotal is smaller than `amountOff` the invoice simply settles at €0.00 with no carryover.
+
+## Duration & redemption limits
+
+`duration` controls how long a discount survives on a subscription:
+
+<TypeTable
+  type={{
+    once: { type: "duration", description: "Applies to the next finalized invoice only, then detaches." },
+    repeating: { type: "duration", description: "Applies for durationInPeriods billing periods." },
+    forever: { type: "duration", description: "Applies to every invoice until the coupon is manually removed." },
+  }}
+/>
+
+Two independent caps protect a coupon from overuse:
+
+- `maxRedemptions` — total times the coupon can be redeemed across all customers.
+- `redeemBy` — a timestamp after which the coupon can no longer be *attached* (already-attached `repeating`/`forever` discounts keep running).
+
+<Callout type="info">
+`maxRedemptions` counts redemptions, not attachments. A `forever` coupon on a monthly subscription consumes one redemption per invoice, so set the cap with the duration in mind.
+</Callout>
+
+## Applying to subscriptions
+
+Attach a coupon at creation or any time after. VINR records the attachment and starts discounting from the next invoice to finalize.
+
+```typescript
+// Attach when creating a subscription.
+const sub = await vinr.subscriptions.create({
+  customer: 'cust_8fK2a',
+  price: 'price_9Qx',
+  coupon: coupon.id,
+});
+
+// Or attach to an existing subscription later.
+await vinr.subscriptions.update('sub_4Tb1', { coupon: 'cpn_launch25' });
+
+// Remove an active discount (stops on the next cycle).
+await vinr.subscriptions.update('sub_4Tb1', { coupon: null });
+```
+
+Attaching a coupon to the **customer** instead of the subscription discounts every current and future subscription for that customer — useful for account-wide promotions.
+
+## Stacking rules
+
+VINR allows **one discount per scope**, and resolves the most specific one:
+
+1. A coupon on the **subscription** wins over a coupon on the customer.
+2. A coupon on the **customer** applies only to subscriptions that have no coupon of their own.
+
+Percentage and fixed coupons do not combine on a single invoice — there is no compounding. If you need a deeper one-time reduction, issue a fixed [invoice item](/docs/api-reference/invoice-items) credit instead of a second coupon.
+
+<Callout type="warn">
+Replacing an active coupon with `subscriptions.update` discards any remaining `repeating` periods of the old discount. There is no automatic resume.
+</Callout>
+
+## Tracking redemptions
+
+Each application emits an event and creates a `redemption` you can reconcile against finalized invoices.
+
+```json
+{
+  "type": "coupon.redeemed",
+  "data": {
+    "id": "rdm_2pL9",
+    "coupon": "cpn_launch25",
+    "invoice": "inv_77Ba",
+    "subscription": "sub_4Tb1",
+    "amountDiscounted": 500,
+    "currency": "EUR"
+  }
+}
+```
+
+Subscribe to `coupon.redeemed` to track promotion spend in near real time. Verify the payload with `vinr.webhooks.verify(payload, signature)` against the `x-vinr-signature` header — see [Webhooks](/docs/integration/webhooks).
+
+## Next steps
+
+<Cards>
+  <Card title="How billing works" href="/docs/billing/how-billing-works" description="Where discounts sit in the invoice lifecycle." />
+  <Card title="Tax" href="/docs/billing/tax" description="How discounts interact with the taxable subtotal." />
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="Attach and manage discounts over the lifecycle." />
+</Cards>

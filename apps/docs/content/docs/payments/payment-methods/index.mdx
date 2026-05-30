@@ -1,0 +1,117 @@
+---
+title: Payment methods overview
+description: The rails and methods VINR supports and how to choose between them.
+persona: ["developer", "business-owner"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+VINR is multi-rail: a single integration unlocks cards, bank transfers, stablecoins, and local methods. You enable methods once at the account level, and the same `payment` object works across all of them. This overview helps you decide which to turn on, where, and why.
+
+## Methods at a glance
+
+Each method rides a **rail** — the network that actually moves the money. The `payment` object and its lifecycle are identical regardless of rail; only cost, speed, and reversibility differ.
+
+| Method | Rail | Settlement speed | Finality | Typical use |
+|---|---|---|---|---|
+| Cards (Visa, Mastercard, Amex) | Cards | Instant auth, T+1–2 settle | Reversible (chargebacks) | Global default, recurring |
+| SEPA Credit Transfer | Bank transfer | Minutes–1 day | Strong | EU B2B, high-value |
+| SEPA Direct Debit | Bank transfer | 2–5 days | Reversible (8-week recall) | EU recurring |
+| Faster Payments | Bank transfer | Seconds–minutes | Strong | UK payouts & pay-ins |
+| iDEAL | Local | Minutes | Strong | Netherlands |
+| Blik | Local | Instant | Strong | Poland |
+| USDC / EURC | Stablecoin | Minutes (on confirmation) | Final | Cross-border, crypto-native |
+
+<Callout type="info">
+The customer picks a method on the hosted checkout based on what you've enabled and their region. You never hard-code a single method — VINR shows the right options automatically.
+</Callout>
+
+## Choosing methods by region
+
+Conversion is highest when local favourites are offered. A rough starting point:
+
+| Region | Enable first | Why |
+|---|---|---|
+| Eurozone | Cards, SEPA, iDEAL, Blik | Bank rails dominate B2B; local methods lift consumer conversion |
+| UK | Cards, Faster Payments | Instant bank rails are widely trusted |
+| Cross-border / crypto | Cards, USDC, EURC | Stablecoins avoid FX spread and slow correspondent banking |
+| Global fallback | Cards | Universally accepted; safe default everywhere |
+
+<Callout type="warn">
+Some methods are single-currency. iDEAL and SEPA settle in EUR only; Faster Payments in GBP. If you charge a customer in an unsupported currency, that method simply won't appear at checkout.
+</Callout>
+
+## Cost, speed & finality trade-offs
+
+Three dimensions drive the choice:
+
+- **Cost** — cards carry interchange plus scheme fees; bank transfers and stablecoins are typically cheaper per transaction. See [pricing & fees](/docs/operations/fees).
+- **Speed** — stablecoins and instant bank rails clear in minutes; card funds settle to your balance on a delay; direct debits take days.
+- **Finality** — cards and SEPA Direct Debit are reversible (chargebacks, recalls). SEPA Credit Transfer, Faster Payments, and confirmed stablecoin transfers are effectively final, which lowers your dispute exposure.
+
+For high-value or fraud-sensitive orders, prefer a final rail. For frictionless consumer checkout, cards and local methods win on conversion.
+
+## Enabling methods
+
+Enable methods in the Dashboard under **Settings → Payment methods**, or programmatically. Newly enabled methods apply to all future payments without code changes.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// Turn on the methods this account should offer
+await vinr.paymentMethods.update({
+  enabled: ['card', 'sepa_credit_transfer', 'ideal', 'usdc'],
+});
+
+// Inspect what's currently active and any per-method constraints
+const config = await vinr.paymentMethods.list();
+for (const m of config.data) {
+  console.log(m.method, m.status, m.currencies.join(','));
+  // → "ideal" "active" "EUR"
+}
+```
+
+To restrict the methods shown on a single checkout — for example, only bank rails for a B2B invoice — pass `paymentMethods` when creating the payment:
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 250000,                 // €2,500.00
+  currency: 'EUR',
+  description: 'Invoice #INV-204',
+  returnUrl: 'https://yoursite.com/thanks',
+  paymentMethods: ['sepa_credit_transfer', 'card'],
+});
+```
+
+<Callout type="info">
+Test each method in sandbox before going live. Use card `4242 4242 4242 4242` for a success, `4000 0000 0000 0002` for a decline, and `4000 0000 0000 3220` to exercise 3DS. Bank and stablecoin methods auto-confirm in sandbox.
+</Callout>
+
+## Per-method guides
+
+Each rail has its own quirks — mandates for direct debit, network confirmations for stablecoins, redirect flows for local methods. Dive into the dedicated guides:
+
+<Accordions>
+  <Accordion title="Cards">
+    Global default. Supports authorize-and-capture, 3DS/SCA, and saved cards for recurring billing. See [authorize & capture](/docs/payments/authorize-and-capture).
+  </Accordion>
+  <Accordion title="Bank transfers (SEPA, Faster Payments)">
+    Lower cost, strong finality for credit transfers. Direct debit requires a stored mandate and can be recalled within the scheme window.
+  </Accordion>
+  <Accordion title="Stablecoins (USDC, EURC)">
+    Funds are final once the required network confirmations land. No FX spread for cross-border. Settled to your VINR balance like any other rail.
+  </Accordion>
+  <Accordion title="Local methods (iDEAL, Blik)">
+    Redirect-based; the customer authenticates in their banking app. Single-currency and region-specific, but convert exceptionally well in-market.
+  </Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="How payments work" href="/docs/payments/how-payments-work" description="The core payment object and flow shared by every rail." />
+  <Card title="Authorize & capture" href="/docs/payments/authorize-and-capture" description="Reserve funds now, capture later — for cards." />
+  <Card title="Accept a payment" href="/docs/guides/accept-a-payment" description="A runnable end-to-end integration guide." />
+</Cards>

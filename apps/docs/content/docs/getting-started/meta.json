@@ -1,4 +1,16 @@
 {
-  "title": "Getting Started",
-  "pages": ["quick-start", "authentication"]
+  "root": true,
+  "title": "Get started",
+  "icon": "Rocket",
+  "pages": [
+    "index",
+    "quick-start",
+    "account-setup",
+    "authentication",
+    "test-mode",
+    "sdks",
+    "integration-overview",
+    "go-live-checklist",
+    "glossary"
+  ]
 }

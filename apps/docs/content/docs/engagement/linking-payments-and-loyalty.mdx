@@ -1,0 +1,152 @@
+---
+title: Linking payments & loyalty
+description: Connect transactions to engagement automatically.
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+The heart of Engagement is tying every payment and subscription renewal to a member, so purchases earn points and redemptions discount checkout — with refund-safe clawbacks that keep balances honest. This page shows the four mechanics you need to wire up: identifying the member, earning on purchase, redeeming at checkout, and reversing on refund.
+
+## Identifying the member on a payment
+
+Engagement only acts on a payment if it can resolve a `loyalty_account`. There are two ways to make that link, checked in order:
+
+1. **Via the customer.** If the payment carries a `customer` (`cust_...`) that already has a linked loyalty account, Engagement finds the member automatically. This is the recommended path.
+2. **Via metadata.** If there is no customer, Engagement looks for `metadata.loyalty_account` (`loy_...`) on the payment.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// Preferred: attach the customer; the member is resolved from the link.
+const payment = await vinr.payments.create({
+  amount: 4200,                  // EUR 42.00 in minor units
+  currency: 'eur',
+  customer: 'cust_abc123',       // linked to loy_... behind the scenes
+});
+
+// Fallback when you have no customer record: pin the member directly.
+const guestPayment = await vinr.payments.create({
+  amount: 4200,
+  currency: 'eur',
+  metadata: { loyalty_account: 'loy_9f2k' },
+});
+```
+
+<Callout type="info">
+Link the member **before** the payment completes. Engagement evaluates earning rules at `payment.completed`; a member added afterward will not retroactively earn unless you replay the award manually.
+</Callout>
+
+## Earning on purchase
+
+When a linked payment completes, Engagement evaluates your [earning rules](/docs/engagement/earning-rules) and writes a `points_transaction`. You do not call anything — it is event-driven. Listen for `loyalty.points.earned` to update your UI or send a notification.
+
+```typescript
+// Webhook handler: react to points awarded by a purchase.
+export async function POST(req: Request) {
+  const payload = await req.text();
+  const signature = req.headers.get('x-vinr-signature')!;
+  const event = vinr.webhooks.verify(payload, signature);
+
+  if (event.type === 'loyalty.points.earned') {
+    const { account, points, source } = event.data;
+    // source.payment is the pay_... that triggered the award.
+    console.log(`Awarded ${points} pts to ${account} from ${source.payment}`);
+  }
+  return new Response('ok');
+}
+```
+
+A typical award for a EUR 42.00 purchase under a "1 point per EUR 1" rule:
+
+```json
+{
+  "id": "ptx_7Qd3",
+  "account": "loy_9f2k",
+  "points": 42,
+  "type": "earn",
+  "source": { "payment": "pay_5tNc", "amount": 4200, "currency": "eur" }
+}
+```
+
+## Redeeming at checkout
+
+Redemptions flow the other way: a member spends points for a reward, and the resulting discount is applied to a payment. Issue the [redemption](/docs/engagement/redemption) first, then attach its discount to the payment you create.
+
+<Steps>
+
+### Create the redemption
+
+Spend points for a reward. This deducts the balance and returns a `rdm_...` with the discount it grants.
+
+```typescript
+const redemption = await vinr.loyalty.redemptions.create({
+  account: 'loy_9f2k',
+  reward: 'rwd_5eur_off',         // a EUR 5.00 discount reward
+});                               // -> { id: 'rdm_...', discount: 500 }
+```
+
+### Apply it to the payment
+
+Pass the redemption on the payment so the discount reduces the amount charged.
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 4200,                   // original EUR 42.00
+  currency: 'eur',
+  customer: 'cust_abc123',
+  redemptions: ['rdm_...'],       // charges EUR 37.00
+});
+```
+
+</Steps>
+
+<Callout type="warn">
+If the payment fails or is abandoned, **release the redemption** so the points return to the member: `await vinr.loyalty.redemptions.cancel('rdm_...')`. VINR auto-releases redemptions that are never attached to a completed payment within 30 minutes.
+</Callout>
+
+## Refunds & clawbacks
+
+When a purchase is refunded, the points it earned should disappear. Engagement does this automatically: a `payment.refunded` event triggers a reversing `points_transaction` of type `clawback`, proportional to the refunded amount.
+
+| Original | Refund | Points clawed back |
+|---|---|---|
+| EUR 42.00 → 42 pts | Full (EUR 42.00) | 42 |
+| EUR 42.00 → 42 pts | Partial (EUR 21.00) | 21 |
+
+If the member already spent the clawed-back points, the balance can go negative — Engagement allows this by default so the ledger stays accurate, and the deficit is absorbed by future earnings. Set `clawback.allow_negative: false` on the program to instead cap the clawback at the current balance.
+
+```json
+{
+  "id": "ptx_8Rap",
+  "account": "loy_9f2k",
+  "points": -21,
+  "type": "clawback",
+  "source": { "refund": "re_2Lmx", "payment": "pay_5tNc" }
+}
+```
+
+## Reconciliation
+
+Every points movement carries its `source` payment or refund, so the loyalty ledger reconciles directly against the [payments ledger](/docs/operations). To audit a window, pull both and join on the payment ID.
+
+```typescript
+const ledger = await vinr.loyalty.transactions.list({
+  account: 'loy_9f2k',
+  created: { gte: 1717113600 },   // unix seconds
+});
+// Each row's source.payment / source.refund maps to a Payments record.
+```
+
+<Callout type="info">
+Net earned for a member over a period equals total `earn` minus `clawback` transactions. Persisting `ptx_` IDs alongside your order records makes disputes and chargebacks easy to trace end to end.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Earning rules" href="/docs/engagement/earning-rules" description="Configure how purchases convert to points." />
+  <Card title="Redemption" href="/docs/engagement/redemption" description="Apply reward discounts at checkout." />
+  <Card title="Webhooks" href="/docs/integration" description="Subscribe to loyalty and payment events." />
+</Cards>

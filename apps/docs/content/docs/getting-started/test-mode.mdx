@@ -1,0 +1,159 @@
+---
+title: Test mode & sandbox
+description: Simulate payments, billing, and engagement flows with no real money.
+persona: ["developer", "operations"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+Every VINR account ships with an isolated sandbox: test keys, simulated payment rails, and deterministic test data across Payments, Billing, and Engagement. Nothing in the sandbox touches real money, real cards, or live customers — so you can build and break things freely before going live.
+
+## Sandbox vs. live
+
+The sandbox is a complete, parallel copy of the VINR platform. It runs the same API, the same SDK, and the same webhook delivery — only the underlying rails are simulated. The two environments are fully separated by the key you authenticate with.
+
+| Aspect | Sandbox | Live |
+|---|---|---|
+| Base URL | `https://sandbox.api.vinr.com` | `https://api.vinr.com` |
+| Key prefix | `sk_test_…` / `pk_test_…` | `sk_live_…` / `pk_live_…` |
+| Card rails | Simulated (test cards only) | Real card networks |
+| Payouts & settlements | Generated, not transferred | Transferred to your bank |
+| Data | Resettable, isolated | Permanent |
+| Webhooks | Delivered to test endpoints | Delivered to live endpoints |
+
+<Callout type="warn">
+Objects never cross the boundary. A `cust_…` created in the sandbox does not exist in live, and a test key cannot read or mutate live data. Migrate by re-creating products, prices, and programs in live — there is no copy step.
+</Callout>
+
+## Test API keys
+
+Find your sandbox keys in the [VINR Dashboard](https://dashboard.vinr.com) under **Settings → API Keys**, toggled to **Test mode**. They are prefixed `sk_test_` and `pk_test_` so they are easy to spot in logs and config.
+
+<Tabs items={["SDK", "REST"]}>
+<Tab value="SDK">
+
+```ts
+import { Vinr } from '@vinr/sdk';
+
+// Point the SDK at the sandbox by using a test secret key.
+const vinr = new Vinr({
+  secretKey: process.env.VINR_SECRET_KEY, // sk_test_… in your test env
+});
+```
+
+</Tab>
+<Tab value="REST">
+
+```bash
+curl https://sandbox.api.vinr.com/v1/payments \
+  -H "X-Api-Key: sk_test_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{ "amount": 1000, "currency": "EUR", "description": "Sandbox test" }'
+```
+
+</Tab>
+</Tabs>
+
+The SDK selects the environment from the key prefix automatically — you do not set a separate `baseUrl`. Keep test and live keys in separate environment files so a test key never ships to production.
+
+## Simulating payments
+
+Create a payment exactly as you would in live, then complete it with a sandbox test card. The card number you choose deterministically controls the outcome.
+
+```ts
+const payment = await vinr.payments.create({
+  amount: 2500, // €25.00
+  currency: 'EUR',
+  description: 'Sandbox order #4242',
+  returnUrl: 'https://yoursite.com/payment/complete',
+});
+
+// Open payment.checkoutUrl and pay with a test card below.
+console.log(payment.id, payment.checkoutUrl);
+```
+
+| Card number | Outcome |
+|---|---|
+| `4242 4242 4242 4242` | Successful payment (`payment.completed`) |
+| `4000 0000 0000 0002` | Declined (`payment.failed`) |
+| `4000 0000 0000 3220` | Triggers 3D Secure authentication |
+
+Use any future expiry date, any 3-digit CVC, and any postal code. To simulate a refund, call `vinr.refunds.create({ payment: pay_… })` — the refund settles instantly in the sandbox instead of taking the usual rail timing.
+
+## Simulating billing cycles
+
+Subscriptions in the sandbox would normally wait days or months to renew. Instead, advance a subscription's clock to generate the next invoice on demand — no waiting for real time to pass.
+
+```ts
+const sub = await vinr.subscriptions.create({
+  customer: 'cust_test_8Hx2',
+  price: 'price_monthly_pro',
+});
+
+// Jump the billing clock forward to the next renewal.
+const result = await vinr.testClock.advance({
+  subscription: sub.id,
+  to: 'next_period', // or an ISO timestamp
+});
+
+console.log(result.invoice); // inv_… generated for the new period
+```
+
+<Callout type="info">
+Advancing the clock fires the same events live billing would: `invoice.created`, `invoice.paid` (or `invoice.payment_failed`), and `subscription.updated`. Use this to test dunning, proration, and trial-end behavior in seconds.
+</Callout>
+
+## Triggering webhook events
+
+You can drive webhook flows two ways: organically, by performing the action (paying, advancing a clock), or directly, by asking VINR to emit a specific event to your endpoint.
+
+```bash
+# Emit a specific event to all registered sandbox endpoints.
+curl https://sandbox.api.vinr.com/v1/test/events \
+  -H "X-Api-Key: sk_test_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{ "type": "loyalty.points.earned", "object": "loy_test_default" }'
+```
+
+Verify the delivery in your handler exactly as in production — the test signature is real and signed with your test secret:
+
+```ts
+export async function POST(req: Request) {
+  const payload = await req.text();
+  const signature = req.headers.get('x-vinr-signature');
+
+  const event = vinr.webhooks.verify(payload, signature);
+  console.log('Received', event.type);
+
+  return new Response('OK', { status: 200 });
+}
+```
+
+For local development, the VINR CLI forwards sandbox events to `localhost` so you do not need a public URL. See [Webhooks](/docs/integration/webhooks) for the listen-and-forward setup.
+
+## Test data reference
+
+The sandbox seeds deterministic fixtures so examples and CI runs are reproducible. These IDs always resolve in test mode:
+
+<TypeTable
+  type={{
+    "cust_test_8Hx2": { type: "customer", description: "Seeded customer with a saved test card" },
+    "prod_test_pro": { type: "product", description: "Sample product with monthly + annual prices" },
+    "prog_test_default": { type: "loyalty program", description: "Points program, 1 point per €1 spent" },
+    "loy_test_default": { type: "loyalty account", description: "Account linked to cust_test_8Hx2" },
+  }}
+/>
+
+To wipe everything you created and return to the seeded baseline, reset the sandbox from **Settings → Test mode → Reset data**, or call `vinr.testClock.reset()` to clear simulated clocks only. Resets are irreversible but only affect test data.
+
+<Callout type="warn">
+Never send real cardholder data to the sandbox. Simulated rails do not authorize real cards, and submitting live PAN to a test endpoint is a compliance violation. Use the test cards above.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Quick Start" href="/docs/getting-started/quick-start" description="Make your first sandbox payment in 5 minutes." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Forward sandbox events to localhost and verify signatures." />
+  <Card title="Going live" href="/docs/operations" description="Swap test keys for live keys and ship to production." />
+</Cards>

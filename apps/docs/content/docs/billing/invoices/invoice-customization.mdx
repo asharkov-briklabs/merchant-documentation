@@ -1,0 +1,155 @@
+---
+title: Invoice customization
+description: Branding, fields, numbering, and footers.
+persona: ["developer", "finance-manager"]
+priority: "P2"
+lastUpdated: "2026-05-30"
+---
+
+Customize how invoices look and what they say — logo, brand colors, custom fields, numbering schemes, and footers — so the documents your customers receive match your brand and satisfy the disclosure rules of your jurisdiction.
+
+## What you can customize
+
+Customization lives in two places. **Account-level branding** applies to every invoice you issue; **per-invoice fields** override or extend that branding for a single document. Most teams set branding once and only reach for overrides when a specific customer or region needs something different.
+
+| Layer | Set on | Examples |
+|---|---|---|
+| Branding | `account.branding` | Logo, primary color, support email, default footer |
+| Numbering | `account.invoice_settings` | Prefix, sequence, per-customer vs. account-wide |
+| Custom fields | `invoice.custom_fields` | PO number, VAT ID, cost center |
+| Footer & memo | `invoice.footer`, `invoice.description` | Legal notice, payment terms, free-text note |
+
+<Callout type="info">
+Branding renders on the hosted invoice page, the PDF, and email receipts alike. You set it once — there is no separate "PDF theme."
+</Callout>
+
+## Set account branding
+
+Branding is global state on your account. Update it from the dashboard or the API; changes apply to invoices finalized after the update (already-finalized invoices keep the branding they were locked with).
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+await vinr.account.updateBranding({
+  logo: 'file_logo_9f2a',        // upload via vinr.files.create first
+  primaryColor: '#1A1F36',       // buttons, accents, table header
+  secondaryColor: '#F6F8FA',     // page background
+  supportEmail: 'billing@acme.eu',
+  defaultFooter: 'Acme Europe BV · VAT NL0000.00.000.B01 · Payment due within 14 days',
+});
+```
+
+<TypeTable
+  type={{
+    logo: { type: "string", description: "File ID of a PNG/SVG uploaded to VINR. Rendered at most 240px wide." },
+    primaryColor: { type: "string", description: "Hex color for accents and table headers.", default: "#0A2540" },
+    secondaryColor: { type: "string", description: "Hex color for the page background.", default: "#FFFFFF" },
+    supportEmail: { type: "string", description: "Shown in the invoice header and used as reply-to on emails." },
+    defaultFooter: { type: "string", description: "Footer applied to every invoice unless overridden per-invoice." },
+  }}
+/>
+
+## Numbering schemes
+
+Every finalized invoice gets a human-readable number that is sequential, gap-free, and immutable once assigned — a hard requirement in most tax regimes. You control the **prefix** and the **scope** of the sequence.
+
+<Tabs items={["Account-wide", "Per-customer"]}>
+<Tab value="Account-wide">
+
+One global counter. `INV-` then a zero-padded sequence: `INV-000123`, `INV-000124`.
+
+```typescript
+await vinr.account.updateInvoiceSettings({
+  numberPrefix: 'INV-',
+  numberScope: 'account',   // single sequence across all customers
+  numberPadding: 6,
+});
+```
+
+</Tab>
+<Tab value="Per-customer">
+
+Each customer carries its own counter, useful when buyers expect contiguous numbering on their own statements: `ACME-0001`, `ACME-0002`.
+
+```typescript
+await vinr.account.updateInvoiceSettings({
+  numberPrefix: 'ACME-',
+  numberScope: 'customer',  // sequence resets per customer
+  numberPadding: 4,
+});
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="warn">
+Numbers are assigned at **finalization**, not at draft creation, and cannot be changed afterward. Draft invoices show no number. Voiding an invoice does not reclaim its number — the gap is intentional and auditable. See [Sending & voiding invoices](/docs/billing/invoices/sending-and-voiding).
+</Callout>
+
+## Custom fields and footers per invoice
+
+Per-invoice settings override the account defaults for one document. Set them on a draft before finalizing — typically the moment you need a buyer's PO number or a region-specific note.
+
+```typescript
+const invoice = await vinr.invoices.update('inv_8Hq2', {
+  customFields: [
+    { name: 'Purchase order', value: 'PO-44915' },
+    { name: 'Cost center',    value: 'EMEA-OPS' },
+  ],
+  footer: 'Reverse charge — VAT to be accounted for by the recipient.',
+  description: 'Q2 platform subscription, seats 1–25.',
+});                              // still a draft; "inv_..."
+```
+
+Custom fields render as a labelled table above the line items. You may set up to **4** fields per invoice; each `name` and `value` is capped at 30 and 140 characters respectively.
+
+## Localization
+
+Set `locale` on the customer (or per-invoice) to translate static labels — "Invoice", "Due", "Subtotal", "Tax" — and to format dates, currency symbols, and decimal separators. Your own text (footer, custom field values, line item descriptions) is rendered verbatim, so localize that content yourself.
+
+```typescript
+await vinr.customers.update('cust_3Tg9', { locale: 'de-DE' });
+// Renders "Rechnung", "Fällig", "1.000,00 €"
+```
+
+## Resulting events
+
+Branding and numbering changes do not emit events on their own. Customization shows up when an invoice moves through its lifecycle:
+
+- `invoice.finalized` — fires once the number, branding, custom fields, and footer are locked onto the document.
+- `invoice.updated` — fires when you change custom fields, footer, or description on a draft.
+
+Verify webhook deliveries before trusting them:
+
+```typescript
+const event = vinr.webhooks.verify(payload, req.headers['x-vinr-signature']);
+if (event.type === 'invoice.finalized') {
+  // event.data.number is now assigned and immutable
+}
+```
+
+## Edge cases
+
+<Accordions>
+<Accordion title="Logo or color changed after finalization">
+Finalized invoices snapshot the branding in force at finalization time, so historical documents stay consistent. Re-rendering a PDF for an old invoice reproduces its original look, not your current theme.
+</Accordion>
+<Accordion title="Per-customer numbering with a shared sequence later">
+Switching `numberScope` only affects invoices finalized after the change. Existing numbers are never renumbered. Plan the scope before you go live, since mixing schemes across the same customer can confuse reconciliation.
+</Accordion>
+<Accordion title="More than 4 custom fields needed">
+Move overflow detail into the line item descriptions or the `footer`. The 4-field limit keeps the header table readable across PDF and email layouts.
+</Accordion>
+<Accordion title="Right-to-left or non-Latin locales">
+RTL locales (e.g. `ar-SA`) flip the layout automatically. Ensure any uploaded logo and verbatim text you supply are appropriate for the script, since VINR does not transliterate your content.
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Sending & voiding invoices" href="/docs/billing/invoices/sending-and-voiding" description="Deliver, collect, and correct finalized invoices." />
+  <Card title="Tax" href="/docs/billing/tax" description="Required tax fields and reverse-charge notices." />
+  <Card title="How billing works" href="/docs/billing/how-billing-works" description="Where invoices sit in the billing flow." />
+</Cards>

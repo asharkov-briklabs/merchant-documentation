@@ -1,0 +1,171 @@
+---
+title: Products & prices
+description: Model what you sell and how much it costs.
+persona: ["developer", "finance-manager"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+A product represents *what* you sell; a price attaches an *amount*, *currency*, and *billing behavior* to it. Keeping them separate lets you change pricing — add a yearly plan, launch in a new currency, run a promotion — without ever touching the catalog item your customers recognize.
+
+## The product object
+
+A `product` is the durable, customer-facing thing in your catalog: "Pro plan", "Seat license", "API access". It carries identity and metadata, not money. Products are shared across [Payments](/docs/payments/how-payments-work) and Billing, so the same `prod_` works for a one-off charge and a subscription.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const product = await vinr.products.create({
+  name: 'Pro plan',
+  description: 'Everything in Starter, plus priority support.',
+  active: true,
+  metadata: { sku: 'PRO-2026', feature_tier: 'pro' },
+});                                  // "prod_..."
+```
+
+<TypeTable
+  type={{
+    name: { type: "string", description: "Display name shown on invoices and receipts." },
+    description: { type: "string", description: "Optional longer detail.", default: "null" },
+    active: { type: "boolean", description: "Whether the product can have new prices attached and be sold.", default: "true" },
+    metadata: { type: "object", description: "Up to 50 key/value pairs for your own use (filtering, fulfilment, analytics)." },
+  }}
+/>
+
+<Callout type="info">
+Use `metadata` for routing and fulfilment keys rather than encoding them in `name`. Names are user-visible and change; metadata is queryable and stable.
+</Callout>
+
+## The price object
+
+A `price` binds money and cadence to a product. It is **immutable** in its core fields — amount, currency, and recurrence never change after creation. That immutability is deliberate: an invoice issued last month must always reflect the price it was billed at. To "change a price" you create a new one and migrate. See [Versioning prices](#versioning-prices).
+
+```typescript
+const monthly = await vinr.prices.create({
+  product: product.id,             // "prod_..."
+  amount: 2000,                    // €20.00 — integer minor units
+  currency: 'EUR',
+  recurring: { interval: 'month' },
+  nickname: 'Pro / monthly EUR',   // internal label, never shown to customers
+});                                // "price_..."
+```
+
+<TypeTable
+  type={{
+    product: { type: "string", description: "The prod_ this price belongs to." },
+    amount: { type: "integer", description: "Amount in minor units (2000 = €20.00)." },
+    currency: { type: "string", description: "ISO 4217 code.", default: "EUR" },
+    recurring: { type: "object | null", description: "Omit for a one-time price; set { interval } for recurring.", default: "null" },
+    nickname: { type: "string", description: "Internal-only label to tell prices apart in the dashboard." },
+  }}
+/>
+
+## One-time vs. recurring prices
+
+The presence of the `recurring` field is the only switch between the two kinds.
+
+- **One-time** — no `recurring` block. Used for [payment links](/docs/payments/payment-links), [invoice items](/docs/api-reference/invoice-items), and single charges (setup fees, hardware, credits).
+- **Recurring** — set `recurring.interval` to `day`, `week`, `month`, or `year`. The price becomes attachable to a [subscription](/docs/billing/subscriptions), which generates an invoice each cycle.
+
+<Tabs items={["One-time", "Recurring", "Metered"]}>
+<Tab value="One-time">
+```typescript
+// A €49.00 onboarding fee billed once.
+const setupFee = await vinr.prices.create({
+  product: product.id,
+  amount: 4900,
+  currency: 'EUR',
+});
+```
+</Tab>
+<Tab value="Recurring">
+```typescript
+// €200.00 / year — interval_count lets you do "every 3 months", etc.
+const yearly = await vinr.prices.create({
+  product: product.id,
+  amount: 20000,
+  currency: 'EUR',
+  recurring: { interval: 'year', interval_count: 1 },
+});
+```
+</Tab>
+<Tab value="Metered">
+```typescript
+// Bill by reported usage instead of a fixed quantity.
+const metered = await vinr.prices.create({
+  product: product.id,
+  amount: 5,                       // €0.05 per unit
+  currency: 'EUR',
+  recurring: { interval: 'month', usage_type: 'metered' },
+});
+```
+See [Usage-based billing](/docs/billing/usage-based-billing) for reporting `mbu_` records.
+</Tab>
+</Tabs>
+
+## Multiple currencies
+
+A single product can carry many prices, including the same plan in different currencies. Create one price per currency and let your checkout pick the one matching the customer's locale or country.
+
+```typescript
+const prices = await Promise.all([
+  vinr.prices.create({ product: product.id, amount: 2000, currency: 'EUR', recurring: { interval: 'month' } }),
+  vinr.prices.create({ product: product.id, amount: 1800, currency: 'GBP', recurring: { interval: 'month' } }),
+  vinr.prices.create({ product: product.id, amount: 2200, currency: 'USD', recurring: { interval: 'month' } }),
+]);
+```
+
+<Callout type="warn">
+A subscription bills in exactly one currency — the currency of its first price. You cannot mix currencies on one subscription. To move a customer between currencies, cancel and recreate, or migrate at renewal.
+</Callout>
+
+## Versioning prices
+
+Because prices are immutable, raising the cost of "Pro / monthly EUR" means creating a *new* price and deciding what happens to existing subscribers. A common, low-friction pattern:
+
+<Steps>
+
+### Create the new price
+
+Add `price_v2` to the same product. Existing subscriptions keep billing on the old price, so nothing changes for current customers yet.
+
+```typescript
+const priceV2 = await vinr.prices.create({
+  product: product.id,
+  amount: 2500,                    // €25.00 — the new rate
+  currency: 'EUR',
+  recurring: { interval: 'month' },
+  nickname: 'Pro / monthly EUR (v2)',
+});
+```
+
+### Point new sales at v2
+
+Update checkout, payment links, and signup flows to reference `priceV2.id`. New customers onboard at the new rate immediately.
+
+### Deactivate the old price
+
+Set `active: false` on the original so it can no longer be attached to new subscriptions — without disturbing the customers already on it.
+
+```typescript
+await vinr.prices.update(oldPrice.id, { active: false });
+```
+
+### Migrate existing subscribers when ready
+
+Move current subscriptions to `priceV2` on their next renewal. VINR [prorates](/docs/billing/trials-and-proration) the change and emits `subscription.updated` so you can notify customers.
+
+</Steps>
+
+<Callout type="info">
+Keep a stable `metadata.plan_key` (e.g. `pro_monthly`) across price versions. Your code keys off the plan, not the specific `price_` id, which makes migrations a data change rather than a deploy.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="Attach prices to a recurring relationship." />
+  <Card title="Usage-based billing" href="/docs/billing/usage-based-billing" description="Bill metered prices from reported usage." />
+  <Card title="Create a subscription" href="/docs/guides/create-a-subscription" description="A runnable end-to-end guide." />
+</Cards>

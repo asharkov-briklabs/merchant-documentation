@@ -1,0 +1,122 @@
+---
+title: Glossary
+description: Definitions of VINR and payments terminology used across the docs.
+persona: ["developer", "business-owner"]
+priority: "P2"
+lastUpdated: "2026-05-30"
+---
+
+Plain-language definitions for the terms used throughout VINR documentation, from authorization to settlement to loyalty currency. Where a term maps to an object you can fetch through the API, the ID prefix is shown so you can recognize it in payloads and logs.
+
+<Callout type="info">
+All monetary amounts in VINR are integers in the currency's minor unit. `1000` means EUR 10.00, not EUR 1000. The default currency across the platform is EUR.
+</Callout>
+
+## Payments terms
+
+These cover the lifecycle of moving money, from the moment a customer presents a card to the moment funds land in your bank account.
+
+| Term | Definition |
+|---|---|
+| **Authorization** | A hold placed on a customer's funds confirming the money is available, without yet moving it. Authorizations can be captured later or expire if left uncaptured. |
+| **Capture** | The step that converts an authorization into an actual charge. With `captureMethod: 'manual'` you capture explicitly; with `automatic` (the default) VINR captures immediately on approval. |
+| **Payment** (`pay_`) | The top-level record of a single attempt to collect money from a customer. A payment moves through statuses such as `pending`, `authorized`, `completed`, and `failed`. |
+| **Customer** (`cust_`) | A stored profile representing the person or business you transact with. Customers hold saved payment methods, addresses, and a transaction history. |
+| **Payment method** | The instrument used to pay — card, SEPA direct debit, iDEAL, or a saved token. Methods can be attached to a customer for reuse. |
+| **Refund** (`re_`) | A return of captured funds to the customer, in full or in part. A payment may have several partial refunds up to its captured total. |
+| **Dispute** (`dp_`) | A chargeback raised by the cardholder's bank contesting a payment. Disputes have evidence deadlines and can be won or lost. See [Disputes](/docs/payments/disputes). |
+| **Settlement** (`setl_`) | The batch in which authorized funds are cleared by the card networks and moved toward your balance. |
+| **Payout** (`po_`) | A transfer of your available VINR balance to your connected bank account, on your configured schedule. |
+| **3D Secure (3DS)** | An issuer authentication step (a code or biometric prompt) that shifts fraud liability to the issuer. Test it in sandbox with card `4000 0000 0000 3220`. |
+
+```ts
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// An authorization you capture later — note amount is in minor units (EUR 25.00)
+const payment = await vinr.payments.create({
+  amount: 2500,
+  currency: 'EUR',
+  captureMethod: 'manual',
+  customer: 'cust_8f2a1c',
+});
+
+// ...after the goods ship, capture the held funds
+await vinr.payments.capture(payment.id);
+```
+
+## Billing terms
+
+These describe recurring revenue: catalog, subscriptions, metering, and the invoices that tie them together.
+
+| Term | Definition |
+|---|---|
+| **Product** (`prod_`) | A thing you sell — a plan, a seat, or a metered service. Products are billing-agnostic until you attach prices. |
+| **Price** (`price_`) | A specific cost and cadence for a product: amount, currency, interval, and pricing model (flat, per-unit, or tiered). A product can have many prices. |
+| **Subscription** (`sub_`) | A standing agreement that bills a customer for one or more prices on a recurring interval. Drives the `subscription.created`, `subscription.updated`, and `subscription.deleted` events. |
+| **Invoice** (`inv_`) | An itemized statement generated for a billing period. When paid it emits `invoice.paid`; when collection fails it enters dunning. |
+| **Usage record** (`mbu_`) | A reported quantity of consumption (API calls, gigabytes) for a metered price, aggregated at the end of the period into invoice line items. |
+| **Proration** | The adjustment applied when a subscription changes mid-cycle, charging or crediting the unused portion of the period. |
+| **Dunning** | The automated retry-and-notify process VINR runs when an invoice payment fails, before marking the subscription past due. |
+| **Trial** | A period during which a subscription is active but not billed. The first real invoice is issued when the trial ends. |
+
+## Engagement terms
+
+The Engagement pillar is VINR's loyalty layer. It lets you reward customers with points and let them redeem rewards, tied to the same customers you bill.
+
+| Term | Definition |
+|---|---|
+| **Loyalty program** (`prog_`) | The container that defines how points are earned and spent: earn rules, point currency, and expiry policy. |
+| **Loyalty account** (`loy_`) | A single customer's standing within a program, holding their current point balance and tier. One per customer per program. |
+| **Points** | The program's internal currency. Points are not legal tender and carry no cash value unless your program rules state otherwise. |
+| **Points transaction** (`ptx_`) | An immutable ledger entry that credits or debits points. Earning emits `loyalty.points.earned`; spending emits `loyalty.points.redeemed`. |
+| **Reward** (`rwd_`) | A catalog item a customer can claim with points — a discount, free item, or perk. |
+| **Redemption** (`rdm_`) | The act of exchanging points for a reward, debiting the account balance and reserving or issuing the reward. |
+| **Tier** | A status level (for example Silver, Gold) that unlocks accelerated earn rates or exclusive rewards. |
+
+```ts
+// Award points when a payment completes
+await vinr.loyalty.points.earn({
+  account: 'loy_3d9b0e',
+  points: 150,
+  reason: 'order.purchase',
+  reference: 'pay_8f2a1c',
+});
+```
+
+## Integration terms
+
+These are the building blocks for connecting VINR to your own systems.
+
+| Term | Definition |
+|---|---|
+| **Event** (`evt_`) | An immutable record that something happened, named with dotted notation like `payment.completed` or `invoice.paid`. Events power webhooks. |
+| **Webhook endpoint** (`we_`) | A URL you register to receive event deliveries over HTTPS. VINR signs each delivery with the `x-vinr-signature` header. |
+| **Signature verification** | Confirming a webhook genuinely came from VINR by validating its signature with `vinr.webhooks.verify(payload, signature)`. Always verify before trusting a payload. |
+| **Idempotency key** | A unique value you attach to a write request so retries do not create duplicate records. |
+| **API key** | The secret credential (`X-Api-Key` header on raw REST) that authenticates your server. Sandbox keys hit `https://sandbox.api.vinr.com`; live keys hit `https://api.vinr.com`. |
+| **Sandbox** | The isolated test environment where no real money moves and the [test cards](/docs/getting-started/quick-start) apply. |
+
+## Compliance terms
+
+These appear in onboarding, risk, and reporting flows.
+
+| Term | Definition |
+|---|---|
+| **PCI DSS** | The card-industry security standard. Using VINR's hosted checkout keeps card data off your servers and minimizes your PCI scope. |
+| **SCA** | Strong Customer Authentication, the EU requirement that often triggers a 3D Secure step on a payment. |
+| **KYC / KYB** | Know Your Customer / Know Your Business — the identity verification you complete during onboarding before payouts are enabled. |
+| **Settlement currency** | The currency your payouts are denominated in, which may differ from the currency a payment was taken in. |
+
+<Callout type="info">
+This page is informational and not legal advice; consult your compliance counsel for binding decisions.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Quick Start" href="/docs/getting-started/quick-start" description="Put these terms to work and make your first payment in five minutes." />
+  <Card title="API Reference" href="/docs/api-reference" description="See every object, its ID prefix, and its fields in full." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Receive and verify the events defined above." />
+</Cards>

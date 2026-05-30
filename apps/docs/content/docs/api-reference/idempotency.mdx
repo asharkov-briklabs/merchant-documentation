@@ -1,0 +1,137 @@
+---
+title: Idempotent requests
+description: Retry safely with idempotency keys.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Networks fail mid-flight. A timeout, a dropped connection, or an over-eager retry can leave you unsure whether a `POST /payments` actually charged a customer. Idempotency keys let you retry any mutating request safely: VINR remembers the first response and replays it instead of performing the operation twice.
+
+## When to use idempotency keys
+
+Send an idempotency key on every `POST` that creates or mutates a resource — payments, refunds, subscriptions, redemptions, payouts. `GET`, `PUT`, and `DELETE` requests are already idempotent by definition and ignore the header.
+
+The SDK generates a key automatically for create calls, so the safe path is the default path. Supply your own key when you want a single business action (one checkout, one order) to map to exactly one VINR resource even across process restarts and retries.
+
+## Idempotency-Key header
+
+Pass a unique value (we recommend a UUID v4) in the `Idempotency-Key` request header. Keys are scoped to your account and to the endpoint, and may be up to 255 characters.
+
+<Tabs items={["SDK", "cURL"]}>
+<Tab value="SDK">
+
+```ts
+import { Vinr } from '@vinr/sdk';
+import { randomUUID } from 'node:crypto';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// Derive a stable key from your own order so retries collapse to one payment.
+const key = `order-${order.id}`; // or randomUUID()
+
+const payment = await vinr.payments.create(
+  {
+    amount: 4500,
+    currency: 'EUR',
+    description: 'Order #1042',
+    returnUrl: 'https://shop.example.com/return',
+  },
+  { idempotencyKey: key },
+);
+
+console.log(payment.id); // pay_... — identical on every retry
+```
+
+</Tab>
+<Tab value="cURL">
+
+```bash
+curl -X POST https://api.vinr.com/v1/payments \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Idempotency-Key: order-1042" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 4500,
+    "currency": "EUR",
+    "description": "Order #1042",
+    "returnUrl": "https://shop.example.com/return"
+  }'
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="info">
+Use one key per logical action, not per HTTP attempt. Generate the key once before the first request and reuse the same value for every retry of that action.
+</Callout>
+
+## Behavior on replay
+
+The first request for a given key executes normally. VINR stores the resulting status code and response body keyed by the request. Any subsequent request that presents the same key returns the stored response without re-running the operation — so a network retry never produces a second charge.
+
+Replayed responses carry an `Idempotent-Replayed: true` header so you can distinguish a fresh result from a cached one in logs.
+
+<Steps>
+
+### First request
+
+`POST /payments` with `Idempotency-Key: order-1042` creates `pay_3Nf...` and returns `201 Created`. VINR records the key, the request fingerprint, and the response.
+
+### Retry after a timeout
+
+Your client never saw the first response and retries with the same key. VINR recognizes the key, skips creation, and replays the original `201` body with `Idempotent-Replayed: true`. No second payment exists.
+
+### Concurrent retries
+
+If a second request with the same key arrives while the first is still in flight, VINR returns `409 Conflict` with code `idempotency_in_progress`. Back off and retry; the completed result will be replayed once the original finishes.
+
+</Steps>
+
+## Key lifetime
+
+VINR retains idempotency keys for **24 hours** after the first request. Within that window, reusing a key replays the stored response. After it expires the key is forgotten, and reusing it will execute the operation again as if new.
+
+<TypeTable
+  type={{
+    "Idempotency-Key": { type: "string", description: "Client-supplied unique key, up to 255 chars. UUID v4 recommended.", default: "SDK auto-generates" },
+    retention: { type: "duration", description: "How long a key and its response are cached", default: "24 hours" },
+    scope: { type: "string", description: "Keys are unique per account + endpoint" },
+    "Idempotent-Replayed": { type: "boolean (response header)", description: "Present and true when the response was served from cache" },
+  }}
+/>
+
+<Callout type="warn">
+Choose keys that you do not need to reuse within 24 hours for a *different* payload. If a key from yesterday's order collides with today's request body, you will get a `409 idempotency_key_reuse` error (see below).
+</Callout>
+
+## Conflicts
+
+VINR fingerprints the request body the first time it sees a key. If the same key arrives later with a **different** payload, the request is rejected — this protects you from accidentally charging a new amount under a stale key.
+
+```json
+{
+  "error": {
+    "type": "invalid_request_error",
+    "code": "idempotency_key_reuse",
+    "message": "This Idempotency-Key was already used with a different request body.",
+    "status": 409
+  }
+}
+```
+
+| Code | Status | Meaning | What to do |
+|---|---|---|---|
+| `idempotency_in_progress` | 409 | A request with this key is still processing | Back off and retry; the original result will be replayed |
+| `idempotency_key_reuse` | 409 | Key reused with a different request body | Use a fresh key for the new action |
+| `idempotency_key_too_long` | 400 | Key exceeds 255 characters | Shorten the key (use a UUID or hashed order id) |
+
+When you receive `idempotency_in_progress`, retry with exponential backoff (for example 1s, 2s, 4s) using the **same** key. Never switch keys to escape the conflict — that is exactly how duplicate charges happen.
+
+## Next steps
+
+<Cards>
+<Card title="API Reference" href="/docs/api-reference" description="Base URLs, authentication, resources, and error codes." />
+<Card title="Errors & retries" href="/docs/troubleshooting" description="Error shapes, HTTP status codes, and safe retry strategies." />
+<Card title="Webhooks" href="/docs/integration" description="Verify and de-duplicate event deliveries alongside idempotent writes." />
+</Cards>

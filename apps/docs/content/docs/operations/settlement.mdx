@@ -1,0 +1,131 @@
+---
+title: Settlement
+description: How and when VINR settles funds to your account.
+persona: ["finance-manager", "operations"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+A captured payment is not the same as money in your bank account. **Settlement** is the process VINR uses to net your balance, batch it, and pay it out — and understanding the schedule, currency rules, and what each batch contains is the difference between clean books and a reconciliation headache.
+
+## The lifecycle of a euro
+
+Funds move through three stages before they reach you. Each has its own object and its own event.
+
+| Stage | Object | What it means |
+|---|---|---|
+| Captured | `payment` | The customer was charged; funds are en route to VINR. |
+| Settled | `settlement` (`setl_`) | A batch of activity netted into a single amount due to you. |
+| Paid out | `payout` (`po_`) | The settled balance leaves VINR for your bank account. |
+
+A `settlement` groups every balance-affecting item for a window — payments, refunds, dispute adjustments, and fees — into one figure. A `payout` is the bank transfer that moves that figure. They are usually one-to-one, but a payout can roll up several settlements if your schedule batches them.
+
+## Settlement schedule
+
+By default VINR settles on a **rolling daily** schedule with a `T+2` delay: activity from a settlement day is included in a payout initiated two business days later. Weekends and bank holidays in your payout currency's region shift the date forward.
+
+You can change the cadence in the Dashboard under **Operations → Payouts**, or read it from the API:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const account = await vinr.account.retrieve();
+console.log(account.settlement.schedule);
+// { interval: 'daily', delayDays: 2, anchor: null }
+```
+
+Supported intervals are `daily`, `weekly` (with a `weeklyAnchor`, e.g. `monday`), and `monthly` (with a `monthlyAnchor`, day 1–28). Longer intervals reduce transfer fees but lengthen the gap between earning and receiving funds.
+
+<Callout type="info">
+Newly activated accounts start on a longer initial delay (typically `T+7`) while risk history builds. This shortens automatically as your account matures — no action needed.
+</Callout>
+
+## Settlement currency
+
+VINR settles in your account's **payout currency**. When you accept a payment in a currency that differs from your payout currency, VINR converts it at settlement time and records the rate and any conversion spread on the settlement.
+
+- If you hold a balance in the same currency as the charge, no conversion occurs.
+- Multi-currency accounts can configure one payout currency per supported settlement currency, avoiding conversion entirely. See [Multicurrency](/docs/payments/multicurrency).
+- Conversion fees appear as a distinct line in the settlement breakdown, never silently folded into the net.
+
+## What a settlement contains
+
+Each `settlement` exposes a `summary` with the components that produced its net amount. Amounts are integers in minor units; a negative figure reduces what you are owed.
+
+```typescript
+const settlement = await vinr.settlements.retrieve('setl_8KQ2vR1aJ');
+
+console.log(settlement.summary);
+// {
+//   currency: 'EUR',
+//   grossPayments: 482000,   // €4,820.00 captured
+//   refunds: -31500,         // €315.00 returned
+//   disputes: -12000,        // €120.00 withheld for an open dispute
+//   fees: -14210,            // VINR processing fees
+//   net: 424290,             // €4,242.90 owed to you
+// }
+```
+
+To reconcile a settlement against individual transactions, page through its balance entries:
+
+```typescript
+for await (const entry of vinr.settlements.listEntries('setl_8KQ2vR1aJ')) {
+  console.log(entry.type, entry.source, entry.amount);
+  // payment   pay_...  482000
+  // fee       pay_...  -14210
+  // refund    re_...   -31500
+}
+```
+
+Every entry links back to its source object (`pay_`, `re_`, `dp_`), so you can trace any figure on a statement to the event that caused it.
+
+## Holds and reserves
+
+Not all captured funds settle immediately. VINR may withhold a portion to cover risk:
+
+- **Dispute holds** — when a payment is disputed, the disputed amount plus any dispute fee is debited from the next settlement until the case resolves. A win credits it back; see [Disputes & chargebacks](/docs/payments/disputes).
+- **Rolling reserves** — a fixed percentage of each settlement held for a defined period (e.g. 5% for 90 days), then released on a rolling basis. Applied to higher-risk profiles.
+- **Minimum payout threshold** — balances below your account's minimum (default `1000` = €10.00) roll forward and settle once the threshold is met.
+
+```typescript
+const account = await vinr.account.retrieve();
+console.log(account.reserve);
+// { type: 'rolling', percent: 5, holdDays: 90, currentlyHeld: 215000 }
+```
+
+<Callout type="warn">
+Reserves and holds are deducted **before** a payout is initiated. A payout amount that looks lower than your captured volume almost always reflects a reserve, an open dispute, or a refund — check the settlement summary before opening a support ticket.
+</Callout>
+
+## Statements
+
+Each settlement produces a downloadable **statement** for your finance team: a PDF for filing and a CSV for import into your ledger. Generate a fresh signed URL via the API:
+
+```bash
+curl https://api.vinr.com/v1/settlements/setl_8KQ2vR1aJ/statement?format=csv \
+  -H "X-Api-Key: $VINR_SECRET_KEY"
+# { "url": "https://files.vinr.com/...", "expiresAt": "2026-05-30T18:00:00Z" }
+```
+
+For automated reconciliation, subscribe to settlement events rather than polling. VINR emits `payout.paid` when funds leave for your bank and `payout.failed` if the transfer is rejected (usually stale bank details).
+
+```typescript
+export async function POST(req: Request) {
+  const payload = await req.text();
+  const event = vinr.webhooks.verify(payload, req.headers.get('x-vinr-signature'));
+
+  if (event.type === 'payout.paid') {
+    await ledger.recordPayout(event.data.id, event.data.amount);
+  }
+  return new Response('ok');
+}
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Reconciliation" href="/docs/operations/reconciliation" description="Match payouts to orders and close your books." />
+  <Card title="Fees & pricing" href="/docs/operations/fees" description="Understand the fees deducted at settlement." />
+  <Card title="Disputes & chargebacks" href="/docs/payments/disputes" description="How holds are applied and released." />
+</Cards>

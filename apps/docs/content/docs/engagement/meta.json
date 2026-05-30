@@ -1,0 +1,29 @@
+{
+  "root": true,
+  "title": "Engagement",
+  "icon": "Gift",
+  "pages": [
+    "index",
+    "---Core concepts---",
+    "how-engagement-works",
+    "loyalty-accounts",
+    "points-and-currency",
+    "tiers-and-status",
+    "---Earn & redeem---",
+    "earning-rules",
+    "rewards-catalog",
+    "redemption",
+    "store-credit-and-wallet",
+    "---Programs---",
+    "campaigns",
+    "offers-and-promotions",
+    "referrals",
+    "coupons-and-vouchers",
+    "---Engage & measure---",
+    "segmentation",
+    "notifications",
+    "engagement-analytics",
+    "---Integration---",
+    "linking-payments-and-loyalty"
+  ]
+}

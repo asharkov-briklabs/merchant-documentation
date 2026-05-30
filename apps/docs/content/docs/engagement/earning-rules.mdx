@@ -1,0 +1,141 @@
+---
+title: Earning rules
+description: Decide how members earn points.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Earning rules map events — a payment, a signup, a referral — to points awarded, with multipliers, caps, and eligibility windows. They are the configurable core of a [loyalty program](/docs/engagement/how-engagement-works): when an event fires, Engagement evaluates every active rule and writes a `points_transaction` for each match.
+
+## Rule anatomy
+
+A rule attaches to a `program`, listens for one `trigger`, and computes points from an `award` expression. The optional fields shape _when_ and _how much_.
+
+<TypeTable
+  type={{
+    trigger: { type: "string", description: "Event that evaluates the rule, e.g. payment.completed." },
+    award: { type: "object", description: "How points are computed — per_amount, fixed, or per_currency." },
+    multiplier: { type: "number", description: "Scales the computed award. Stacks with tier and campaign multipliers.", default: "1" },
+    cap: { type: "object", description: "Maximum points per member per window.", default: "none" },
+    window: { type: "string", description: "Eligibility period: day, week, month, lifetime.", default: "lifetime" },
+    active: { type: "boolean", description: "Whether the rule is evaluated.", default: "true" },
+  }}
+/>
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// Earn 1 point per €1 spent on any completed payment.
+const rule = await vinr.loyalty.earningRules.create({
+  program: 'prog_default',
+  trigger: 'payment.completed',
+  award: { type: 'per_amount', per: 100, points: 1 }, // per 100 minor units (= €1)
+});                                                    // "rule_..."
+```
+
+The `award.type` controls the computation:
+
+| Type | Meaning | Example |
+|---|---|---|
+| `per_amount` | Points per N minor units of `amount`. | 1 point per €1 → `{ per: 100, points: 1 }` |
+| `fixed` | A flat award regardless of amount. | Welcome bonus → `{ points: 500 }` |
+| `per_currency` | Per-currency rate, for multi-currency programs. | `{ EUR: 1, USD: 1, GBP: 1.2 }` |
+
+## Event triggers
+
+Rules react to events from across VINR. A single program can mix triggers — purchase points, a welcome bonus, and referral rewards are three rules, not three features.
+
+| Trigger | Typical rule |
+|---|---|
+| `payment.completed` | Award per €1 spent. |
+| `loyalty.account.created` | Welcome bonus. |
+| `subscription.created` | Bonus for committing to an annual plan. |
+| `invoice.paid` | Recurring-billing loyalty. |
+| `referral.converted` | Reward referrer and referee. |
+
+For a payment to earn, it must be linked to a member. See [Linking payments & loyalty](/docs/engagement/linking-payments-and-loyalty) for how `customer` and `metadata` resolve to a `loyalty_account`.
+
+```typescript
+// A flat welcome bonus when a member enrolls.
+await vinr.loyalty.earningRules.create({
+  program: 'prog_default',
+  trigger: 'loyalty.account.created',
+  award: { type: 'fixed', points: 500 },
+});
+```
+
+## Multipliers & bonuses
+
+`multiplier` scales a rule's award. Multipliers compose: the effective rate is the rule multiplier times any active [tier](/docs/engagement/tiers-and-status) multiplier times any [campaign](/docs/engagement/campaigns) multiplier in effect at the time of the event.
+
+```typescript
+// Double points on the base purchase rule.
+await vinr.loyalty.earningRules.update('rule_abc123', { multiplier: 2 });
+```
+
+<Callout type="info">
+A Gold member (tier multiplier 1.5) earning under a 2x rule during a 3x weekend campaign earns `1 × 2 × 1.5 × 3 = 9` points per €1. Multipliers stack multiplicatively, not additively.
+</Callout>
+
+## Caps & limits
+
+Caps protect against runaway awards from large or repeated transactions. A `cap` limits points per member within a rolling `window`.
+
+```typescript
+// Cap purchase earnings at 5,000 points per member per calendar month.
+await vinr.loyalty.earningRules.update('rule_abc123', {
+  cap: { points: 5000 },
+  window: 'month',
+});
+```
+
+When a cap is hit, the resulting `points_transaction` is truncated to the remaining headroom and tagged `capped: true` in its metadata, so you can detect and communicate the limit. Set `window: 'lifetime'` for one-time bonuses you never want to award twice — for example, a welcome bonus fires once per member even if the trigger repeats.
+
+<Callout type="warn">
+Caps are evaluated at award time, not retroactively. Lowering a cap does not claw back points already granted; it only constrains future awards.
+</Callout>
+
+## Testing rules
+
+Use the [sandbox](https://sandbox.api.vinr.com) to fire real events without moving money. Create a payment with a sandbox card, then inspect the member's points transactions.
+
+<Steps>
+
+### Simulate a qualifying event
+
+In sandbox, create a payment for a linked customer using test card `4242 4242 4242 4242`. On completion it emits `payment.completed`.
+
+### Inspect the resulting transactions
+
+List the member's `points_transaction` records and confirm the award, multiplier, and any cap behaved as configured.
+
+```typescript
+const txns = await vinr.loyalty.pointsTransactions.list({
+  account: 'loy_member123',
+  limit: 5,
+});
+// Each ptx_ shows source rule, points, and metadata.capped if truncated.
+```
+
+### Verify the earned webhook
+
+Confirm your endpoint received `loyalty.points.earned`. Verify the signature before trusting the payload.
+
+```typescript
+const event = vinr.webhooks.verify(payload, signature); // x-vinr-signature
+if (event.type === 'loyalty.points.earned') {
+  // event.data.points, event.data.account, event.data.rule
+}
+```
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="Linking payments & loyalty" href="/docs/engagement/linking-payments-and-loyalty" description="Make payments resolve to a member so rules can fire." />
+  <Card title="Tiers and status" href="/docs/engagement/tiers-and-status" description="Tier multipliers that stack on earning rules." />
+  <Card title="Campaigns" href="/docs/engagement/campaigns" description="Time-boxed bonus multipliers for earning." />
+</Cards>

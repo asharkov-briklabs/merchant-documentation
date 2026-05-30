@@ -1,0 +1,169 @@
+---
+title: Accept stablecoins
+description: Accept stablecoins — a runnable, end-to-end guide verified against the VINR sandbox.
+category: "payments"
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Accept USDC and EURC payments and settle the proceeds straight to your fiat balance — no wallet, custody, or blockchain code on your side. VINR handles address generation, on-chain monitoring, and conversion; you work with the same `pay_` objects and webhooks you already use for cards.
+
+## Overview
+
+A stablecoin payment is a regular VINR payment with a crypto payment method. You create it server-side, send the customer to a hosted page that shows a deposit address and QR code, and the payment confirms once the chain reaches finality.
+
+```
+your server          VINR                 chain / customer
+    │  create payment   │                       │
+    │──────────────────►│                       │
+    │  checkoutUrl      │   deposit address      │
+    │◄──────────────────│──────────────────────►│ sends USDC
+    │                   │   payment.processing   │
+    │◄──────────────────│◄──────────────────────│ tx seen
+    │  payment.completed │   (after finality)    │
+    │◄──────────────────│                       │
+    │  fulfil order     │                       │
+```
+
+The amount is quoted in your fiat currency (minor units, EUR by default). VINR locks an exchange rate at creation time and shows the customer the equivalent token amount.
+
+## Supported assets and chains
+
+| Asset | Networks | Notes |
+|---|---|---|
+| USDC | Ethereum, Base, Polygon, Solana | Most liquid; lowest fees on Base and Solana |
+| EURC | Ethereum, Base | Native EUR settlement, no FX spread |
+| USDT | Ethereum, Polygon | Settlement to EUR incurs an FX conversion |
+
+<Callout type="info">
+Enable assets and networks per account in **Dashboard → Payment methods → Stablecoins**. Networks you have not enabled are rejected at payment creation with a `400 unsupported_network`.
+</Callout>
+
+## Create a stablecoin payment
+
+Pass `paymentMethod: 'stablecoin'` and the assets you accept. The customer picks the exact token and network on the hosted page.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+export async function POST(req: Request) {
+  const { orderId } = await req.json();
+
+  const payment = await vinr.payments.create(
+    {
+      amount: 4999,              // €49.99 — quoted, then converted to tokens
+      currency: 'EUR',
+      paymentMethod: 'stablecoin',
+      stablecoin: {
+        assets: ['USDC', 'EURC'],          // what you'll accept
+        networks: ['base', 'ethereum'],    // optional allow-list
+      },
+      description: `Order ${orderId}`,
+      returnUrl: `https://yoursite.com/orders/${orderId}/complete`,
+      metadata: { orderId },
+    },
+    { idempotencyKey: `order-${orderId}` },
+  );
+
+  return Response.json({ checkoutUrl: payment.checkoutUrl });
+}
+```
+
+Redirect the customer to `payment.checkoutUrl`. The hosted page displays a unique deposit address, a QR code, the locked token amount, and a countdown to the rate-quote expiry.
+
+<Callout type="warn">
+The locked rate expires (default 15 minutes). If the customer pays after expiry or sends the wrong amount, the payment moves to `requires_action` and VINR re-quotes or initiates a refund of the underpayment. Always fulfil on the webhook, never on the redirect.
+</Callout>
+
+## Confirmation and finality
+
+On-chain payments are not instant. A stablecoin payment passes through extra states before `completed`:
+
+<TypeTable
+  type={{
+    requires_payment: { type: "status", description: "Address issued, waiting for the customer to send funds." },
+    processing: { type: "status", description: "Transaction seen in the mempool / first block; awaiting required confirmations." },
+    completed: { type: "status", description: "Finality reached. Funds credited — safe to fulfil." },
+    requires_action: { type: "status", description: "Underpayment, late payment, or expired quote. Needs re-quote or refund." },
+  }}
+/>
+
+Required confirmations vary by network — VINR waits for finality before emitting `payment.completed`, so you never fulfil on a reorg-able transaction.
+
+```typescript
+export async function POST(req: Request) {
+  const event = vinr.webhooks.verify(
+    await req.text(),
+    req.headers.get('x-vinr-signature'),
+  );
+
+  switch (event.type) {
+    case 'payment.processing':
+      await markAwaitingConfirmation(event.data.metadata.orderId);
+      break;
+    case 'payment.completed':
+      await fulfillOrder(event.data.metadata.orderId);   // idempotent!
+      break;
+    case 'payment.requires_action':
+      await notifyCustomer(event.data.metadata.orderId);  // under/late payment
+      break;
+  }
+  return new Response('OK', { status: 200 });
+}
+```
+
+The completed event includes a `stablecoin` block with the settled token, network, `txHash`, and confirmation count for your records and reconciliation.
+
+## Settlement to fiat
+
+By default, VINR auto-converts received tokens to your account currency and adds the proceeds to your fiat balance, which pays out via the normal [payout schedule](/docs/operations/payouts). EURC into a EUR account settles 1:1 with no FX spread; USD-denominated tokens incur a conversion at the quoted rate.
+
+To hold the asset instead of converting, set `stablecoin.settlement: 'crypto'` at creation — proceeds accrue to a per-asset crypto balance you can withdraw to an external address. See [settlements](/docs/operations/settlements) for the conversion ledger and fee breakdown.
+
+## Test it
+
+The sandbox simulates the chain so no real funds or wallet are needed. Open the hosted page, pick an asset, then trigger an outcome:
+
+| Sandbox action | Result |
+|---|---|
+| **Simulate payment** button | Funds the address with the exact amount → `completed` |
+| **Simulate underpayment** | Sends less than quoted → `requires_action` |
+| **Let quote expire** | Wait past the countdown → `requires_action`, then auto re-quote |
+
+You can also drive it from your server against `https://sandbox.api.vinr.com`:
+
+```bash
+curl https://sandbox.api.vinr.com/v1/test/stablecoin/fund \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"payment": "pay_3Nf8...", "asset": "USDC", "network": "base"}'
+```
+
+## Go live
+
+<Steps>
+
+### Enable mainnet assets
+
+Switch the stablecoin payment method to live in the Dashboard and confirm the networks you support in production.
+
+### Choose a settlement policy
+
+Decide between `fiat` (auto-convert) and `crypto` (hold) settlement, and review the FX spread on the [pricing page](/docs/operations/settlements).
+
+### Walk the go-live checklist
+
+Confirm webhook handling for `processing` and `requires_action`, then run the [go-live checklist](/docs/getting-started/go-live-checklist).
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="Accept a one-time payment" href="/docs/guides/accept-a-payment" description="The card-based flow this guide builds on." />
+  <Card title="Payouts" href="/docs/operations/payouts" description="How settled fiat reaches your bank." />
+  <Card title="Settlements" href="/docs/operations/settlements" description="Conversion ledger, FX, and fees." />
+</Cards>

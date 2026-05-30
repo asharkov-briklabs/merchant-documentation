@@ -1,0 +1,170 @@
+---
+title: Disputes & chargebacks
+description: Respond to chargebacks and manage evidence.
+persona: ["operations", "finance-manager"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+When a cardholder asks their bank to reverse a payment, the issuer opens a **chargeback** and VINR creates a `dispute` object on the affected payment. You then have a fixed window to submit evidence proving the charge was legitimate. This page covers the full lifecycle, how to respond, and how to keep your dispute rate low.
+
+## Dispute lifecycle
+
+A dispute moves through a small set of states. Each transition fires a webhook so you can automate responses instead of polling.
+
+| Status | Meaning | Your action |
+|---|---|---|
+| `needs_response` | Issuer opened the chargeback; funds are held | Gather and submit evidence before the deadline |
+| `under_review` | Evidence submitted; the issuer is deciding | Wait — no action possible |
+| `won` | Issuer ruled in your favor; funds returned | None |
+| `lost` | Issuer ruled for the cardholder; funds reversed | Review reason, prevent recurrence |
+| `warning_needs_response` | Early fraud alert (pre-chargeback) | Refund proactively to avoid a formal dispute |
+
+```
+payment.completed
+   └─ cardholder disputes
+        └─ dispute.created (needs_response)   ← funds held + fee debited
+             └─ you submit evidence
+                  └─ dispute.under_review
+                       ├─ dispute.won   → funds + fee returned
+                       └─ dispute.lost  → funds stay reversed
+```
+
+<Callout type="warn">
+The moment a dispute opens, VINR debits the disputed amount **plus a dispute fee** from your balance. If you win, the amount is returned; the fee may or may not be, depending on the network. See [Fees & reversals](#fees--reversals).
+</Callout>
+
+## Reacting to the webhook
+
+Subscribe to `dispute.*` events so your team is alerted the instant a chargeback lands. Always verify the signature before trusting the payload.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+export async function handler(req: Request) {
+  const payload = await req.text();
+  const signature = req.headers.get('x-vinr-signature') ?? '';
+
+  const event = vinr.webhooks.verify(payload, signature);
+
+  if (event.type === 'dispute.created') {
+    const dispute = event.data; // dp_...
+    await alertOpsTeam({
+      disputeId: dispute.id,
+      paymentId: dispute.payment,
+      reason: dispute.reason,        // e.g. "fraudulent", "product_not_received"
+      amount: dispute.amount,        // minor units, e.g. 1000 = €10.00
+      respondBy: dispute.evidenceDueBy, // ISO-8601 deadline
+    });
+  }
+
+  return new Response('ok', { status: 200 });
+}
+```
+
+## Submitting evidence
+
+Evidence is a structured bundle of fields and file uploads. Tailor what you send to the dispute `reason` — a "product not received" claim needs shipping proof, while a "fraudulent" claim needs identity and device data.
+
+<Steps>
+
+### Inspect the dispute
+
+Retrieve the dispute to read its `reason` and `evidenceDueBy`. The reason determines which fields the issuer weighs most heavily.
+
+```typescript
+const dispute = await vinr.disputes.retrieve('dp_3Nf8x2a...');
+console.log(dispute.reason, dispute.evidenceDueBy);
+```
+
+### Upload supporting files
+
+Receipts, shipping labels, and signed contracts are uploaded first and referenced by ID.
+
+```typescript
+const receipt = await vinr.files.create({
+  purpose: 'dispute_evidence',
+  file: fs.createReadStream('./receipt.pdf'),
+});
+// receipt.id → "file_8Hk2..."
+```
+
+### Attach and submit evidence
+
+Send the fields plus file references. Submitting moves the dispute to `under_review` and locks further edits.
+
+```typescript
+await vinr.disputes.update('dp_3Nf8x2a...', {
+  evidence: {
+    customerName: 'Jordan Rivera',
+    customerEmail: 'jordan@example.com',
+    billingAddress: 'Keizersgracht 100, 1015 CW Amsterdam, NL',
+    receipt: 'file_8Hk2...',
+    shippingCarrier: 'PostNL',
+    shippingTrackingNumber: '3SABC1234567890',
+    serviceDate: '2026-05-12',
+    productDescription: 'Annual Pro plan — order #1234',
+    customerCommunication: 'file_9Lm3...', // email thread
+  },
+  submit: true,
+});
+```
+
+</Steps>
+
+<Callout type="info">
+You can save evidence without submitting by omitting `submit` (or setting it to `false`). VINR keeps a draft so multiple team members can contribute before the final submission.
+</Callout>
+
+## Deadlines & outcomes
+
+The `evidenceDueBy` timestamp is set by the issuing bank, typically **7 to 21 days** after the dispute opens. Missing it counts as conceding the dispute.
+
+- Submit at least 24 hours early — issuers occasionally close windows before the displayed time.
+- Once submitted, decisions usually arrive in **60 to 75 days**. This is set by card-network rules, not VINR.
+- Outcomes are final at the network level. A `lost` dispute cannot be appealed through VINR, though some networks allow a separate arbitration process for large amounts — contact [support](/docs/operations) before pursuing it.
+
+<TypeTable
+  type={{
+    reason: { type: "string", description: "Why the cardholder disputed: fraudulent, product_not_received, duplicate, subscription_canceled, credit_not_processed, unrecognized" },
+    amount: { type: "integer", description: "Disputed amount in minor units" },
+    evidenceDueBy: { type: "string", description: "ISO-8601 deadline to submit evidence" },
+    status: { type: "string", description: "needs_response, under_review, won, or lost" },
+    isChargeable: { type: "boolean", description: "Whether the dispute fee applies to this dispute", default: "true" },
+  }}
+/>
+
+## Fees & reversals
+
+When a dispute opens, two things leave your VINR balance immediately:
+
+1. The **disputed amount**, held until the outcome.
+2. A **dispute fee** (network-dependent, shown on each `dispute` object).
+
+If you **win**, the disputed amount is credited back to your balance and appears as a `dispute.won` adjustment in [reconciliation](/docs/operations/reconciliation). If you **lose**, the amount stays reversed and the original payment is marked `disputed`. Either way the debit and any reversal show up on your [settlement](/docs/operations/settlement) report, so reconcile against the `dp_` IDs rather than the original `pay_` IDs.
+
+<Callout type="warn">
+Refunding a payment that is already disputed does **not** resolve the dispute and can result in the customer being paid twice. Respond to the dispute instead; only issue a refund if you intend to concede.
+</Callout>
+
+## Preventing disputes
+
+Most disputes are avoidable. The highest-leverage controls:
+
+- **Clear billing descriptors** — set a recognizable statement descriptor so customers recognize the charge. "Unrecognized" disputes are the most common and the most preventable.
+- **3D Secure** — authenticating cardholders shifts fraud liability to the issuer for many disputes. See [3D Secure](/docs/payments/3d-secure).
+- **Respond to fraud warnings** — `warning_needs_response` events arrive before a formal chargeback. Refunding then avoids the fee and the dispute-rate hit entirely.
+- **Prompt fulfillment + tracking** — capture shipping and delivery data so "product not received" claims are easy to rebut.
+- **Easy cancellation** — for [subscriptions](/docs/billing), make cancelling self-serve; friction drives `subscription_canceled` disputes.
+
+A dispute rate above roughly **0.9%** risks card-network monitoring programs. Track yours in the dashboard and treat sustained spikes as an incident.
+
+## Next steps
+
+<Cards>
+  <Card title="3D Secure" href="/docs/payments/3d-secure" description="Authenticate cardholders and shift fraud liability." />
+  <Card title="Refunds" href="/docs/payments/refunds" description="Return funds before a dispute is ever opened." />
+  <Card title="Reconciliation" href="/docs/operations/reconciliation" description="Match dispute adjustments to your settlements." />
+</Cards>

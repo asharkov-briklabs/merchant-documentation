@@ -1,0 +1,181 @@
+---
+title: Save and reuse a card
+description: Save and reuse a card — a runnable, end-to-end guide verified against the VINR sandbox.
+category: "payments"
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Saving a card lets returning customers pay in one tap and powers off-session charges like subscription renewals and top-ups. This guide takes you from collecting consent through charging a stored method, all runnable against the VINR sandbox.
+
+## Overview
+
+A saved card is a **payment method** attached to a **customer** (`cust_…`). You collect and tokenize the card once with the customer present, then reuse the resulting `pm_…` token for future charges — either with the customer on your page (on-session) or without them (off-session, e.g. a renewal).
+
+```
+your server          VINR              customer
+    │  create setup     │                   │
+    │─────────────────►│                   │
+    │  setupUrl        │                   │
+    │◄─────────────────│   redirect        │
+    │──────────────────────────────────────►│ enters card + SCA
+    │  payment_method.saved (webhook)       │
+    │◄─────────────────│◄──────────────────│
+    │  store pm_ id    │                   │
+    │  charge later (off-session)           │
+    │─────────────────►│                   │
+```
+
+Two rules drive everything below: a customer must explicitly consent before you store a card, and you must record the **intended future usage** so VINR can apply the right authentication when you charge later.
+
+## Create a customer
+
+A saved card always belongs to a customer. Create one (or reuse an existing `cust_…`) before saving the method.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const customer = await vinr.customers.create({
+  email: 'ada@example.com',
+  name: 'Ada Lovelace',
+  metadata: { userId: 'u_8842' },
+});
+// customer.id → "cust_…"
+```
+
+## Save a payment method
+
+Use a **setup** to collect and authenticate the card without taking a payment. Set `usage` to declare how you'll charge it later — this is what determines the SCA exemption VINR can request.
+
+```typescript
+export async function POST(req: Request) {
+  const { customerId } = await req.json();
+
+  const setup = await vinr.setups.create(
+    {
+      customer: customerId,
+      usage: 'off_session',                 // renewals / merchant-initiated
+      returnUrl: 'https://yoursite.com/wallet',
+    },
+    { idempotencyKey: `setup-${customerId}` },
+  );
+
+  return Response.json({ setupUrl: setup.setupUrl });
+}
+```
+
+Redirect the customer to `setup.setupUrl`. VINR hosts card entry and runs the 3D Secure challenge needed to authorize future off-session use.
+
+<Callout type="warn">
+Always capture and store proof of consent (timestamp, IP, the agreement text shown). Off-session charges without recorded mandate consent are the most common cause of disputes — see [Compliance notes](#compliance-notes).
+</Callout>
+
+## Confirm the saved method
+
+When the setup completes, VINR emits `payment_method.saved`. Persist the `pm_…` id against your customer record from the webhook so it's recorded exactly once.
+
+```typescript
+export async function POST(req: Request) {
+  const event = vinr.webhooks.verify(
+    await req.text(),
+    req.headers.get('x-vinr-signature'),
+  );
+
+  if (event.type === 'payment_method.saved') {
+    await db.savePaymentMethod({
+      customerId: event.data.customer,
+      paymentMethodId: event.data.id,        // "pm_…"
+      brand: event.data.card.brand,          // "visa"
+      last4: event.data.card.last4,          // "4242"
+    });
+  }
+  return new Response('OK', { status: 200 });
+}
+```
+
+## Charge a saved method
+
+To charge later, create a payment referencing the customer and stored `pm_…`. Set `offSession: true` when the customer is not present so VINR knows to use the saved mandate.
+
+```typescript
+const payment = await vinr.payments.create(
+  {
+    amount: 4999,                  // €49.99
+    currency: 'EUR',
+    customer: 'cust_…',
+    paymentMethod: 'pm_…',
+    offSession: true,
+    description: 'Monthly plan renewal',
+    metadata: { invoiceId: 'inv_…' },
+  },
+  { idempotencyKey: 'renewal-2026-05' },
+);
+
+if (payment.status === 'completed') {
+  // charge succeeded with no customer interaction
+}
+```
+
+Some banks still require authentication even for stored cards. When that happens the payment returns `status: 'requires_action'` with an `authenticationUrl` — bring the customer back on-session to complete it.
+
+```typescript
+if (payment.status === 'requires_action') {
+  await emailCustomer({
+    invoiceId: payment.metadata.invoiceId,
+    link: payment.authenticationUrl,   // "Confirm your payment"
+  });
+}
+```
+
+## Manage stored methods
+
+List, inspect, and remove a customer's saved cards. Always offer customers a way to remove a card from your UI.
+
+```typescript
+const methods = await vinr.customers.paymentMethods.list('cust_…');
+// → [{ id: 'pm_…', card: { brand, last4, expMonth, expYear } }, …]
+
+await vinr.paymentMethods.detach('pm_…');   // forget the card
+```
+
+<TypeTable
+  type={{
+    usage: { type: '"on_session" | "off_session"', description: "How the saved card will be charged later. Off-session enables merchant-initiated charges.", default: '"off_session"' },
+    offSession: { type: "boolean", description: "Set true on payments.create when the customer is not present.", default: "false" },
+    paymentMethod: { type: "string", description: "The saved pm_ token to charge.", default: "—" },
+  }}
+/>
+
+## Test it
+
+Use these sandbox cards on the hosted setup page:
+
+| Card | Result |
+|---|---|
+| `4242 4242 4242 4242` | Saved successfully |
+| `4000 0000 0000 3220` | Requires 3D Secure to save |
+| `4000 0000 0000 0002` | Declined at save time |
+
+To simulate a later off-session charge that needs re-authentication, charge a method saved with the `3220` card — the payment returns `requires_action`.
+
+## Compliance notes
+
+Storing and reusing cards carries obligations beyond the API call:
+
+- **Consent and mandate.** Record explicit consent, the date, and the terms shown before the first off-session charge. Keep it retrievable for the life of the agreement.
+- **SCA.** In the EEA, the initial save is authenticated with 3D Secure so subsequent merchant-initiated charges can claim an exemption. VINR requests this automatically when `usage` is `off_session`.
+- **Network mandates.** For recurring charges, send a pre-debit notification per card-network rules. VINR stores the mandate reference returned at save time and attaches it to each charge.
+- **PCI scope.** Because card entry happens on VINR-hosted pages and you only ever handle `pm_…` tokens, you stay within the reduced SAQ A scope. See [PCI compliance](/docs/compliance/pci).
+
+This page is informational and not legal advice; consult your compliance counsel for binding decisions.
+
+## Next steps
+
+<Cards>
+  <Card title="Handle 3D Secure" href="/docs/guides/handle-3d-secure" description="Complete SCA at save and at charge time." />
+  <Card title="Payment methods" href="/docs/payments/payment-methods" description="Everything VINR can store and charge." />
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="Use saved cards for recurring billing." />
+</Cards>

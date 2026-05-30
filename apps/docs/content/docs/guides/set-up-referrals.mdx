@@ -1,0 +1,172 @@
+---
+title: Set up referrals
+description: Set up referrals — a runnable, end-to-end guide verified against the VINR sandbox.
+category: "engagement"
+persona: ["developer"]
+priority: "P2"
+lastUpdated: "2026-05-30"
+---
+
+This guide builds a working referral program on top of VINR [Engagement](/docs/engagement): each existing customer gets a unique code, new customers attribute on signup, and both sides earn loyalty points when the referred customer makes their first qualifying payment. It's runnable against the sandbox — swap your test keys in and follow along.
+
+## Overview
+
+A referral is a reward that fires on a *delayed condition*: you grant the points only after the invited customer converts. That two-step shape is what makes referrals different from a normal earn rule.
+
+```
+referrer            VINR                referred customer
+   │  share code      │                       │
+   │─────────────────────────────────────────►│ signs up with code
+   │                  │  attribute referral    │
+   │                  │◄──────────────────────│
+   │                  │                       │ first payment
+   │                  │◄──────────────────────│
+   │  loyalty.points.earned (both accounts)    │
+   │◄─────────────────│──────────────────────►│
+```
+
+You create a referral program once, mint a code per referrer, attribute it at signup, and let a webhook settle the reward on the referred customer's first `payment.completed`.
+
+## Create the referral program
+
+A referral program is a loyalty program (`prog_`) configured with a `referral` ruleset. It defines who earns, how much, and what counts as a qualifying conversion.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const program = await vinr.loyalty.programs.create({
+  name: 'Refer a friend',
+  type: 'referral',
+  currency: 'EUR',
+  referral: {
+    referrerReward: { points: 500 },     // paid to the inviter
+    refereeReward: { points: 500 },      // paid to the new customer
+    qualifyingEvent: 'payment.completed',
+    minimumAmount: 2000,                  // €20.00 first purchase
+    rewardOn: 'first_qualifying_payment',
+    expiresAfterDays: 30,                 // code attribution window
+  },
+});
+```
+
+<TypeTable
+  type={{
+    referrerReward: { type: "Reward", description: "Points granted to the inviting account." },
+    refereeReward: { type: "Reward", description: "Points granted to the invited account." },
+    minimumAmount: { type: "integer", description: "Minimum first-payment value (minor units) to qualify.", default: "0" },
+    rewardOn: { type: "string", description: "When to settle: first_qualifying_payment or every_payment.", default: "first_qualifying_payment" },
+    expiresAfterDays: { type: "integer", description: "Attribution window from code creation.", default: "90" },
+  }}
+/>
+
+## Generate a referral code per customer
+
+Mint one durable code per referrer's [loyalty account](/docs/engagement/loyalty-accounts) (`loy_`). Codes are idempotent on the account, so calling this again returns the same code rather than creating duplicates.
+
+```typescript
+const code = await vinr.loyalty.referrals.createCode(
+  {
+    programId: program.id,           // prog_...
+    accountId: referrerAccountId,    // loy_...
+  },
+  { idempotencyKey: `refcode-${referrerAccountId}` },
+);
+
+// Build a shareable link your frontend can render
+const shareUrl = `https://yoursite.com/signup?ref=${code.code}`;
+```
+
+<Callout type="info">
+Don't generate a fresh code per page load. One stable code per account keeps analytics clean and lets the referrer reuse the same link everywhere. See [Loyalty accounts](/docs/engagement/loyalty-accounts).
+</Callout>
+
+## Attribute the referral at signup
+
+When a new customer arrives with `?ref=`, attribute the code to their new [customer](/docs/payments/customers) (`cust_`) the moment you create their loyalty account. Attribution only pends the reward — nothing is paid until they convert.
+
+```typescript
+export async function POST(req: Request) {
+  const { email, refCode } = await req.json();
+
+  const customer = await vinr.customers.create({ email });
+  const account = await vinr.loyalty.accounts.create({
+    programId: process.env.VINR_LOYALTY_PROGRAM_ID,
+    customerId: customer.id,
+  });
+
+  if (refCode) {
+    await vinr.loyalty.referrals.attribute({
+      programId: program.id,
+      code: refCode,
+      refereeAccountId: account.id,
+    });
+  }
+
+  return Response.json({ customerId: customer.id });
+}
+```
+
+<Callout type="warn">
+Attribution fails if the code has expired (past `expiresAfterDays`) or if the referee is the same account as the referrer (self-referral). Both surface as a `4xx` — catch and degrade gracefully rather than blocking signup.
+</Callout>
+
+## Settle the reward on conversion
+
+The referred customer's first qualifying payment is what releases points to both sides. Listen for `loyalty.points.earned` so you can notify each party — but VINR does the granting for you once the `referral.qualifyingEvent` fires.
+
+```typescript
+export async function POST(req: Request) {
+  const event = vinr.webhooks.verify(
+    await req.text(),
+    req.headers.get('x-vinr-signature'),
+  );
+
+  switch (event.type) {
+    case 'loyalty.referral.converted':
+      // both ptx_ point transactions already created by VINR
+      await emailReferrer(event.data.referrerAccountId);
+      await emailReferee(event.data.refereeAccountId);
+      break;
+    case 'loyalty.referral.rejected':
+      // failed fraud checks — log for review
+      await logRejection(event.data.referralId, event.data.reason);
+      break;
+  }
+  return new Response('OK', { status: 200 });
+}
+```
+
+## Fraud controls
+
+Referral programs attract abuse. VINR enforces a few controls automatically, and you should layer your own on top:
+
+- **Self-referral blocking** — attribution rejects when the referrer and referee resolve to the same customer.
+- **Conversion gating** — the `minimumAmount` and `first_qualifying_payment` settings stop reward farming via tiny or repeat purchases.
+- **Velocity limits** — set `maxConversionsPerCode` on the program to cap how many times one code can pay out.
+- **Manual review** — `loyalty.referral.rejected` events expose a `reason` (e.g. `duplicate_device`, `disposable_email`) so you can investigate from [Operations](/docs/operations).
+
+```typescript
+await vinr.loyalty.programs.update(program.id, {
+  referral: { maxConversionsPerCode: 25, requireDistinctPaymentMethod: true },
+});
+```
+
+## Test it
+
+In the sandbox, run the full loop: create a referrer account, mint a code, attribute it to a new account, then pay with a qualifying card.
+
+| Sandbox action | Card | Expected |
+|---|---|---|
+| First payment ≥ €20.00 | `4242 4242 4242 4242` | Both accounts earn 500 points |
+| First payment below `minimumAmount` | `4242 4242 4242 4242` | No reward, no event |
+| Declined first payment | `4000 0000 0000 0002` | Referral stays pending |
+
+## Next steps
+
+<Cards>
+  <Card title="Earn loyalty at checkout" href="/docs/guides/earn-loyalty-at-checkout" description="Award points on a payment the customer just made." />
+  <Card title="Loyalty programs" href="/docs/engagement/loyalty-programs" description="Tiers, earn rules, and reward catalogs." />
+  <Card title="Engagement overview" href="/docs/engagement" description="The full loyalty and engagement model." />
+</Cards>

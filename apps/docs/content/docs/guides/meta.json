@@ -1,0 +1,30 @@
+{
+  "root": true,
+  "title": "Guides",
+  "icon": "BookOpen",
+  "pages": [
+    "index",
+    "---Payments---",
+    "accept-a-payment",
+    "save-and-reuse-cards",
+    "handle-3d-secure",
+    "accept-stablecoins",
+    "accept-bank-transfers",
+    "accept-local-methods",
+    "---Billing---",
+    "create-a-subscription",
+    "send-an-invoice",
+    "bill-for-usage",
+    "set-up-dunning",
+    "offer-a-free-trial",
+    "---Engagement---",
+    "launch-a-loyalty-program",
+    "earn-and-redeem-points",
+    "run-a-promotion",
+    "set-up-referrals",
+    "---Cross-product---",
+    "reconcile-settlements",
+    "earn-loyalty-at-checkout",
+    "migrate-to-vinr"
+  ]
+}

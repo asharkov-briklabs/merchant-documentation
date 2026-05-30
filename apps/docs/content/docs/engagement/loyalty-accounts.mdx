@@ -1,0 +1,152 @@
+---
+title: Loyalty accounts (members)
+description: Represent enrolled customers and their balances.
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+A loyalty account is a member: the link between a [customer](/docs/payments/customers) and a [program](/docs/engagement/how-engagement-works), carrying their points balance, tier, and full transaction history. Every earn and redemption flows through an account, so getting enrollment and customer linking right is the foundation of any engagement integration.
+
+## The loyalty account object
+
+An account (`loy_...`) belongs to exactly one program and, when known, references one customer. Its balances are derived from the underlying `points_transaction` ledger — you never set them directly.
+
+<TypeTable
+  type={{
+    id: { type: "string", description: "Unique identifier, prefixed loy_." },
+    program: { type: "string", description: "The program this member belongs to (prog_...)." },
+    customer: { type: "string | null", description: "Linked customer (cust_...), or null for a standalone member." },
+    status: { type: "enum", description: "active, closed, or merged.", default: "active" },
+    balance: { type: "integer", description: "Spendable points, net of pending and expired." },
+    lifetime_points: { type: "integer", description: "Total points ever earned — drives tier qualification." },
+    tier: { type: "string | null", description: "Current tier key, e.g. 'gold'." },
+    metadata: { type: "object", description: "Your key/value pairs (max 50 keys)." },
+  }}
+/>
+
+<Callout type="info">
+`balance` is spendable now; `lifetime_points` only ever increases and is what [tiers](/docs/engagement/tiers-and-status) evaluate against. A redemption lowers `balance` but never `lifetime_points`.
+</Callout>
+
+## Enrolling members
+
+Create an account to enroll someone explicitly — typically at signup or first checkout. Link the customer at the same time so their next payment earns immediately.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const member = await vinr.loyalty.accounts.create({
+  program: 'prog_default',
+  customer: 'cust_abc123',
+  metadata: { signup_channel: 'web' },
+});
+
+console.log(member.id, member.balance); // "loy_7Qk..." 0
+```
+
+If a `loyalty.account.created` welcome bonus rule is configured, the new member's balance reflects it on the next read.
+
+### Enroll on first qualifying event
+
+You don't have to enroll up front. Enable **auto-enrollment** on the program and VINR creates an account the first time a linked customer triggers a qualifying event (such as `payment.completed`). The member exists from the moment they earn their first point — no separate call needed.
+
+<Callout type="warn">
+Auto-enrollment requires the payment to carry a `customer`. Anonymous guest payments cannot be auto-enrolled because there is nobody to link. See [Linking payments & loyalty](/docs/engagement/linking-payments-and-loyalty).
+</Callout>
+
+## Linking to a customer
+
+The `customer` field is the bridge between Payments and Engagement. When a payment names that customer, its earning rules resolve to this account.
+
+<Tabs items={["Link at creation", "Link an existing account", "Look up by customer"]}>
+<Tab value="Link at creation">
+```typescript
+await vinr.loyalty.accounts.create({
+  program: 'prog_default',
+  customer: 'cust_abc123',
+});
+```
+</Tab>
+<Tab value="Link an existing account">
+```typescript
+// Attach a customer to a standalone member created earlier.
+await vinr.loyalty.accounts.update('loy_7Qk...', {
+  customer: 'cust_abc123',
+});
+```
+</Tab>
+<Tab value="Look up by customer">
+```typescript
+// Avoid duplicate enrollments — resolve before creating.
+const { data } = await vinr.loyalty.accounts.list({
+  program: 'prog_default',
+  customer: 'cust_abc123',
+  limit: 1,
+});
+const member = data[0] ?? await vinr.loyalty.accounts.create({
+  program: 'prog_default',
+  customer: 'cust_abc123',
+});
+```
+</Tab>
+</Tabs>
+
+A customer may hold at most one active account per program. Attempting a second returns `409 account_already_exists` with the existing `loy_` id — use that to recover idempotently.
+
+## Balances and history
+
+The account exposes a derived `balance`, but the source of truth is the `points_transaction` ledger. List transactions to show members exactly how their balance moved.
+
+```typescript
+const account = await vinr.loyalty.accounts.retrieve('loy_7Qk...');
+console.log(account.balance, account.lifetime_points);
+
+const ledger = await vinr.loyalty.transactions.list({
+  account: 'loy_7Qk...',
+  limit: 20,
+});
+for (const ptx of ledger.data) {
+  // ptx_... — type: 'earn' | 'redeem' | 'expire' | 'adjust' | 'reverse'
+  console.log(ptx.id, ptx.type, ptx.amount, ptx.reason);
+}
+```
+
+Each transaction records its origin (the triggering `payment`, `redemption`, or manual adjustment), so the ledger doubles as an audit trail. To grant or correct points outside a rule — goodwill, support resolutions, migrations — post an adjustment rather than editing a balance:
+
+```bash
+curl -X POST https://api.vinr.com/v1/loyalty/transactions \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "account": "loy_7Qk...", "type": "adjust", "amount": 500, "reason": "goodwill_credit" }'
+```
+
+## Closing and merging accounts
+
+Close an account to retire a member while preserving their history for reporting. Closing is reversible by reopening; it does not delete the ledger.
+
+```typescript
+await vinr.loyalty.accounts.close('loy_7Qk...'); // status -> "closed"
+```
+
+When a customer ends up with two accounts in the same program — for example after merging duplicate customer records — merge them so balances and lifetime points combine into one survivor.
+
+```typescript
+const survivor = await vinr.loyalty.accounts.merge({
+  source: 'loy_dupOld...',   // emptied, status -> "merged"
+  target: 'loy_7Qk...',      // receives source balance + lifetime points
+});
+```
+
+<Callout type="warn">
+Merging is **irreversible**. The source account's `balance` and `lifetime_points` move to the target, its transactions are re-parented, and a `loyalty.account.merged` event fires. Reconcile any in-flight [redemptions](/docs/engagement/redemption) before merging.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Linking payments & loyalty" href="/docs/engagement/linking-payments-and-loyalty" description="Identify the member on every payment so purchases earn." />
+  <Card title="Tiers and status" href="/docs/engagement/tiers-and-status" description="How lifetime points promote members between tiers." />
+  <Card title="Earning rules" href="/docs/engagement/earning-rules" description="Configure how events award points to accounts." />
+</Cards>

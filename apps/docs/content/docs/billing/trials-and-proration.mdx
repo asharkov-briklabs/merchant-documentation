@@ -1,0 +1,134 @@
+---
+title: Trials & proration
+description: Free trials and fair mid-cycle changes.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Trials defer the first charge so customers can evaluate before paying; proration fairly settles mid-cycle plan changes by crediting unused time and charging the new rate. Both adjust _when_ and _how much_ a subscription invoices, and both show up as explicit line items so the math is auditable.
+
+## Trial periods
+
+A trial keeps a subscription `active` while suppressing collection until the trial ends. Set `trial_period_days` at creation, or pin an exact moment with `trial_end` (a Unix timestamp).
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const subscription = await vinr.subscriptions.create({
+  customer: 'cust_8Qe2',
+  price: 'price_pro_monthly',
+  trial_period_days: 14,
+});
+
+subscription.status;        // "trialing"
+subscription.trial_end;     // 1749600000 — first invoice finalizes here
+```
+
+During the trial VINR generates a draft `invoice` for €0.00 and emits no `invoice.paid`. The billing cycle anchor is set to `trial_end`, so the first real period begins exactly when the trial closes.
+
+<Callout type="info">
+You do **not** need a payment method to start a trial. Collect one before `trial_end` (for example via a [setup flow](/docs/payments/save-a-payment-method)) so the first charge succeeds. Listen for `subscription.trial_will_end`, emitted three days out, to nudge customers.
+</Callout>
+
+## Trial-end behavior
+
+What happens when the trial closes depends on `trial_settings.end_behavior` and whether a usable payment method exists.
+
+| Situation | Outcome |
+|---|---|
+| Payment method on file | First invoice finalizes and collects; status becomes `active`. |
+| No method, `end_behavior: "cancel"` | Subscription transitions to `canceled`; no charge. |
+| No method, `end_behavior: "pause"` | Subscription becomes `paused`; resumes on next valid method. |
+| Collection fails | Enters [dunning](/docs/billing/dunning-and-recovery); status `past_due`. |
+
+```typescript
+await vinr.subscriptions.create({
+  customer: 'cust_8Qe2',
+  price: 'price_pro_monthly',
+  trial_period_days: 30,
+  trial_settings: { end_behavior: 'pause' },
+});
+```
+
+To end a trial early — for instance when a customer clicks "upgrade now" — set `trial_end: 'now'`. VINR finalizes the first invoice immediately and prorates nothing, because no period has been consumed.
+
+## What proration is
+
+Proration is how VINR keeps billing fair when a subscription changes _within_ a period. When the quantity, price, or plan changes mid-cycle, VINR computes two line items: a **credit** for the unused portion of the old rate and a **charge** for the remaining portion at the new rate. Both are measured to the second against the period boundaries.
+
+For a €20/month plan changed exactly halfway through the cycle to €40/month, VINR credits €10.00 (unused old) and charges €20.00 (remaining new), netting €10.00.
+
+```json
+{
+  "object": "invoice",
+  "lines": [
+    { "description": "Unused time on Pro (€20/mo)",    "amount": -1000, "proration": true },
+    { "description": "Remaining time on Business (€40/mo)", "amount":  2000, "proration": true }
+  ],
+  "amount_due": 1000
+}
+```
+
+By default these prorations are **not** collected instantly — they accumulate as pending line items and settle on the next regular invoice. Set `proration_behavior: 'always_invoice'` on the update to bill the difference right away.
+
+## Proration on upgrades & downgrades
+
+The mechanics are identical for upgrades and downgrades; only the sign of the net amount differs. Update the subscription item and choose how the proration is applied.
+
+<Steps>
+
+### Change the plan
+
+Swap the price on the subscription item. VINR snapshots the change time as the proration boundary.
+
+```typescript
+const updated = await vinr.subscriptions.update('sub_3KdP', {
+  items: [{ id: 'si_77', price: 'price_business_monthly' }],
+  proration_behavior: 'create_prorations', // default: defer to next invoice
+});
+```
+
+### Inspect the preview (optional)
+
+Before committing, preview the upcoming invoice so you can show the customer the exact charge.
+
+```typescript
+const preview = await vinr.invoices.preview({
+  subscription: 'sub_3KdP',
+  items: [{ id: 'si_77', price: 'price_business_monthly' }],
+});
+preview.amount_due; // 1000 — the net proration
+```
+
+### Collect now or later
+
+Keep the default to roll the difference into the next cycle, or pass `proration_behavior: 'always_invoice'` to charge immediately.
+
+</Steps>
+
+<Callout type="warn">
+On a **downgrade**, the credit for unused time can exceed the new charge, producing a negative `amount_due`. VINR records this as customer credit balance and applies it to the next invoice — it does not issue a [refund](/docs/payments/refunds) automatically.
+</Callout>
+
+## Disabling proration
+
+Some pricing models want clean, predictable invoices instead of per-second fairness. Pass `proration_behavior: 'none'` on the update to skip both line items entirely: the customer keeps the old rate until the period ends, then the new rate applies on the next cycle.
+
+```typescript
+await vinr.subscriptions.update('sub_3KdP', {
+  items: [{ id: 'si_77', price: 'price_business_monthly' }],
+  proration_behavior: 'none', // no credit, no immediate charge
+});
+```
+
+You can also set a default at the subscription level so every future change inherits it. Use `'none'` for annual plans or flat-rate tiers where mid-cycle math would only confuse customers, and keep `'create_prorations'` for metered or seat-based plans where fairness matters.
+
+## Next steps
+
+<Cards>
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="The full lifecycle these changes flow through." />
+  <Card title="How billing works" href="/docs/billing/how-billing-works" description="Objects, cycles, and anchors behind proration." />
+  <Card title="Dunning & recovery" href="/docs/billing/dunning-and-recovery" description="What happens when a trial-end charge fails." />
+</Cards>

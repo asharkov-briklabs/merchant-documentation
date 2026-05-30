@@ -1,0 +1,139 @@
+---
+title: Finalization & payment
+description: How invoices finalize and get paid.
+persona: ["developer", "finance-manager"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Finalization is the moment an invoice stops being editable and becomes a binding statement: VINR computes the amount due, locks the line items, and attempts collection against the customer's default payment method. Understanding the draft → finalized → paid transition is the key to predicting when money moves and which events fire.
+
+## The invoice lifecycle
+
+Every `invoice` moves through a fixed set of statuses. Transitions are one-way — once an invoice leaves `draft`, its line items are frozen.
+
+| Status | Meaning | Editable? |
+|---|---|---|
+| `draft` | Accumulating line items for the period. | Yes |
+| `open` | Finalized and awaiting payment. | No |
+| `paid` | Collected in full. | No |
+| `uncollectible` | Abandoned after [dunning](/docs/billing/dunning-and-recovery) exhausted retries. | No |
+| `void` | Cancelled before payment; reverses the statement. | No |
+
+## What finalization does
+
+When a draft finalizes — automatically about an hour after creation, or immediately when you call the API — VINR performs four steps in order:
+
+<Steps>
+
+### Apply discounts
+
+Any [coupons](/docs/billing/coupons-and-discounts) attached to the customer or subscription reduce the relevant line items.
+
+### Compute tax
+
+VINR resolves the customer's tax location and adds [tax](/docs/billing/tax) line items. After this point the rates are fixed even if your configuration later changes.
+
+### Lock and number
+
+Line items become immutable, the invoice receives its sequential number, and the status flips to `open`.
+
+### Attempt collection
+
+If `collection_method` is `charge_automatically`, VINR creates a [payment](/docs/payments/how-payments-work) (`pay_...`) against the default method. For `send_invoice`, it instead surfaces a hosted payment page and waits.
+
+</Steps>
+
+<Callout type="info">
+Auto-advancing subscriptions finalize for you. You only call `finalize` explicitly when you created a standalone invoice and want to collect it now rather than wait for the grace window.
+</Callout>
+
+## Finalize and collect a draft
+
+The SDK exposes finalization and payment as discrete calls so you can inspect the locked amount before charging.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// 1. Finalize a draft invoice — discounts + tax are applied and the total locks.
+const invoice = await vinr.invoices.finalize('inv_8Qd2c1', {
+  autoAdvance: false, // we'll trigger payment ourselves
+});
+
+console.log(invoice.status);       // "open"
+console.log(invoice.amountDue);    // 2440  → EUR 24.40 (incl. tax)
+
+// 2. Collect against the customer's default method.
+const paid = await vinr.invoices.pay('inv_8Qd2c1');
+
+if (paid.status === 'paid') {
+  console.log('Settled via', paid.payment); // "pay_..."
+} else {
+  console.log('Collection failed; dunning will retry');
+}
+```
+
+Prefer raw REST? The same two-step flow:
+
+```bash
+curl -X POST https://api.vinr.com/v1/invoices/inv_8Qd2c1/finalize \
+  -H "X-Api-Key: $VINR_SECRET_KEY"
+
+curl -X POST https://api.vinr.com/v1/invoices/inv_8Qd2c1/pay \
+  -H "X-Api-Key: $VINR_SECRET_KEY"
+```
+
+## Reacting to the result
+
+Collection is asynchronous from your application's perspective — always drive fulfilment from [webhooks](/docs/integration/webhooks), not the API response, because retries and bank latency can change the outcome minutes later.
+
+| Event | When it fires | What to do |
+|---|---|---|
+| `invoice.finalized` | Status reaches `open`. | Optionally notify the customer. |
+| `invoice.paid` | Payment succeeds. | Grant or extend access. |
+| `invoice.payment_failed` | A collection attempt declines. | Nothing — dunning will retry. |
+| `invoice.marked_uncollectible` | All retries exhausted. | Revoke access, escalate to finance. |
+
+```typescript
+const event = vinr.webhooks.verify(payload, req.headers['x-vinr-signature']);
+
+if (event.type === 'invoice.paid') {
+  const invoice = event.data;        // "inv_..."
+  await grantAccess(invoice.customer); // "cust_..."
+}
+```
+
+## When the first attempt fails
+
+A decline does not void the invoice. The invoice stays `open` and enters [dunning](/docs/billing/dunning-and-recovery): VINR retries on a configurable schedule, using updated card details if the customer fixes them via the hosted page. Only after the schedule is exhausted does the invoice become `uncollectible`.
+
+<Callout type="warn">
+Test the failure path in sandbox with card `4000 0000 0000 0002` (declined) before going live. A `4000 0000 0000 3220` card forces a 3DS challenge so you can verify your [SCA](/docs/payments/strong-customer-authentication) handling on recurring charges.
+</Callout>
+
+## Edge cases
+
+<Accordions>
+
+<Accordion title="Zero-amount invoices">
+After discounts and credit, an invoice can total `0`. VINR finalizes it and moves it straight to `paid` with no payment object — useful for fully-comped periods.
+</Accordion>
+
+<Accordion title="Voiding after finalization">
+You can `void` an `open` invoice that was never paid; this reverses the statement and emits `invoice.voided`. You cannot void a `paid` invoice — issue a [refund](/docs/payments/refunds) instead.
+</Accordion>
+
+<Accordion title="Re-finalizing">
+Finalization is idempotent. Calling `finalize` on an already-`open` invoice returns the existing invoice unchanged rather than recomputing tax.
+</Accordion>
+
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Dunning & recovery" href="/docs/billing/dunning-and-recovery" description="Retry schedules and failed-payment recovery." />
+  <Card title="How payments work" href="/docs/payments/how-payments-work" description="The collection engine behind every invoice." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Drive fulfilment from invoice events." />
+</Cards>

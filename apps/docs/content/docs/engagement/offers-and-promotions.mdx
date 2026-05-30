@@ -1,0 +1,141 @@
+---
+title: Offers & promotions
+description: Targeted incentives to drive behavior.
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Offers are targeted, time-bound incentives — bonus points, percentage discounts, free gifts — surfaced to a chosen segment of members and redeemed under conditions you define. Where [earning rules](/docs/engagement/earning-rules) run continuously for everyone, an offer is a deliberate nudge aimed at the right members at the right moment.
+
+## The offer object
+
+An `offer` (prefix `ofr_`) bundles three decisions: _who_ qualifies (targeting), _what_ they get (the incentive), and _when and how often_ it applies (limits). It is created in a draft state, published to go live, and pauses or expires when its window closes.
+
+<TypeTable
+  type={{
+    id: { type: "string", description: "Unique identifier, e.g. ofr_9fK2.", default: "—" },
+    name: { type: "string", description: "Internal label shown in the dashboard.", default: "—" },
+    incentive: { type: "object", description: "What the member receives — see Offer mechanics.", default: "—" },
+    targeting: { type: "object", description: "Segment and eligibility conditions.", default: "{} (all members)" },
+    starts_at: { type: "string (ISO 8601)", description: "When the offer becomes redeemable.", default: "now" },
+    ends_at: { type: "string (ISO 8601)", description: "When the offer expires.", default: "null (open-ended)" },
+    max_redemptions: { type: "integer", description: "Total redemptions across all members.", default: "null" },
+    per_member_limit: { type: "integer", description: "Redemptions allowed per member.", default: "1" },
+    status: { type: "enum", description: "draft, active, paused, or expired.", default: "draft" },
+  }}
+/>
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// A weekend double-points offer for members in the "lapsed" segment.
+const offer = await vinr.engagement.offers.create({
+  name: 'Win-back weekend: 2x points',
+  incentive: { type: 'points_multiplier', multiplier: 2 },
+  targeting: { segments: ['lapsed_90d'] },
+  starts_at: '2026-06-06T00:00:00Z',
+  ends_at: '2026-06-08T23:59:59Z',
+  per_member_limit: 1,
+});                                  // "ofr_..."
+
+await vinr.engagement.offers.publish(offer.id);
+```
+
+## Targeting & eligibility
+
+Targeting answers _who can see and use_ an offer. It is evaluated at redemption time, so a member who drifts out of a segment after activating still loses eligibility. Combine any of the following; all conditions must pass.
+
+| Condition | Example | Notes |
+|---|---|---|
+| `segments` | `['lapsed_90d']` | Named segments managed in the dashboard or via the segments API. |
+| `tiers` | `['gold', 'platinum']` | Restrict to one or more [tiers](/docs/engagement/tiers-and-status). |
+| `min_balance` | `500` | Member must hold at least this many points. |
+| `enrolled_before` | `2026-01-01` | Reward tenure; exclude brand-new members. |
+| `metadata` | `{ region: 'EU' }` | Match arbitrary keys on the [loyalty account](/docs/engagement/loyalty-accounts). |
+
+<Callout type="info">
+An empty `targeting` object means **all active members** are eligible. Use that for store-wide promotions, but prefer a segment for win-back and reactivation campaigns so you don't subsidize members who would have purchased anyway.
+</Callout>
+
+## Offer mechanics
+
+The `incentive` block defines the payoff. VINR supports four types; each maps to a `points_transaction`, a discount, or a [reward](/docs/engagement/rewards-catalog) issued at redemption.
+
+| `type` | Effect | Key fields |
+|---|---|---|
+| `points_multiplier` | Multiplies points earned on a qualifying purchase. | `multiplier` |
+| `points_bonus` | Flat points award on activation or first purchase. | `points` |
+| `percentage_discount` | Percentage off a [checkout](/docs/engagement/redemption). | `percent`, `max_discount` |
+| `gift_reward` | Issues a catalog reward at no point cost. | `reward` |
+
+```typescript
+// A flat 1,000-point bonus, capped to the first 500 members.
+const bonus = await vinr.engagement.offers.create({
+  name: 'Spring 1,000-point bonus',
+  incentive: { type: 'points_bonus', points: 1000 },
+  targeting: { tiers: ['gold'] },
+  max_redemptions: 500,
+  ends_at: '2026-06-30T23:59:59Z',
+});
+```
+
+Discount amounts follow the platform convention: integers in minor units (`max_discount: 1500` caps the discount at EUR 15.00).
+
+## Activation & redemption
+
+Offers are either **auto-applied** (the member qualifies and the incentive fires automatically on the next qualifying event) or **opt-in** (the member must activate the offer first). Multiplier and discount offers are usually auto-applied; bonus and gift offers are opt-in so members consciously claim them.
+
+<Steps>
+
+### Member activates (opt-in offers only)
+
+Call `activate` with the member and offer. VINR checks targeting and per-member limits, then marks the offer claimed for that member and emits `loyalty.offer.activated`.
+
+### A qualifying event arrives
+
+For a multiplier or discount, the relevant event — typically `payment.completed` — is matched against the active offer. For a bonus, activation itself triggers the award.
+
+### The incentive is applied
+
+VINR creates the resulting `points_transaction` or applies the discount, records a redemption against the offer, and emits `loyalty.offer.redeemed`.
+
+</Steps>
+
+```typescript
+// Opt-in activation, then verify the resulting webhook server-side.
+await vinr.engagement.offers.activate({
+  offer: 'ofr_9fK2',
+  account: 'loy_abc123',
+});
+
+// In your webhook handler:
+const event = vinr.webhooks.verify(payload, req.headers['x-vinr-signature']);
+if (event.type === 'loyalty.offer.redeemed') {
+  const { offer, account, points_transaction } = event.data;
+  // Reconcile the award in your own ledger.
+}
+```
+
+<Callout type="warn">
+Always confirm the outcome from the verified `loyalty.offer.redeemed` event, not from the activation response. Activation reserves eligibility; redemption is what actually moves points or applies a discount, and it can still fail a limit check under concurrency.
+</Callout>
+
+## Expiry & limits
+
+Three independent ceilings keep an offer bounded. VINR enforces all of them atomically at redemption, so a race between two requests can never overshoot a cap.
+
+- **Time window** — `starts_at` / `ends_at`. Outside the window the offer status is `draft`/`expired` and redemptions are rejected.
+- **Global cap** — `max_redemptions` limits the total across every member. The offer auto-expires once reached.
+- **Per-member cap** — `per_member_limit` (default `1`) limits how often a single member can redeem.
+
+A redemption blocked by any limit returns a `409` with code `offer_limit_reached`; treat it as a normal, expected outcome rather than an error and surface a graceful message to the member. See [error handling](/docs/troubleshooting) for the standard pattern.
+
+## Next steps
+
+<Cards>
+  <Card title="Campaigns" href="/docs/engagement/campaigns" description="Orchestrate offers into multi-step journeys." />
+  <Card title="Earning rules" href="/docs/engagement/earning-rules" description="The always-on counterpart to targeted offers." />
+  <Card title="Redemption" href="/docs/engagement/redemption" description="How discounts and rewards apply at checkout." />
+</Cards>

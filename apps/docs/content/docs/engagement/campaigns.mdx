@@ -1,0 +1,143 @@
+---
+title: Campaigns
+description: Run time-boxed engagement initiatives.
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Campaigns coordinate earning bonuses, offers, and messaging over a defined period and audience to drive a specific outcome — a holiday spend push, a winback of lapsed members, or a launch boost for a new product. A campaign is a thin layer on top of the engagement primitives you already use: it scopes [earning rules](/docs/engagement/earning-rules) and [rewards](/docs/engagement/rewards-catalog) to a window and an audience, then measures what happened.
+
+## The campaign object
+
+A campaign bundles a schedule, an audience, a goal, and one or more mechanics (bonus multipliers, fixed bonuses, or featured rewards). While it is `active`, its mechanics apply automatically to qualifying events; outside the window they do nothing.
+
+| Field | What it controls |
+|---|---|
+| `program` | The loyalty program the campaign runs under. |
+| `audience` | Who is eligible — a segment, a tier, or `all`. |
+| `schedule` | `starts_at` / `ends_at` in ISO 8601. |
+| `mechanics` | Bonus multipliers, fixed awards, or featured rewards. |
+| `goal` | The metric the campaign optimizes for and its target. |
+| `status` | `draft`, `scheduled`, `active`, `ended`, or `archived`. |
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// Double points for gold-tier members over the holiday window.
+const campaign = await vinr.loyalty.campaigns.create({
+  program: 'prog_default',
+  name: 'Holiday Double Points',
+  audience: { type: 'tier', tier: 'gold' },
+  schedule: {
+    startsAt: '2026-12-01T00:00:00Z',
+    endsAt: '2026-12-26T00:00:00Z',
+  },
+  mechanics: [
+    { type: 'points_multiplier', trigger: 'payment.completed', factor: 2 },
+  ],
+  goal: { metric: 'incremental_spend', target: 5000000 }, // EUR 50,000.00
+});                                  // "camp_..."
+```
+
+## Audience & scheduling
+
+The `audience` decides who a campaign touches. Use `all` for store-wide pushes, `tier` to reward status, or `segment` for a saved filter (for example, members who have not purchased in 90 days).
+
+<TypeTable
+  type={{
+    type: { type: '"all" | "tier" | "segment"', description: "How the audience is resolved." },
+    tier: { type: "string", description: "Tier key, required when type is tier.", default: "—" },
+    segment: { type: "string", description: "Segment id, required when type is segment.", default: "—" },
+  }}
+/>
+
+Scheduling is timezone-aware via UTC offsets in the timestamps. A campaign moves from `scheduled` to `active` at `startsAt` and to `ended` at `endsAt` automatically — you do not need to flip it. Each transition emits an event you can react to.
+
+<Callout type="info">
+Subscribe to `loyalty.campaign.started` and `loyalty.campaign.ended` to trigger member messaging or refresh in-app banners. Verify the `x-vinr-signature` header with `vinr.webhooks.verify(payload, signature)` before trusting the body.
+</Callout>
+
+## Goals & mechanics
+
+Mechanics are what the campaign *does*; the goal is what you *measure it against*. A campaign can carry several mechanics that all apply while it is active.
+
+| Mechanic | Effect |
+|---|---|
+| `points_multiplier` | Multiplies points from a trigger by `factor` (for example `2` for double points). |
+| `points_bonus` | Awards a flat `amount` of points when the trigger fires. |
+| `featured_reward` | Surfaces a reward in the catalog and can discount its points cost. |
+
+```typescript
+// A flat 500-point welcome bonus for new members who join during launch week.
+await vinr.loyalty.campaigns.update('camp_launch', {
+  mechanics: [
+    { type: 'points_bonus', trigger: 'loyalty.account.created', amount: 500 },
+    { type: 'featured_reward', reward: 'rwd_free_shipping', pointsCost: 0 },
+  ],
+});
+```
+
+When a multiplier campaign is active, the resulting `points_transaction` carries `metadata.campaign` so you can attribute earned points back to the initiative.
+
+## Combining with offers
+
+Multiple campaigns can be active at once, and a single payment can match more than one. VINR resolves overlap predictably:
+
+<Steps>
+
+### Base rules run first
+
+Standard [earning rules](/docs/engagement/earning-rules) compute the baseline points for the event.
+
+### Campaign multipliers stack additively
+
+If two `points_multiplier` campaigns of `2x` both match, the member earns `3x`, not `4x` — base `1x` plus two `+1x` increments. This keeps stacked promotions from running away.
+
+### Bonuses add on top
+
+Each matching `points_bonus` awards its flat amount once per qualifying event.
+
+### Caps apply last
+
+Per-member and per-campaign caps (set on the campaign) clip the total so a single member cannot drain a budget.
+
+</Steps>
+
+<Callout type="warn">
+Always set a `budget` and a per-member cap on multiplier campaigns. Without them, an unexpected high-value purchase or a member with abnormal volume can consume far more points liability than intended.
+</Callout>
+
+## Measuring results
+
+Read campaign performance against its declared goal. The report compares the audience's behavior during the window to a matched baseline so you see *incremental* impact, not just gross activity.
+
+```bash
+curl https://api.vinr.com/v1/loyalty/campaigns/camp_launch/report \
+  -H "X-Api-Key: $VINR_SECRET_KEY"
+```
+
+```json
+{
+  "campaign": "camp_launch",
+  "goal": { "metric": "incremental_spend", "target": 5000000 },
+  "result": {
+    "incremental_spend": 6240000,
+    "attainment": 1.25,
+    "points_awarded": 1840000,
+    "enrolled_members": 312,
+    "redemptions": 47
+  }
+}
+```
+
+`attainment` above `1.0` means the campaign beat its target. Pair `points_awarded` with the realized `incremental_spend` to judge whether the points liability you took on paid for itself.
+
+## Next steps
+
+<Cards>
+  <Card title="Earning rules" href="/docs/engagement/earning-rules" description="The base rules campaigns multiply." />
+  <Card title="Rewards catalog" href="/docs/engagement/rewards-catalog" description="What featured rewards point to." />
+  <Card title="How engagement works" href="/docs/engagement/how-engagement-works" description="The object graph and event loop." />
+</Cards>

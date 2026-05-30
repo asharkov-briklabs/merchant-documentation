@@ -1,0 +1,165 @@
+---
+title: Integration overview
+description: Choose the right integration path across Payments, Billing, and Engagement.
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+VINR exposes one API and one SDK across three products — Payments, Billing, and Engagement — but each product offers several integration depths, from a hosted page you can wire up in an afternoon to a fully API-driven flow you control end to end. This page helps you pick the right entry point for your stack, your compliance posture, and how much of the UI you want to own.
+
+## Decision guide
+
+Start with two questions: how much UI do you want to build, and how much cardholder data do you want to touch. Touching raw card data raises your PCI DSS scope; hosted and embedded options keep that data on VINR's infrastructure.
+
+| Path | You build | PCI scope | Best when |
+|---|---|---|---|
+| **Hosted** | A redirect and a webhook handler | Lowest (SAQ A) | You want to ship fast or run server-side only |
+| **Embedded elements** | Your own checkout page, VINR-hosted fields | Low (SAQ A-EP) | You want a branded checkout without handling card data |
+| **API-direct** | Full client and server flow | Highest (SAQ D) | You need total control and are already PCI certified |
+
+<Callout type="info">
+When in doubt, start hosted. Every hosted integration can be migrated to embedded or API-direct later without changing your data model — the `pay_`, `cust_`, and `sub_` objects are identical across paths.
+</Callout>
+
+## Payments paths
+
+All three payment paths produce the same `payment` object and emit the same `payment.completed` and `payment.failed` events, so your fulfillment logic is portable.
+
+<Tabs items={["Hosted", "Embedded", "API-direct"]}>
+<Tab value="Hosted">
+Create a payment server-side and redirect the customer to the returned `checkoutUrl`. VINR collects card details and handles 3DS.
+
+```ts
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 1000, // €10.00 in minor units
+  currency: 'EUR',
+  description: 'Order #1234',
+  returnUrl: 'https://yoursite.com/checkout/return',
+});
+
+return Response.redirect(payment.checkoutUrl);
+```
+</Tab>
+<Tab value="Embedded">
+Mount VINR Elements in your own page. Card fields are served from VINR's domain inside an iframe, so the data never reaches your server.
+
+```ts
+const session = await vinr.payments.createSession({
+  amount: 1000,
+  currency: 'EUR',
+});
+// Pass session.clientSecret to the browser and mount Elements with it.
+```
+</Tab>
+<Tab value="API-direct">
+Submit a tokenized payment method to the API yourself. This requires a valid PCI SAQ D attestation on file.
+
+```ts
+const payment = await vinr.payments.create({
+  amount: 1000,
+  currency: 'EUR',
+  paymentMethod: 'pm_tokenized_from_your_client',
+  confirm: true,
+});
+```
+</Tab>
+</Tabs>
+
+See [Payments](/docs/payments) for the full method matrix and capture options.
+
+## Billing paths
+
+Billing is API-first: you model `prod_`, `price_`, and `sub_` objects and let VINR drive the invoice lifecycle. There is no separate "hosted" tier, but you can delegate the entire payment-collection step to a hosted checkout.
+
+<Steps>
+
+### Define a product and price
+
+```ts
+const price = await vinr.prices.create({
+  productId: 'prod_starter',
+  amount: 2900, // €29.00 per period
+  currency: 'EUR',
+  recurring: { interval: 'month' },
+});
+```
+
+### Subscribe a customer
+
+```ts
+const subscription = await vinr.subscriptions.create({
+  customerId: 'cust_8fa2',
+  priceId: price.id,
+});
+```
+
+### React to invoice events
+
+VINR generates `inv_` objects automatically and charges the customer's default payment method. Listen for `invoice.paid` and `subscription.deleted` rather than polling.
+
+```ts
+const event = vinr.webhooks.verify(payload, signature);
+if (event.type === 'invoice.paid') {
+  await grantAccess(event.data.customerId);
+}
+```
+
+</Steps>
+
+For metered plans, report usage with `vinr.usage.record(...)`, which creates `mbu_` records. See [Billing](/docs/billing).
+
+## Engagement paths
+
+Engagement (loyalty) layers onto either standalone customers or your existing Payments/Billing data. You attach a `loy_` account to a `cust_` and award points either manually or by reacting to payment events.
+
+```ts
+// Earn points automatically when a payment completes
+const event = vinr.webhooks.verify(payload, signature);
+if (event.type === 'payment.completed') {
+  await vinr.loyalty.points.earn({
+    programId: 'prog_default',
+    customerId: event.data.customerId,
+    amount: Math.floor(event.data.amount / 100), // 1 point per euro
+    sourcePaymentId: event.data.id,
+  });
+}
+```
+
+This produces a `ptx_` transaction and emits `loyalty.points.earned`. Rewards (`rwd_`) and redemptions (`rdm_`) follow the same event-driven pattern. See [Engagement](/docs/engagement).
+
+## Combining products
+
+The biggest reason to standardize on VINR is that one `cust_` object threads through all three products. A common end-to-end flow:
+
+<Steps>
+
+### Collect the first payment
+
+Use a hosted or embedded Payments flow to capture the customer and a reusable payment method.
+
+### Open a subscription
+
+Reuse that `cust_` to create a `sub_` in Billing — no second card entry.
+
+### Reward retention
+
+React to `invoice.paid` to award loyalty points, building an Engagement loop on top of recurring revenue.
+
+</Steps>
+
+<Callout type="warn">
+Keep a single set of API keys per environment and one webhook endpoint per service. Routing all three products through one verified `we_` endpoint keeps signature handling and replay protection consistent. See [Webhooks](/docs/integration/webhooks).
+</Callout>
+
+## Next steps
+
+<Cards>
+<Card title="Quick Start" href="/docs/getting-started/quick-start" description="Make your first payment in five minutes." />
+<Card title="Authentication" href="/docs/getting-started/authentication" description="Manage API keys and secure server-side calls." />
+<Card title="Webhooks" href="/docs/integration/webhooks" description="Verify signatures and handle events reliably across products." />
+</Cards>

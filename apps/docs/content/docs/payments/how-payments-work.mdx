@@ -1,0 +1,71 @@
+---
+title: How payments work
+description: The core objects and flow behind every VINR payment.
+persona: ["developer", "business-owner"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+A VINR payment moves through a predictable set of objects and states regardless of which rail it uses — card, bank transfer, stablecoin, or a local method. Learn this model once and every method, capability, and API endpoint becomes easier to reason about.
+
+## The payment object
+
+Every charge is represented by a single `payment` object. You create it with an amount in **minor units** (e.g. `1000` = €10.00), a currency, and where to send the customer afterward.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 1000,            // €10.00 in minor units
+  currency: 'EUR',
+  description: 'Order #1234',
+  returnUrl: 'https://yoursite.com/payment/complete',
+  metadata: { orderId: '1234' },
+});
+
+// payment.id        → "pay_3Nf8x2a..."
+// payment.status    → "pending"
+// payment.checkoutUrl → hosted page to send the customer to
+```
+
+<Callout type="warn">
+Amounts are always integers in the currency's smallest unit. €10.00 is `1000`, not `10`. Zero-decimal currencies (e.g. JPY) use the whole number.
+</Callout>
+
+## Rails & methods
+
+A **rail** is the underlying network that moves the money; a **method** is what the customer chooses. One integration gives you all of them — see [Payment methods](/docs/payments/payment-methods).
+
+| Rail | Example methods | Speed | Finality |
+|---|---|---|---|
+| Cards | Visa, Mastercard, Amex | Instant auth | Reversible (chargebacks) |
+| Bank transfers | SEPA, faster payments | Minutes–days | Strong |
+| Stablecoins | USDC, EURC | Minutes | Final on confirmation |
+| Local methods | iDEAL, Blik | Instant–minutes | Varies |
+
+## Authorization vs. capture
+
+For card payments, money moves in up to two steps:
+
+1. **Authorization** — the issuer reserves the funds on the customer's account.
+2. **Capture** — you claim the reserved funds, moving them toward settlement.
+
+By default VINR captures immediately. To reserve now and capture later (e.g. on shipment), use [authorize & capture](/docs/payments/authorize-and-capture).
+
+## Funds flow & settlement
+
+```
+customer → [authorization] → [capture] → your VINR balance → [settlement] → your bank
+```
+
+Captured funds accumulate in your [balance](/docs/operations/balances) and are paid out to your bank on your [settlement](/docs/operations/settlement) schedule. Fees and refunds are netted along the way and reflected in [reconciliation](/docs/operations/reconciliation).
+
+## Where to go next
+
+<Cards>
+  <Card title="Payment lifecycle" href="/docs/payments/payment-lifecycle" description="Every status and the events that fire." />
+  <Card title="Accept a payment" href="/docs/guides/accept-a-payment" description="A runnable end-to-end guide." />
+  <Card title="Payment methods" href="/docs/payments/payment-methods" description="Cards, bank transfers, stablecoins, local." />
+</Cards>

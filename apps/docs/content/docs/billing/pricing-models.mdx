@@ -1,0 +1,176 @@
+---
+title: Pricing models
+description: Flat, tiered, volume, graduated, and per-seat pricing.
+persona: ["developer", "finance-manager"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+A `price` is more than an amount — its **pricing model** decides how VINR turns a quantity into a line-item total at invoice time. This page walks through every model VINR supports, the math behind each, and how to encode it on a price so the invoice comes out right.
+
+The model lives entirely on the `price` object. A product can carry many prices with different models, so you can offer a flat monthly plan and a usage-metered add-on under the same catalog entry.
+
+## The five models at a glance
+
+| Model | Total for quantity `q` | Best for |
+|---|---|---|
+| Flat-rate | fixed amount, ignores `q` | Single plans, base fees |
+| Per-unit | `q × amount` | Seats, licences, simple metering |
+| Tiered (graduated) | each tier priced on its own slice of `q` | Usage that should reward growth gradually |
+| Volume | one tier's rate applied to **all** of `q` | "Buy more, pay less per unit" |
+| Package | `ceil(q ÷ size) × amount` | Selling in bundles of N |
+
+<Callout type="info">
+Tiered and volume share the same `tiers` array — the only difference is the `tiers_mode` field (`graduated` vs `volume`). Getting these two confused is the most common pricing bug, so the worked examples below use identical tiers to make the contrast obvious.
+</Callout>
+
+## Flat-rate
+
+The simplest model: a fixed amount per period regardless of quantity. This is the default when you omit a model.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const price = await vinr.prices.create({
+  product: 'prod_pro',
+  amount: 2000,                  // €20.00 flat, every cycle
+  currency: 'EUR',
+  recurring: { interval: 'month' },
+});                              // "price_..."
+```
+
+## Per-unit & per-seat
+
+Multiply a unit amount by quantity. Set `usage_type: 'licensed'` for a fixed quantity you set on the subscription item (classic per-seat), or `'metered'` to bill [reported usage](/docs/billing/usage-based-billing).
+
+```typescript
+const seat = await vinr.prices.create({
+  product: 'prod_team',
+  amount: 1200,                  // €12.00 per seat
+  currency: 'EUR',
+  recurring: { interval: 'month', usage_type: 'licensed' },
+});
+
+// 7 seats → 7 × €12.00 = €84.00
+await vinr.subscriptions.create({
+  customer: 'cust_3xK9',
+  items: [{ price: seat.id, quantity: 7 }],
+});
+```
+
+## Tiered (graduated)
+
+Each tier is priced on the slice of quantity that *falls inside it*. Quantity climbs through the tiers and accumulates cost — like a progressive tax bracket. Use it when you want early units to stay priced high and only later units to get cheaper.
+
+```typescript
+const graduated = await vinr.prices.create({
+  product: 'prod_api',
+  currency: 'EUR',
+  recurring: { interval: 'month', usage_type: 'metered' },
+  tiers_mode: 'graduated',
+  tiers: [
+    { up_to: 1000,    unit_amount: 5 },   // first 1,000 calls @ €0.05
+    { up_to: 10000,   unit_amount: 3 },   // next 9,000 @ €0.03
+    { up_to: 'inf',   unit_amount: 1 },   // everything above @ €0.01
+  ],
+});
+```
+
+For 12,000 calls the total is computed slice by slice:
+
+```text
+1,000 × €0.05  =  €50.00
+9,000 × €0.03  = €270.00
+2,000 × €0.01  =  €20.00
+                ---------
+                €340.00
+```
+
+## Volume
+
+Same tiers, but the rate of the **single tier the total quantity lands in** is applied to *all* units. This is the "the more you buy, the cheaper every unit gets" model — a sharp cliff rather than a gradual blend.
+
+```typescript
+const volume = await vinr.prices.create({
+  product: 'prod_api',
+  currency: 'EUR',
+  recurring: { interval: 'month', usage_type: 'metered' },
+  tiers_mode: 'volume',
+  tiers: [
+    { up_to: 1000,    unit_amount: 5 },
+    { up_to: 10000,   unit_amount: 3 },
+    { up_to: 'inf',   unit_amount: 1 },
+  ],
+});
+```
+
+The same 12,000 calls now land entirely in the top tier:
+
+```text
+12,000 × €0.01 = €120.00
+```
+
+<Callout type="warn">
+Identical tiers, identical usage — €340 graduated versus €120 volume. Always state `tiers_mode` explicitly and confirm it against a test invoice before going live.
+</Callout>
+
+## Tier fields
+
+Each entry in `tiers` accepts a flat fee, a per-unit amount, or both. A `flat_amount` is charged once when the tier is reached, on top of any `unit_amount`.
+
+<TypeTable
+  type={{
+    up_to: { type: "number | 'inf'", description: "Upper bound of this tier (inclusive). Use 'inf' for the final, unbounded tier." },
+    unit_amount: { type: "integer", description: "Per-unit price in minor units applied within this tier.", default: "0" },
+    flat_amount: { type: "integer", description: "One-time fee in minor units when usage reaches this tier.", default: "0" },
+  }}
+/>
+
+## Package pricing
+
+Sell in fixed bundles: round quantity *up* to the next package, then charge per package. Useful for credits, message blocks, or anything sold in lots.
+
+```typescript
+// €10.00 per pack of 100 messages
+const pack = await vinr.prices.create({
+  product: 'prod_sms',
+  amount: 1000,
+  currency: 'EUR',
+  recurring: { interval: 'month', usage_type: 'metered' },
+  transform_quantity: { divide_by: 100, round: 'up' },
+});
+// 250 messages → ceil(250 / 100) = 3 packs → €30.00
+```
+
+## Choosing a model
+
+<Steps>
+
+### Is the charge independent of quantity?
+
+Use **flat-rate** for base subscriptions and platform fees.
+
+### Is it a clean linear "price × count"?
+
+Use **per-unit** — `licensed` for seats you set, `metered` for reported usage.
+
+### Do you want pricing to scale with consumption?
+
+Use **graduated** to discount only the marginal units, or **volume** to re-price the whole bill once a threshold is crossed.
+
+### Do you sell in fixed lots?
+
+Use **package** pricing with `transform_quantity`.
+
+</Steps>
+
+You can combine models on one subscription — e.g. a flat platform fee, a per-seat price, and a graduated usage price as three items. Each item is calculated independently and rolled into the same [invoice](/docs/billing/how-billing-works).
+
+## Next steps
+
+<Cards>
+  <Card title="Products & prices" href="/docs/billing/products-and-prices" description="Model your catalog and attach prices." />
+  <Card title="Usage-based billing" href="/docs/billing/usage-based-billing" description="Report metered usage for tiered and per-unit prices." />
+  <Card title="How billing works" href="/docs/billing/how-billing-works" description="See where prices fit in the invoice flow." />
+</Cards>

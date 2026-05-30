@@ -1,0 +1,141 @@
+---
+title: Monitoring & alerts
+description: Stay ahead of failures with metrics and alerting.
+persona: ["operations"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Payment failures, webhook backlogs, and disputes rarely announce themselves — they show up as a slow drift in your numbers. This page covers the metrics VINR exposes, how to wire them into alerts, and how to keep webhook delivery healthy so you find out before your customers do.
+
+## Key metrics
+
+VINR computes rolling metrics across your account and exposes them through the Metrics API and the dashboard. Each metric is a time series you can window by minute, hour, or day.
+
+| Metric | What it tells you | Watch for |
+|---|---|---|
+| `payments.authorization_rate` | Share of attempts that authorize | Sudden drops (issuer or routing problem) |
+| `payments.decline_rate` | Declines by reason code | Spikes in `insufficient_funds` vs `do_not_honor` |
+| `webhooks.delivery_lag_p95` | 95th-percentile delivery delay | Rising lag (your endpoint is slow or down) |
+| `invoices.payment_failed_rate` | Failed collections per cycle | Climbing rate feeds [dunning](/docs/billing/dunning-and-recovery) |
+| `disputes.open_count` | Unresolved disputes | Trending up toward network thresholds |
+| `loyalty.points.earn_rate` | Points issued per minute | Anomalies that may signal abuse |
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// Pull the last 24h of authorization rate, bucketed hourly.
+const series = await vinr.metrics.query({
+  metric: 'payments.authorization_rate',
+  interval: 'hour',
+  start: '2026-05-29T00:00:00Z',
+  end: '2026-05-30T00:00:00Z',
+});
+
+for (const point of series.points) {
+  console.log(point.timestamp, point.value); // value is 0.0 - 1.0
+}
+```
+
+<Callout type="info">
+Metrics are derived from the same [events](/docs/integration/events) that drive webhooks, so a metric and the event stream never disagree. If you need raw rows for your own warehouse, export events rather than reconstructing them from metrics.
+</Callout>
+
+## Configuring alerts
+
+An **alert** binds a metric to a threshold and a delivery channel. When the metric crosses the threshold for the configured window, VINR opens an alert, notifies your channels, and emits an event you can act on programmatically.
+
+```typescript
+const alert = await vinr.alerts.create({
+  metric: 'payments.decline_rate',
+  condition: { operator: 'gt', threshold: 0.15 }, // 15%
+  window: '15m',                                   // sustained for 15 minutes
+  channels: ['we_slack_ops', 'email:ops@acme.com'],
+  severity: 'high',
+});
+// VINR emits "alert.triggered" and "alert.resolved" as the metric crosses.
+```
+
+<TypeTable
+  type={{
+    metric: { type: "string", description: "Metric key from the table above." },
+    condition: { type: "object", description: "operator (gt|lt) and threshold." },
+    window: { type: "string", description: "Sustained duration before firing.", default: "5m" },
+    channels: { type: "string[]", description: "Webhook endpoint IDs or email:/sms: targets." },
+    severity: { type: "string", description: "low | medium | high — controls escalation.", default: "medium" },
+  }}
+/>
+
+<Callout type="warn">
+Set a `window` long enough to ride out normal variance. A 1-minute window on `authorization_rate` will page you for every routine issuer blip; 10-15 minutes catches real degradation without the noise.
+</Callout>
+
+## Webhook delivery health
+
+Most operational blind spots are really webhook blind spots — if your endpoint silently fails, your systems drift out of sync with VINR. Monitor delivery the same way you monitor payments.
+
+<Steps>
+
+### Track the lag metric
+
+Alert on `webhooks.delivery_lag_p95`. A climbing p95 usually means your endpoint is responding slowly or returning non-`2xx` codes, which forces VINR to retry.
+
+### Inspect failing deliveries
+
+```typescript
+const failures = await vinr.webhooks.deliveries.list({
+  endpoint: 'we_1a2b3c',
+  status: 'failed',
+  limit: 20,
+});
+// Each delivery includes the response code, body, and attempt count.
+```
+
+### Replay after a fix
+
+Once your endpoint is healthy again, replay the backlog instead of waiting for the retry schedule. VINR retries with exponential backoff for up to 72 hours, but a manual replay closes the gap immediately.
+
+```bash
+curl -X POST https://api.vinr.com/v1/webhooks/deliveries/replay \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -d 'endpoint=we_1a2b3c' \
+  -d 'since=2026-05-30T08:00:00Z'
+```
+
+</Steps>
+
+<Callout type="error">
+Deliveries that exhaust all retries are marked permanently failed and will not be re-sent automatically. Always alert on the failed-delivery count so a multi-hour outage does not become silent data loss. See [Webhooks](/docs/integration/webhooks) for verification and retry details.
+</Callout>
+
+## Incident response
+
+When an alert fires, the goal is to triage fast and avoid making things worse.
+
+1. **Confirm scope.** Open the alert in the dashboard and check whether the metric moved account-wide or for a single payment method, currency, or region.
+2. **Check the status page.** Rule out a VINR-side incident (below) before chasing your own integration.
+3. **Mitigate.** For collection failures, let [dunning](/docs/billing/dunning-and-recovery) run rather than retrying manually. For webhook outages, fix the endpoint and replay.
+4. **Resolve.** VINR auto-resolves the alert and emits `alert.resolved` once the metric returns within threshold for the window. Record the root cause in your own runbook.
+
+## Status page
+
+VINR publishes platform health at [status.vinr.com](https://status.vinr.com), covering the API, dashboard, webhook delivery, and settlement processing. Subscribe there for component-level incident notifications, and consume the machine-readable feed if you want to suppress your own alerts during a known upstream incident.
+
+```bash
+curl https://api.vinr.com/v1/status \
+  -H "X-Api-Key: $VINR_SECRET_KEY"
+# { "api": "operational", "webhooks": "degraded", ... }
+```
+
+<Callout type="info">
+During a `degraded` webhook window, expect elevated `delivery_lag_p95`. Gate your lag alerts on the status feed to avoid paging your team for an incident you cannot fix.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Verify, retry, and replay event deliveries." />
+  <Card title="Events" href="/docs/integration/events" description="The event stream behind every metric and alert." />
+  <Card title="Dunning & recovery" href="/docs/billing/dunning-and-recovery" description="Automated recovery for failed collections." />
+</Cards>

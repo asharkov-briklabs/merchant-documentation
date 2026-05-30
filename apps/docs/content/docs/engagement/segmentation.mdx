@@ -1,0 +1,144 @@
+---
+title: Segmentation
+description: Group members by behavior and attributes.
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Segments group loyalty members by attributes and behavior — spend, tier, recency, location — so you can target earning rules, offers, and messaging at the right people. A segment is a saved, reusable filter that other Engagement objects reference by ID.
+
+## Defining segments
+
+A segment is a named set of conditions evaluated against each `loyalty_account` and its derived facts (lifetime spend, current tier, last activity). Create one with the SDK:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// "VIP regulars": Gold+ members who spent over EUR 500 in the last 90 days.
+const segment = await vinr.loyalty.segments.create({
+  program: 'prog_default',
+  name: 'VIP regulars',
+  match: 'all',                       // 'all' = AND, 'any' = OR
+  conditions: [
+    { fact: 'tier', op: 'in', value: ['gold', 'platinum'] },
+    { fact: 'spend_90d', op: 'gte', value: 50000 },   // EUR 500.00, minor units
+    { fact: 'last_activity_days', op: 'lte', value: 30 },
+  ],
+});                                    // "seg_..."
+```
+
+Each condition is a `{ fact, op, value }` triple. Supported operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, and `between`. The top-level `match` decides whether all conditions must hold or any single one.
+
+## Behavioral vs. attribute segments
+
+VINR distinguishes two kinds of facts. Understanding which you are using matters because behavioral facts are recomputed continuously, while attribute facts change only when you update the member.
+
+| Kind | Example facts | Source | Freshness |
+|---|---|---|---|
+| Attribute | `tier`, `country`, `enrolled_days`, `email_subscribed`, custom `metadata.*` | Set on the `loyalty_account` | On write |
+| Behavioral | `spend_90d`, `points_balance`, `redemptions_total`, `last_activity_days`, `orders_lifetime` | Derived from `payment` and `points_transaction` events | Near real time |
+
+```typescript
+// Attribute segment: members in Germany who opted into email.
+await vinr.loyalty.segments.create({
+  program: 'prog_default',
+  name: 'DE email-opted',
+  match: 'all',
+  conditions: [
+    { fact: 'country', op: 'eq', value: 'DE' },
+    { fact: 'email_subscribed', op: 'eq', value: true },
+  ],
+});
+```
+
+<Callout type="info">
+Reference custom data with the `metadata.` prefix, for example `{ fact: 'metadata.plan', op: 'eq', value: 'business' }`. Only top-level metadata keys are queryable.
+</Callout>
+
+## Dynamic membership
+
+Segments are **dynamic by default**: membership is computed on read, never stored. When a member crosses a threshold — say `spend_90d` rises past EUR 500 — they enter the segment automatically, and they leave just as silently when the rolling window moves on. You do not add or remove members manually.
+
+This has two practical consequences:
+
+- **Membership is a snapshot.** A member listed today may not match tomorrow. Always evaluate against the live segment rather than caching IDs.
+- **Behavioral windows trail events.** Facts like `spend_90d` settle within seconds of a `payment.completed` event, not instantly. For audit-grade timing, key off the event rather than segment membership.
+
+```typescript
+// Check whether a specific member currently matches a segment.
+const { matches } = await vinr.loyalty.segments.evaluate('seg_vip', {
+  account: 'loy_abc123',
+});
+
+// Or page through everyone who matches right now.
+const members = await vinr.loyalty.segments.listMembers('seg_vip', { limit: 100 });
+```
+
+## Using segments to target
+
+A segment ID is the building block other Engagement features reuse. The same `seg_vip` can gate an earning multiplier, scope a campaign, and filter a broadcast.
+
+<Tabs items={["Earning rule", "Campaign", "Messaging"]}>
+<Tab value="Earning rule">
+
+```typescript
+// Double points, but only for members in the VIP segment.
+await vinr.loyalty.rules.create({
+  program: 'prog_default',
+  trigger: 'payment.completed',
+  segment: 'seg_vip',
+  award: { type: 'multiplier', value: 2 },
+});
+```
+
+</Tab>
+<Tab value="Campaign">
+
+```typescript
+// Scope a campaign to win-back: members inactive for 60+ days.
+await vinr.loyalty.campaigns.create({
+  program: 'prog_default',
+  name: 'Win-back Q3',
+  segment: 'seg_lapsed',
+  bonus: { type: 'fixed', points: 500 },
+});
+```
+
+</Tab>
+<Tab value="Messaging">
+
+```typescript
+// Trigger a message to everyone currently in the segment.
+await vinr.engagement.messages.send({
+  segment: 'seg_vip',
+  template: 'tmpl_vip_offer',
+});
+```
+
+</Tab>
+</Tabs>
+
+## Limits
+
+<TypeTable
+  type={{
+    segments_per_program: { type: "number", description: "Maximum saved segments per program.", default: "200" },
+    conditions_per_segment: { type: "number", description: "Maximum conditions in one segment.", default: "20" },
+    listMembers_page_size: { type: "number", description: "Maximum members returned per page.", default: "100" },
+    behavioral_window_max: { type: "string", description: "Longest rolling window for behavioral facts.", default: "365d" },
+  }}
+/>
+
+<Callout type="warn">
+Segments are evaluated per program. A `loyalty_account` only matches conditions within its own `program`; you cannot build a segment spanning multiple programs.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Earning rules" href="/docs/engagement/earning-rules" description="Award points conditioned on a segment." />
+  <Card title="Campaigns" href="/docs/engagement/campaigns" description="Run time-boxed offers against a segment." />
+  <Card title="Tiers & status" href="/docs/engagement/tiers-and-status" description="The tier facts segments build on." />
+</Cards>

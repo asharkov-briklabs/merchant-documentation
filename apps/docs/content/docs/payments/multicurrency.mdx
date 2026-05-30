@@ -1,0 +1,163 @@
+---
+title: Multicurrency & FX
+description: Present, process, and settle across currencies.
+persona: ["finance-manager", "business-owner"]
+priority: "P2"
+lastUpdated: "2026-05-30"
+---
+
+VINR can show a customer a price in their own currency, process the charge in that currency, and settle the proceeds into yours — converting at a single, transparent rate locked at processing time. This page explains the three currencies involved, how rates and markup are applied, and how to choose your settlement currency.
+
+## The three currencies
+
+Every cross-currency payment touches up to three distinct currencies. Keeping them separate is the key to reasoning about FX.
+
+| Currency | What it is | Example |
+|---|---|---|
+| **Presentment** | What the customer sees and is billed in | A shopper in Tokyo sees `¥1,500` |
+| **Processing** | The currency the charge is authorized and captured in | `JPY` on the issuer statement |
+| **Settlement** | The currency paid into your VINR balance and bank | `EUR` in your payout |
+
+Presentment and processing are usually the same — the customer pays in their currency. The conversion happens between the **processing** currency and your **settlement** currency, applied when the payment is captured.
+
+```
+customer pays ¥1,500 (presentment = processing)
+        │
+        ▼  FX at capture time
+   settles as €9.12 (settlement) → your EUR balance
+```
+
+## Presenting prices in local currency
+
+To charge in a currency, set it on the payment. Amounts remain integers in that currency's minor units, and zero-decimal currencies like JPY use the whole number.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 1500,            // ¥1,500 — JPY is zero-decimal, no minor units
+  currency: 'JPY',         // presentment & processing currency
+  description: 'Order #4821',
+  returnUrl: 'https://yoursite.com/payment/complete',
+  metadata: { orderId: '4821' },
+});
+```
+
+<Callout type="warn">
+Do not convert prices yourself before calling the API. Charge in the customer's currency and let VINR handle the conversion to settlement — this keeps the rate, markup, and disclosure auditable on the payment object.
+</Callout>
+
+To pick the right presentment currency, read the customer's country or locale from your storefront, or call the rates endpoint to display a live converted price before checkout (see below).
+
+## Supported currencies
+
+VINR processes 135+ currencies. Settlement is supported into a smaller set tied to your payout bank accounts. A few representative groups:
+
+| Group | Examples |
+|---|---|
+| Major | EUR, USD, GBP, JPY, CHF, CAD, AUD |
+| Nordic | SEK, NOK, DKK |
+| Zero-decimal | JPY, KRW, CLP, VND |
+| Three-decimal | BHD, KWD, TND (minor unit = 1/1000) |
+
+<Callout type="info">
+Not every currency you can **present** can be **settled** into directly. If you charge in a currency you cannot settle, VINR converts it to your default settlement currency automatically. Check current support per account at [Supported currencies](/docs/operations/settlement).
+</Callout>
+
+## FX rates & markup
+
+When a payment is captured in a currency different from its settlement currency, VINR applies a conversion rate composed of two parts:
+
+<TypeTable
+  type={{
+    midMarketRate: { type: "number", description: "The wholesale reference rate at capture time", default: "—" },
+    markup: { type: "number", description: "VINR's FX fee, applied on top of the mid-market rate", default: "0.01 (1.0%)" },
+    appliedRate: { type: "number", description: "The rate actually used: midMarketRate adjusted by markup", default: "—" },
+  }}
+/>
+
+The rate is **locked at capture time**, not at payment creation, so the amount that reaches your balance is deterministic once funds are captured. Both the mid-market rate and the applied rate are recorded on the payment's `fxDetails` for reconciliation.
+
+```typescript
+const payment = await vinr.payments.retrieve('pay_3Nf8x2a');
+
+// payment.fxDetails → {
+//   processingCurrency: 'JPY',
+//   settlementCurrency: 'EUR',
+//   midMarketRate: 0.006120,
+//   markup: 0.01,
+//   appliedRate: 0.006059,
+//   settledAmount: 909,        // €9.09 in minor units
+// }
+```
+
+To show a customer a converted price *before* they pay, fetch an indicative rate. This rate is for display only — the binding rate is the one locked at capture.
+
+```bash
+curl https://api.vinr.com/v1/fx/rates?from=EUR&to=JPY \
+  -H "X-Api-Key: $VINR_SECRET_KEY"
+```
+
+```json
+{
+  "from": "EUR",
+  "to": "JPY",
+  "midMarketRate": 163.40,
+  "markup": 0.01,
+  "appliedRate": 161.79,
+  "asOf": "2026-05-30T09:00:00Z"
+}
+```
+
+## Settlement currency selection
+
+Your **default settlement currency** is set during onboarding and matches your primary payout bank account. You have two ways to influence where money lands:
+
+<Steps>
+
+### Add a settlement currency
+
+Connect a payout bank account in another currency to receive same-currency proceeds without conversion. For example, adding a USD account lets USD charges settle as USD instead of converting to EUR.
+
+### Set per-payment routing (optional)
+
+For advanced setups, specify a `settlementCurrency` on the payment to override the account default, provided you hold a matching payout account.
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 5000,                  // $50.00
+  currency: 'USD',
+  settlementCurrency: 'USD',     // settle as USD, skip conversion to EUR
+  returnUrl: 'https://yoursite.com/payment/complete',
+});
+```
+
+</Steps>
+
+Settling in the same currency you process avoids FX markup entirely — useful if you have local bank accounts in your major markets. When no same-currency account exists, VINR converts to your default at the applied rate above.
+
+<Callout type="info">
+FX markup is charged only on conversions. Same-currency settlement (charge USD, settle USD) incurs no FX fee — only standard processing fees apply.
+</Callout>
+
+## Reconciliation & reporting
+
+Each cross-currency payment carries its full `fxDetails`, and payouts group settled amounts by settlement currency. The `payment.completed` webhook includes the settled amount and applied rate, so you can post the exact figure to your ledger without re-deriving it.
+
+| Field | Use in your books |
+|---|---|
+| `amount` / `currency` | Revenue recognized in the sale currency |
+| `fxDetails.settledAmount` | Cash received in settlement currency |
+| `fxDetails.appliedRate` | The realized FX rate for gain/loss tracking |
+
+See [Reconciliation](/docs/operations/reconciliation) for matching settled amounts to bank deposits.
+
+## Next steps
+
+<Cards>
+  <Card title="Settlement & payouts" href="/docs/operations/settlement" description="Settlement currencies, schedules, and payout accounts." />
+  <Card title="Reconciliation" href="/docs/operations/reconciliation" description="Match FX-settled amounts to your bank deposits." />
+  <Card title="How payments work" href="/docs/payments/how-payments-work" description="The payment object, rails, and funds flow." />
+</Cards>

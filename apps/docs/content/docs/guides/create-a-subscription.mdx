@@ -1,0 +1,114 @@
+---
+title: Create a subscription
+description: Model products and prices, start a subscription, and handle the first invoice.
+category: "billing"
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+This guide creates a recurring subscription end-to-end: model a product and price, attach a customer with a saved payment method, start the subscription, and react to the first invoice. Runnable against the sandbox.
+
+## Overview
+
+A subscription ties a [customer](/docs/payments/customers) to one or more [prices](/docs/billing/products-and-prices) and generates an [invoice](/docs/billing/invoices) each cycle, collecting payment automatically. You'll fulfil access on invoice events.
+
+<Callout type="info">
+This guide assumes the customer already has a saved payment method. If not, run [Save & reuse cards](/docs/guides/save-and-reuse-cards) first — Billing reuses the same stored method.
+</Callout>
+
+## Model products & prices
+
+Create the product once, then a recurring price for it. Prices are immutable — to change pricing, create a new price.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const product = await vinr.products.create({ name: 'Pro plan' });
+
+const price = await vinr.prices.create({
+  product: product.id,
+  amount: 2000,                       // €20.00
+  currency: 'EUR',
+  recurring: { interval: 'month' },   // 'day' | 'week' | 'month' | 'year'
+});
+```
+
+## Create the subscription
+
+Attach the customer, the price, and an optional trial. VINR immediately creates the first invoice (or schedules it after the trial).
+
+```typescript
+const subscription = await vinr.subscriptions.create({
+  customer: 'cust_abc123',
+  items: [{ price: price.id, quantity: 1 }],
+  trialPeriodDays: 14,                // omit to bill immediately
+  metadata: { plan: 'pro' },
+});
+
+// subscription.id     → "sub_..."
+// subscription.status → "trialing" (or "active" with no trial)
+```
+
+## Handle the first invoice
+
+Fulfil access from webhooks, not the API response — collection is asynchronous. The key events:
+
+| Event | Do this |
+|---|---|
+| `invoice.paid` | Grant or extend access for the period. |
+| `invoice.payment_failed` | Let [dunning](/docs/billing/dunning-and-recovery) retry; warn the customer. |
+| `subscription.updated` | Sync plan/quantity changes. |
+| `subscription.deleted` | Revoke access. |
+
+```typescript
+export async function POST(req: Request) {
+  const event = vinr.webhooks.verify(
+    await req.text(),
+    req.headers.get('x-vinr-signature'),
+  );
+
+  switch (event.type) {
+    case 'invoice.paid':
+      await grantAccess(event.data.customer, event.data.period_end);
+      break;
+    case 'subscription.deleted':
+      await revokeAccess(event.data.customer);
+      break;
+  }
+  return new Response('OK', { status: 200 });
+}
+```
+
+## Manage the lifecycle
+
+- **Upgrade/downgrade** — change the item's price; VINR [prorates](/docs/billing/trials-and-proration) automatically. See [Upgrades & downgrades](/docs/billing/subscriptions/upgrades-and-downgrades).
+- **Cancel** — `vinr.subscriptions.cancel(id)` immediately, or `cancelAtPeriodEnd: true` to let it run out. See [Cancellations](/docs/billing/subscriptions/cancellations).
+- **Pause** — suspend collection without losing the relationship. See [Pausing & resuming](/docs/billing/subscriptions/pausing-and-resuming).
+
+## Go live
+
+<Steps>
+
+### Let customers self-serve
+
+Enable the [customer portal](/docs/billing/customer-portal) so customers update cards and plans without you building UI.
+
+### Configure dunning
+
+Set retry schedules and emails in [Dunning & recovery](/docs/billing/dunning-and-recovery) before real renewals happen.
+
+### Turn on tax
+
+Enable [automatic tax](/docs/billing/tax) so every invoice collects the right amount.
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="Bill for usage" href="/docs/guides/bill-for-usage" description="Add metered, consumption-based pricing." />
+  <Card title="Set up dunning" href="/docs/guides/set-up-dunning" description="Recover failed renewals." />
+  <Card title="Subscriptions reference" href="/docs/api-reference/subscriptions" description="Every parameter and field." />
+</Cards>

@@ -1,0 +1,184 @@
+---
+title: Bill for usage
+description: Bill for usage — a runnable, end-to-end guide verified against the VINR sandbox.
+category: "billing"
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Usage-based billing charges customers for what they actually consume — API calls, gigabytes transferred, seats active — instead of a flat fee. This guide takes you from a metered price to a finalized invoice that reflects real consumption, runnable against the VINR sandbox.
+
+## Overview
+
+The flow has four moving parts: a metered **price** defines how to charge per unit, a **subscription** attaches that price to a customer, **usage records** report consumption as it happens, and VINR aggregates those records into an **invoice** at the end of each billing period.
+
+```
+your server                VINR
+    │  create metered price  │
+    │───────────────────────►│
+    │  create subscription   │
+    │───────────────────────►│
+    │  report usage (mbu_)    │   ...repeated all period
+    │───────────────────────►│
+    │                        │  period ends → aggregate
+    │  invoice.paid (webhook) │◄── invoice finalized & charged
+    │◄───────────────────────│
+```
+
+You report usage continuously; VINR sums it per period, prices it, and bills the customer automatically.
+
+## Define a metered price
+
+A metered price sets `billingScheme: 'usage'` and an aggregation strategy. Here we charge €0.002 per API request, summed over the month.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const product = await vinr.products.create({
+  name: 'API access',
+});
+
+const price = await vinr.prices.create({
+  product: product.id,            // prod_...
+  currency: 'EUR',
+  billingScheme: 'usage',
+  unitAmountDecimal: '0.2',       // €0.002 per unit, in minor-unit decimals
+  recurring: {
+    interval: 'month',
+    usageType: 'metered',
+    aggregateUsage: 'sum',        // sum | last_during_period | max
+  },
+});
+```
+
+<Callout type="info">
+Use `unitAmountDecimal` (a string) for sub-cent rates. A whole-cent rate like €0.05 can use `unitAmount: 5`. See [Pricing models](/docs/billing/pricing-models) for tiered and graduated schemes.
+</Callout>
+
+## Subscribe the customer
+
+Attach the metered price to a subscription. Metered prices have no fixed quantity — billing is driven entirely by reported usage.
+
+```typescript
+const subscription = await vinr.subscriptions.create({
+  customer: 'cust_8aZ2',
+  items: [{ price: price.id }],   // price_...
+});
+
+console.log(subscription.id);     // sub_...
+```
+
+## Report usage records
+
+Each time the customer consumes something, post a usage record against the subscription item. Always pass an `idempotencyKey` so retried requests don't double-count.
+
+```typescript
+async function reportApiCall(subscriptionItemId: string, count: number, requestId: string) {
+  const record = await vinr.usageRecords.create(
+    {
+      subscriptionItem: subscriptionItemId,
+      quantity: count,
+      timestamp: Math.floor(Date.now() / 1000),
+      action: 'increment',        // increment | set
+    },
+    { idempotencyKey: `usage-${requestId}` },
+  );
+
+  return record.id;               // mbu_...
+}
+```
+
+<Callout type="warn">
+The `timestamp` decides which billing period a record lands in. Backdated timestamps that fall before the current period boundary are rejected — report usage promptly, or batch within the same period.
+</Callout>
+
+For high-volume sources, batch records instead of one call per event:
+
+```typescript
+await vinr.usageRecords.createBatch({
+  subscriptionItem: 'si_4Kp1',
+  records: [
+    { quantity: 1200, timestamp: 1748390400, action: 'increment' },
+    { quantity: 980,  timestamp: 1748476800, action: 'increment' },
+  ],
+});
+```
+
+## Aggregation & windows
+
+VINR collapses all records in a period into a single billable quantity using the price's `aggregateUsage` strategy:
+
+| Strategy | Billable quantity | Use for |
+|---|---|---|
+| `sum` | Total of every `increment` | API calls, GB transferred |
+| `last_during_period` | Most recent `set` value | Active seats at period end |
+| `max` | Highest value seen | Peak concurrent connections |
+
+Inspect the running total at any time before the period closes:
+
+```typescript
+const summary = await vinr.usageRecords.summaries({
+  subscriptionItem: 'si_4Kp1',
+});
+
+console.log(summary.data[0].totalUsage);   // e.g. 18420
+```
+
+<Callout type="info">
+With `action: 'set'`, each record overwrites rather than adds — ideal for reporting "current seat count" where you don't want a sum.
+</Callout>
+
+## Invoicing usage
+
+When the billing period ends, VINR finalizes an invoice: it multiplies the aggregated quantity by the metered rate, adds any flat or tiered components, and charges the customer's default payment method. Fulfil or update entitlements from the webhook so it happens exactly once.
+
+```typescript
+export async function POST(req: Request) {
+  const event = vinr.webhooks.verify(
+    await req.text(),
+    req.headers.get('x-vinr-signature'),
+  );
+
+  switch (event.type) {
+    case 'invoice.paid':
+      // inv_... — quantity already aggregated and priced
+      await extendAccess(event.data.subscription, event.data.periodEnd);
+      break;
+    case 'invoice.payment_failed':
+      await startDunning(event.data.customer);
+      break;
+  }
+  return new Response('OK', { status: 200 });
+}
+```
+
+## Test it
+
+In the sandbox, you can fast-forward a subscription to its period boundary to force an invoice without waiting a month.
+
+<Steps>
+
+### Report some usage
+
+Post a few `mbu_` records against the subscription item with the snippet above.
+
+### Advance the clock
+
+In the [Dashboard](/docs/getting-started/authentication) test mode, use **Advance billing period** on the subscription to trigger immediate aggregation and invoicing.
+
+### Confirm the charge
+
+The invoice charges the sandbox default card. Watch for `invoice.paid` to land on your webhook, then check the line item quantity matches your reported total.
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="Pricing models" href="/docs/billing/pricing-models" description="Add tiered, graduated, and package rates on top of metering." />
+  <Card title="Manage subscriptions" href="/docs/guides/manage-subscriptions" description="Upgrade, prorate, and cancel metered plans." />
+  <Card title="Usage records API" href="/docs/api-reference/usage-records" description="Full reference for reporting and summarizing usage." />
+</Cards>

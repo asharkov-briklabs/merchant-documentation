@@ -1,0 +1,68 @@
+---
+title: Engagement
+description: Loyalty, rewards, and customer engagement on VINR.
+persona: ["developer", "business-owner"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+VINR Engagement turns transactions into relationships. Run a loyalty program, award and redeem points, build status tiers and a rewards catalog, and drive repeat purchases with campaigns and offers — all reacting automatically to events from [Payments](/docs/payments) and [Billing](/docs/billing).
+
+## What Engagement includes
+
+<Cards>
+  <Card title="Loyalty accounts" href="/docs/engagement/loyalty-accounts" description="Enroll members and track their balances and tier." />
+  <Card title="Points & currency" href="/docs/engagement/points-and-currency" description="Issue, adjust, and expire your loyalty currency." />
+  <Card title="Tiers & status" href="/docs/engagement/tiers-and-status" description="Reward your best customers with escalating benefits." />
+  <Card title="Earning rules" href="/docs/engagement/earning-rules" description="Map events to the points members earn." />
+  <Card title="Rewards & redemption" href="/docs/engagement/rewards-catalog" description="Define what members can redeem points for." />
+  <Card title="Campaigns & offers" href="/docs/engagement/campaigns" description="Run targeted, time-boxed initiatives." />
+</Cards>
+
+## How it relates to Payments & Billing
+
+Engagement is **event-driven**: it listens to what happens in Payments and Billing and reacts. A completed payment can award points; reaching a spend threshold can promote a member's tier; a redemption can apply a discount at [checkout](/docs/integration/checkout). The [Linking payments & loyalty](/docs/engagement/linking-payments-and-loyalty) guide is the heart of the product.
+
+<Callout type="info">
+Engagement reuses the same `customer` object as Payments and Billing. A loyalty account links to a customer, so one identity carries a buyer's payment methods, subscriptions, and points.
+</Callout>
+
+## Key objects
+
+| Object | Prefix | Purpose |
+|---|---|---|
+| Program | `prog_` | A loyalty program with its own currency and rules. |
+| Loyalty account | `loy_` | An enrolled member — links a customer to a program. |
+| Points transaction | `ptx_` | An award, deduction, or expiry of points. |
+| Reward | `rwd_` | A catalog item members can redeem points for. |
+| Redemption | `rdm_` | A member spending points on a reward. |
+
+## Designing a program
+
+<Steps>
+
+### Decide your currency and earn rate
+
+Choose what members earn (points, stars, miles) and how — e.g. **1 point per €1 spent**. See [Points & currency](/docs/engagement/points-and-currency).
+
+### Define earning rules
+
+Map events to points: purchases, sign-ups, referrals, birthdays. Add multipliers and caps. See [Earning rules](/docs/engagement/earning-rules).
+
+### Build a rewards catalog
+
+Decide what points buy — discounts, free items, or [store credit](/docs/engagement/store-credit-and-wallet). See [Rewards catalog](/docs/engagement/rewards-catalog).
+
+### Connect it to checkout
+
+Identify the member on each payment so purchases earn and redemptions discount. See [Linking payments & loyalty](/docs/engagement/linking-payments-and-loyalty).
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="How engagement works" href="/docs/engagement/how-engagement-works" description="The objects and event flow in detail." />
+  <Card title="Launch a loyalty program" href="/docs/guides/launch-a-loyalty-program" description="A runnable end-to-end walkthrough." />
+  <Card title="Engagement API reference" href="/docs/api-reference/loyalty-accounts" description="Endpoints, parameters, and responses." />
+</Cards>

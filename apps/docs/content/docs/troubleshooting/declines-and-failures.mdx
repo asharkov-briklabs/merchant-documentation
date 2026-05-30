@@ -1,0 +1,134 @@
+---
+title: Declines & failures
+description: Diagnose why a payment was declined and what to do next.
+persona: ["developer", "operations"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+When a payment ends in `failed`, VINR returns a structured `failure` object explaining why. This page maps those codes to root causes, separates retryable failures from permanent ones, and shows how to retry without burning through a customer's card or your decline rate.
+
+## Where the reason lives
+
+Every failed payment carries a `failure` object with a stable `code`, a human `message`, and a `category` you can branch on programmatically. The same object is attached to the `payment.failed` webhook.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.retrieve('pay_3Kd9aZ2eRb');
+
+if (payment.status === 'failed') {
+  const { code, category, message, retryable } = payment.failure;
+  console.log(`${category}/${code}: ${message} (retryable=${retryable})`);
+}
+```
+
+<Callout type="info">
+Never surface the raw issuer `message` to cardholders for fraud-related codes — it can leak signal to bad actors. Show a generic "Your card was declined" and log the detail on your side.
+</Callout>
+
+## Decline categories
+
+The `category` field groups every failure into one of five buckets. Branch on `category` for control flow; use `code` only for analytics.
+
+<TypeTable
+  type={{
+    issuer_declined: { type: "category", description: "The cardholder's bank rejected the charge (insufficient funds, lost/stolen, generic decline)." },
+    authentication_failed: { type: "category", description: "3D Secure / SCA was required and not completed or was rejected." },
+    invalid_request: { type: "category", description: "Bad card details — wrong number, expired card, bad CVC or postal code." },
+    processing_error: { type: "category", description: "Transient error at the network or VINR rail; the charge never reached a decision." },
+    fraud_blocked: { type: "category", description: "Blocked by VINR Radar or your own rules before reaching the issuer." },
+  }}
+/>
+
+## Common codes
+
+| Code | Category | Meaning | Retryable |
+|---|---|---|---|
+| `insufficient_funds` | `issuer_declined` | Not enough balance/credit | Yes, later |
+| `do_not_honor` | `issuer_declined` | Generic issuer refusal, no reason given | Yes, later |
+| `card_lost` / `card_stolen` | `issuer_declined` | Reported lost or stolen | No |
+| `expired_card` | `invalid_request` | Past expiry date | No (need new card) |
+| `incorrect_cvc` | `invalid_request` | CVC mismatch | No (re-enter) |
+| `authentication_required` | `authentication_failed` | SCA challenge not completed | Yes, with 3DS |
+| `processing_error` | `processing_error` | Network timeout / rail error | Yes, immediately |
+| `velocity_exceeded` | `fraud_blocked` | Tripped a Radar or custom rule | No |
+
+## Soft vs. hard declines
+
+The single most important distinction for retry logic:
+
+- **Soft declines** are temporary. The card is fundamentally usable but the bank said no _right now_ — `insufficient_funds`, `do_not_honor`, `processing_error`. A later retry can succeed.
+- **Hard declines** are permanent for that card. `card_stolen`, `expired_card`, `pickup_card`. Retrying the same card will fail again and repeated attempts hurt your authorization rate.
+
+The `failure.retryable` boolean encodes this so you don't have to maintain the table yourself.
+
+```typescript
+async function handleFailure(payment: any) {
+  const { category, retryable } = payment.failure;
+
+  if (!retryable) {
+    // Hard decline — ask for a different payment method.
+    return promptForNewCard(payment.customer);
+  }
+  if (category === 'processing_error') {
+    return scheduleRetry(payment.id, { delayMs: 30_000 }); // transient: retry soon
+  }
+  // Soft issuer decline — retry on a smart schedule, not immediately.
+  return scheduleRetry(payment.id, { delayMs: 24 * 60 * 60 * 1000 });
+}
+```
+
+## Retrying intelligently
+
+<Steps>
+
+### Check `retryable` first
+
+If `failure.retryable` is `false`, stop. Request a new payment method instead of re-submitting the same card.
+
+### Reuse a saved method, not a new charge object
+
+Retry against the stored `pm_...` method with a fresh [idempotency key](/docs/integration/idempotency) per attempt so a network retry of the _same_ attempt never double-charges.
+
+### Space out soft declines
+
+For `issuer_declined`, retry on a schedule (for example day 1, 3, 5, 7), not in a tight loop. Issuers throttle and may flag merchants who hammer declined cards.
+
+### Re-authenticate when SCA is the cause
+
+For `authentication_required`, re-create the payment and route the customer through a 3DS challenge rather than retrying silently.
+
+</Steps>
+
+```bash
+curl https://api.vinr.com/v1/payments \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Idempotency-Key: retry_pay_3Kd9aZ2eRb_attempt2" \
+  -d amount=2500 \
+  -d currency=eur \
+  -d customer=cust_8Qm2 \
+  -d payment_method=pm_1Lz4
+```
+
+<Callout type="warn">
+Smart-retry behaviour is built into [Billing dunning](/docs/billing/dunning) for subscription invoices. Only build your own retry loop for one-off payments.
+</Callout>
+
+## Reducing decline rates
+
+- **Send full address and CVC.** Issuers approve more often when AVS and CVC data are present.
+- **Pass a clear `statement_descriptor`.** Cardholders dispute charges they don't recognise, and unfamiliar descriptors raise issuer suspicion.
+- **Use network tokens for saved cards.** Tokenised credentials survive card reissues and lift approval rates versus raw PANs.
+- **Retry soft declines later, never harder.** Volume of retries on a dead card lowers your overall acceptance rate.
+- **Test the paths.** In sandbox, `4000 0000 0000 0002` forces a decline and `4000 0000 0000 3220` forces a 3DS challenge so you can exercise both branches.
+
+## Next steps
+
+<Cards>
+  <Card title="Payment lifecycle" href="/docs/payments/payment-lifecycle" description="Every status and the transitions between them." />
+  <Card title="Dunning" href="/docs/billing/dunning" description="Automated retries and recovery for failed invoices." />
+  <Card title="Idempotency" href="/docs/integration/idempotency" description="Retry safely without double-charging." />
+</Cards>

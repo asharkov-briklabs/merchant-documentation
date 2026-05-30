@@ -1,0 +1,116 @@
+---
+title: Balances
+description: Understand available, pending, and reserved balances.
+persona: ["finance-manager"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Your VINR balance is the running total of money that has flowed in (payments, refunds reversing out) and money that will flow out (refunds, fees, payouts). Reading it correctly means knowing the difference between funds you can withdraw today and funds the network is still settling — and why VINR may hold a portion in reserve.
+
+## Balance types
+
+A balance is held per currency and split into three buckets. The sum is your gross position; only one bucket is withdrawable.
+
+| Bucket | What it means | Withdrawable |
+|---|---|---|
+| `available` | Settled funds, free of holds — eligible for the next [payout](/docs/operations/payouts). | Yes |
+| `pending` | Captured payments still moving through settlement, plus future-dated activity. | No (yet) |
+| `reserved` | Funds VINR holds against [dispute](/docs/payments/disputes) and refund risk. | No |
+
+Each bucket also carries `connect_reserved` if you run a platform, but for a standard merchant the three above are what you reconcile against.
+
+<Callout type="info">
+Amounts are always integers in minor units. A balance of `153400` in `EUR` is €1,534.00. A single balance object can contain several currency entries — see [Currency balances](#currency-balances).
+</Callout>
+
+## Pending vs. available
+
+When a [payment completes](/docs/payments/how-payments-work), the funds do not become `available` instantly. Card networks and bank rails settle on a delay, so VINR routes the captured amount into `pending` and moves it to `available` once settlement confirms.
+
+<Steps>
+
+### Capture
+
+A payment is captured and VINR emits `payment.completed`. The amount lands in `pending`.
+
+### Settlement window
+
+The funds clear the underlying rail. The default window is **2 business days** for cards in most regions; SEPA and other rails differ. The window starts from capture, not authorization.
+
+### Availability
+
+On clearing, VINR moves the amount from `pending` to `available` and emits `balance.available`. It is now eligible for the next payout run.
+
+</Steps>
+
+Refunds and chargebacks work in reverse: the deduction is applied to `pending` first, and if `pending` cannot absorb it, against `available`. A negative `available` balance is debited from your next incoming settlements.
+
+## Reserves
+
+A reserve is a portion of your funds VINR holds to cover potential future refunds and disputes. Reserves protect both you and the network from negative balances when liabilities outrun incoming volume. Two forms exist:
+
+- **Rolling reserve** — a percentage of each day's volume held for a fixed period (for example, 5% held for 30 days), then released on a rolling basis.
+- **Fixed reserve** — a flat amount held until risk conditions change.
+
+Reserve terms are set on your account by VINR Risk and surface in the dashboard under Operations. You cannot withdraw `reserved` funds, but you can always read them via the API to reconcile the gap between gross volume and `available`.
+
+<Callout type="warn">
+A spike in [disputes](/docs/payments/disputes) can trigger or raise a reserve. If a payout looks smaller than expected, check `reserved` before opening a support ticket — the funds are held, not missing.
+</Callout>
+
+## Balance API
+
+Retrieve the current balance for your account. The response groups amounts by currency.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const balance = await vinr.balances.retrieve();
+
+for (const entry of balance.currencies) {
+  console.log(
+    entry.currency,
+    'available', entry.available,   // minor units
+    'pending', entry.pending,
+    'reserved', entry.reserved,
+  );
+}
+```
+
+For an audit trail of every credit and debit — payments, refunds, fees, payout deductions — list balance transactions and filter by type or settlement date:
+
+```bash
+curl https://api.vinr.com/v1/balance_transactions?limit=50 \
+  -H "X-Api-Key: $VINR_SECRET_KEY"
+```
+
+Each transaction links back to its source object (a `pay_…`, `re_…`, `dp_…`, or `po_…`) so you can trace any line on a payout back to the activity that produced it.
+
+<TypeTable
+  type={{
+    currency: { type: "string", description: "ISO 4217 code, e.g. EUR.", default: "EUR" },
+    available: { type: "integer", description: "Withdrawable funds in minor units." },
+    pending: { type: "integer", description: "Captured but not yet settled." },
+    reserved: { type: "integer", description: "Held against refund and dispute risk.", default: "0" },
+  }}
+/>
+
+## Currency balances
+
+If you accept payments in more than one currency, VINR keeps a **separate balance per currency** — funds are never auto-converted. EUR settlements accumulate in your EUR balance, USD in your USD balance, and so on. Each currency settles and pays out on its own schedule.
+
+This means you can hold a positive `available` balance in one currency while another runs negative from refunds. Payouts are issued per currency to a matching bank account; if you lack a payout account for a held currency, those funds stay in `available` until you add one. To consolidate, enable currency conversion in the dashboard or request manual conversion through VINR support.
+
+<Callout type="info">
+Reconcile each currency independently. Summing across currencies without converting at a defined rate will not match your bank deposits.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Payouts" href="/docs/operations/payouts" description="How available funds reach your bank account." />
+  <Card title="Disputes" href="/docs/payments/disputes" description="How chargebacks debit your balance and trigger reserves." />
+  <Card title="Reconciliation" href="/docs/operations/reconciliation" description="Match balance transactions to your ledger." />
+</Cards>

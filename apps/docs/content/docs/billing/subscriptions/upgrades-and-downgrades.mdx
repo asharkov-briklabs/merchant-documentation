@@ -1,0 +1,150 @@
+---
+title: Upgrades & downgrades
+description: Move customers between plans fairly.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Change a subscriber's plan immediately or at period end, with proration that credits unused time on the old price and charges for the new one. A plan change is just an update to the subscription's price — VINR computes the money math so an upgrade can charge mid-cycle and a downgrade can defer or refund.
+
+## What a plan change is
+
+A subscription points at a `price`. To move a customer, you update that price (and optionally `quantity`). Two decisions shape the outcome:
+
+| Decision | Field | Effect |
+|---|---|---|
+| When the new price takes effect | `proration_behavior` | Now, at period end, or never. |
+| Whether to bill immediately | `invoice_now` | Issue a proration invoice now vs. roll onto the next cycle. |
+
+The `subscription` and `customer` are unchanged objects throughout — you keep the same `sub_` id, history, and billing cycle anchor unless you explicitly reset it.
+
+## How proration works
+
+When a change takes effect mid-cycle, VINR splits the current period at the moment of change and writes two proration line items onto the next invoice (or an immediate one):
+
+<Steps>
+
+### Credit unused time
+
+VINR refunds the remaining time on the old price as a negative line item — e.g. half a month left on a €20 plan credits €10.00 (`-1000`).
+
+### Charge the new rate
+
+It then charges the new price for that same remaining time — half a month of a €50 plan is €25.00 (`2500`).
+
+### Net it out
+
+The next invoice nets the two. The example above adds €15.00 (`1500`) for the upgrade; a downgrade nets negative and becomes [credit balance](/docs/billing/credit-notes) applied to future invoices.
+
+</Steps>
+
+<Callout type="info">
+Proration is line-item math on an invoice, not a separate refund. To return money to the card instead of crediting future invoices, issue a [credit note](/docs/billing/credit-notes) with a cash refund.
+</Callout>
+
+## Proration behaviors
+
+<TypeTable
+  type={{
+    create_prorations: { type: "string", description: "Split the period now; charge/credit the difference. Default for upgrades.", default: "create_prorations" },
+    always_invoice: { type: "string", description: "Like create_prorations, but finalize and collect a proration invoice immediately." },
+    none: { type: "string", description: "Apply the new price with no credit or charge — full new rate starts next cycle." },
+  }}
+/>
+
+## Upgrade immediately
+
+Move the customer up a tier now and bill the difference the same day:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const subscription = await vinr.subscriptions.update('sub_8Kd2', {
+  price: 'price_pro_monthly',     // the new, higher price
+  proration_behavior: 'always_invoice', // settle now, don't wait for next cycle
+});
+// -> invoice with two proration lines is created and collected immediately
+```
+
+## Downgrade at period end
+
+Most teams defer downgrades so the customer keeps paid features they already bought through the end of the period. Schedule the change with no immediate proration:
+
+```typescript
+const subscription = await vinr.subscriptions.update('sub_8Kd2', {
+  price: 'price_starter_monthly', // the new, lower price
+  proration_behavior: 'none',     // no credit/charge now
+  effective: 'period_end',        // new price applies on next cycle
+});
+// access stays on "Pro" until period_end; next invoice bills the lower rate
+```
+
+<Callout type="warn">
+A downgrade can reduce included quotas (seats, usage allowances). If current usage exceeds the new plan's limit, deferring to period end avoids stranding the customer mid-cycle. Validate quotas before applying immediately.
+</Callout>
+
+## Preview before you commit
+
+Show the customer the exact net amount before charging by previewing the upcoming invoice with the proposed price:
+
+```typescript
+const preview = await vinr.invoices.preview({
+  subscription: 'sub_8Kd2',
+  price: 'price_pro_monthly',
+  proration_behavior: 'create_prorations',
+});
+
+console.log(preview.amount_due); // e.g. 1500 -> "€15.00 due today"
+```
+
+## Resulting events
+
+A plan change emits a predictable sequence. Drive fulfilment and access changes from these rather than from the API response:
+
+| Event | When it fires |
+|---|---|
+| `subscription.updated` | The price (or quantity) on the subscription changed. |
+| `invoice.created` | A proration invoice was generated (`always_invoice`). |
+| `invoice.paid` | The proration charge was collected — grant the new entitlements here. |
+| `invoice.payment_failed` | The upgrade charge failed; flows into [dunning](/docs/billing/dunning-and-recovery). |
+
+```typescript
+// In your webhook handler
+const event = vinr.webhooks.verify(payload, signature); // x-vinr-signature
+if (event.type === 'subscription.updated') {
+  const sub = event.data;
+  await syncEntitlements(sub.customer, sub.price); // grant/revoke features
+}
+```
+
+## Edge cases
+
+<Accordions>
+
+<Accordion title="Failed upgrade payment">
+If `proration_behavior: 'always_invoice'` and the card declines, the subscription stays on the old price until the invoice is paid. Don't grant new entitlements until `invoice.paid`. The invoice enters dunning automatically.
+</Accordion>
+
+<Accordion title="Negative net (downgrade with immediate proration)">
+A mid-cycle downgrade with `create_prorations` produces a net credit. VINR holds it as customer credit balance and applies it to the next invoice — it does not refund to the card. Use a [credit note](/docs/billing/credit-notes) for cash refunds.
+</Accordion>
+
+<Accordion title="Changing the billing interval">
+Switching monthly to yearly is a price change like any other. The anchor stays put unless you pass `reset_billing_cycle: true`, which restarts the period at the change time and reprorates accordingly.
+</Accordion>
+
+<Accordion title="Usage-based components">
+Metered prices are billed in arrears, so they have nothing to prorate. The accrued usage is invoiced as normal on the next cycle regardless of the plan change. See [Usage-based billing](/docs/billing/usage-based-billing).
+</Accordion>
+
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Trials & proration" href="/docs/billing/trials-and-proration" description="The proration model in full detail." />
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="The full subscription lifecycle." />
+  <Card title="Credit notes" href="/docs/billing/credit-notes" description="Refund or credit a downgrade balance." />
+</Cards>

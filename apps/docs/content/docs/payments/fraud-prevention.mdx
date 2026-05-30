@@ -1,0 +1,146 @@
+---
+title: Fraud prevention
+description: Reduce fraud and chargebacks with rules and risk scoring.
+persona: ["operations", "developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+VINR scores every payment for risk in real time and lets you decide what happens to it: allow, send to review, or block outright. This page covers the signals behind the score, how to author rules, the manual review queue, blocklists, and how to measure whether your controls are actually working.
+
+## How risk scoring works
+
+When you create a payment, VINR's risk engine evaluates it before authorization and attaches a `riskScore` (integer, `0`–`100`, higher is riskier) and a `riskLevel` of `low`, `elevated`, or `high`. The score is a blend of issuer signals, device and network data, the customer's history on your account, and velocity patterns across the VINR network.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 12000,
+  currency: 'EUR',
+  customer: 'cust_9aQ2',
+  returnUrl: 'https://yoursite.com/payment/complete',
+});
+
+// payment.risk.score   → 72
+// payment.risk.level   → "elevated"
+// payment.risk.outcome → "review"   // allow | review | block
+// payment.risk.signals → ["velocity_high", "issuer_country_mismatch"]
+```
+
+<Callout type="info">
+The score is advisory until a rule acts on it. A high score alone never blocks a payment — your [rules](#rules-engine) decide the outcome. This keeps you in control of the precision/recall tradeoff for your business.
+</Callout>
+
+## Risk signals
+
+Signals are the named factors that move the score. They fall into four families:
+
+| Family | Example signals | What they catch |
+|---|---|---|
+| Issuer | `issuer_country_mismatch`, `prepaid_card`, `auth_decline_recent` | Stolen or thin cards |
+| Device & network | `proxy_detected`, `device_reuse_high`, `impossible_travel` | Account takeover, bots |
+| Velocity | `velocity_high`, `card_testing_pattern`, `amount_anomaly` | Card testing, bursts |
+| History | `chargeback_history`, `new_customer`, `email_age_low` | Repeat offenders |
+
+Every signal that fired is returned on `payment.risk.signals` and shown on the payment in the dashboard, so a reviewer can see *why* a charge was flagged rather than just a number.
+
+## Rules engine
+
+Rules turn signals and score into an outcome. Each rule has a condition and an action (`allow`, `review`, or `block`); rules evaluate top to bottom and the first match wins. Manage them in the dashboard or via the API.
+
+```typescript
+const rule = await vinr.fraud.rules.create({
+  name: 'Block high-risk over €500',
+  action: 'block',
+  priority: 10,
+  condition: {
+    all: [
+      { field: 'risk.level', op: 'eq', value: 'high' },
+      { field: 'amount', op: 'gte', value: 50000 },
+    ],
+  },
+});
+
+// rule.id → "rule_4kP1..."
+```
+
+<TypeTable
+  type={{
+    name: { type: "string", description: "Human-readable label shown in review." },
+    action: { type: "'allow' | 'review' | 'block'", description: "Outcome when the condition matches." },
+    priority: { type: "integer", description: "Lower numbers evaluate first.", default: "100" },
+    condition: { type: "object", description: "A tree of all/any groups with field/op/value leaves." },
+  }}
+/>
+
+Available fields include `risk.score`, `risk.level`, `risk.signals`, `amount`, `currency`, `customer.email`, `card.country`, and any `metadata.*` key you set. Operators are `eq`, `neq`, `gte`, `lte`, `in`, and `contains`.
+
+<Callout type="warn">
+Test new rules in [sandbox](/docs/getting-started) before promoting them. Use card `4000 0000 0000 0002` to simulate a decline and `4000 0000 0000 3220` to force a 3DS challenge so you can confirm your review path end to end.
+</Callout>
+
+## Manual review queue
+
+Payments whose winning rule action is `review` are authorized but **not captured** — the funds are held while a human decides. They land in the review queue and emit `payment.flagged`. Resolve them before the authorization expires (typically 7 days for cards).
+
+<Steps>
+
+### Pull the queue
+
+```typescript
+const queue = await vinr.fraud.reviews.list({ status: 'pending', limit: 50 });
+```
+
+### Inspect the evidence
+
+Each item carries the payment, its `risk.signals`, the customer's prior payments, and the rule that flagged it.
+
+### Decide
+
+```typescript
+// Approve → captures the held authorization
+await vinr.fraud.reviews.approve('pay_3Nf8x2a');
+
+// Reject → releases the authorization, no funds move
+await vinr.fraud.reviews.reject('pay_3Nf8x2a', { reason: 'suspected_fraud' });
+```
+
+</Steps>
+
+Approving captures the payment and fires `payment.completed`; rejecting releases the hold and fires `payment.canceled`. Unresolved items expire automatically when the authorization lapses.
+
+## Blocklists & allowlists
+
+For deterministic decisions that should bypass scoring, maintain lists keyed by `email`, `card_fingerprint`, `ip`, or `customer`. Allowlist entries short-circuit to `allow`; blocklist entries short-circuit to `block`, before any rule runs.
+
+```bash
+curl -X POST https://api.vinr.com/v1/fraud/lists/block/entries \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "type": "email", "value": "mule@example.com", "note": "Confirmed chargeback ring" }'
+```
+
+<Callout type="info">
+A `card_fingerprint` is stable across the same physical card even when the PAN is re-tokenized, so blocking a fingerprint stops a fraudster who re-enters the same card under a new email.
+</Callout>
+
+## Measuring fraud impact
+
+You can't tune what you don't measure. Watch these three metrics in **Operations to Fraud analytics**, ideally segmented by rule:
+
+- **Chargeback rate** — disputes divided by captured payments. Card networks flag merchants above ~1%; stay well under it.
+- **Block rate & false-positive proxy** — share of payments blocked, plus how many blocked customers later succeed elsewhere on your account (a sign of over-blocking).
+- **Review SLA** — median time a payment sits in the queue. Slow reviews lose good customers.
+
+Subscribe to `payment.flagged`, `dispute.created`, and `dispute.won` webhooks to stream these into your own dashboards. See [disputes & chargebacks](/docs/payments/disputes) for the lifecycle that follows a fraud loss.
+
+## Next steps
+
+<Cards>
+  <Card title="Disputes & chargebacks" href="/docs/payments/disputes" description="Handle the losses that slip through and submit evidence." />
+  <Card title="3D Secure & SCA" href="/docs/payments/3d-secure" description="Shift liability to the issuer with authentication." />
+  <Card title="Payment lifecycle" href="/docs/payments/payment-lifecycle" description="Every status and the events that fire." />
+</Cards>

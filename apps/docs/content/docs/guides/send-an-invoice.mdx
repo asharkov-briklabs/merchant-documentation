@@ -1,0 +1,154 @@
+---
+title: Send an invoice
+description: Send an invoice — a runnable, end-to-end guide verified against the VINR sandbox.
+category: "billing"
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+This guide takes you from a bare customer record to a paid, reconciled invoice. It's runnable against the sandbox — swap your test keys in and follow along. Use invoices when you want VINR to host a payment page, email the customer, and chase payment for you, rather than collecting card details inline.
+
+## Overview
+
+```
+your server              VINR                    customer
+    │  create customer     │                        │
+    │─────────────────────►│                        │
+    │  add line items      │                        │
+    │─────────────────────►│                        │
+    │  finalize → send     │   hosted invoice email  │
+    │─────────────────────►│───────────────────────►│ pays
+    │  invoice.paid (webhook)                        │
+    │◄─────────────────────│◄───────────────────────│
+    │  mark fulfilled / reconcile                    │
+```
+
+An invoice starts as a `draft` you can edit freely. Finalizing locks the line items and issues a hosted invoice URL; VINR then emails the customer and collects payment. You fulfil and reconcile on the `invoice.paid` webhook.
+
+## Create a customer
+
+Invoices belong to a customer. Store the returned `cust_` id alongside your own user record so you can bill them again later.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const customer = await vinr.customers.create({
+  email: 'ops@acme.example',
+  name: 'Acme GmbH',
+  metadata: { accountId: 'acct_8842' },
+});
+// customer.id === 'cust_...'
+```
+
+<Callout type="info">
+The customer's `email` is where VINR sends the hosted invoice and any payment reminders. Make sure it's verified before you finalize.
+</Callout>
+
+## Build invoice line items
+
+Create a draft invoice, then attach one or more line items. Amounts are integers in minor units — `120000` is EUR 1,200.00. You can add ad-hoc items or reference an existing [price](/docs/api-reference/prices).
+
+```typescript
+const invoice = await vinr.invoices.create({
+  customer: customer.id,
+  currency: 'EUR',
+  collectionMethod: 'send_invoice',   // email the customer (vs. charge_automatically)
+  daysUntilDue: 14,
+  metadata: { projectId: 'proj_2291' },
+});
+
+await vinr.invoices.addLineItem(invoice.id, {
+  description: 'Implementation — May 2026',
+  quantity: 1,
+  unitAmount: 120000,                 // €1,200.00
+});
+
+await vinr.invoices.addLineItem(invoice.id, {
+  description: 'Support hours',
+  quantity: 8,
+  unitAmount: 9500,                   // €95.00 each
+});
+```
+
+While the invoice is in `draft`, you can add, update, or remove line items as often as you like. Totals, tax, and any discounts recompute automatically on finalize.
+
+## Finalize and send
+
+Finalizing freezes the line items, assigns an invoice number, and generates the hosted invoice URL. With `collectionMethod: 'send_invoice'`, calling `send` emails the customer a link to that page.
+
+```typescript
+const finalized = await vinr.invoices.finalize(invoice.id);
+// finalized.status === 'open'
+// finalized.hostedInvoiceUrl → VINR-hosted, pays by card/wallet/local method
+
+await vinr.invoices.send(finalized.id);   // delivers the email
+```
+
+<Callout type="warn">
+After finalize, line items are immutable. To correct a sent invoice, [void](/docs/api-reference/invoices) it and issue a new one — never edit amounts out of band.
+</Callout>
+
+## Collect payment
+
+The customer pays on the hosted page, which supports cards, wallets, and any [local methods](/docs/payments/payment-methods/local-methods) you've enabled. Each invoice generates an underlying `pay_` you can inspect, but you don't need to build a checkout yourself.
+
+Fulfil from the webhook so it happens exactly once, even if the customer never returns to your site.
+
+```typescript
+export async function POST(req: Request) {
+  const event = vinr.webhooks.verify(
+    await req.text(),
+    req.headers.get('x-vinr-signature'),
+  );
+
+  switch (event.type) {
+    case 'invoice.paid':
+      await markProjectPaid(event.data.metadata.projectId);   // idempotent!
+      break;
+    case 'invoice.payment_failed':
+      await alertAccountManager(event.data.id);
+      break;
+  }
+  return new Response('OK', { status: 200 });
+}
+```
+
+## Reconcile
+
+To check status server-side or build your own dashboard, retrieve the invoice. The `amountPaid` and `amountRemaining` fields (minor units) tell you exactly where it stands.
+
+```typescript
+const inv = await vinr.invoices.retrieve(invoice.id);
+console.log(inv.status, inv.amountPaid, inv.amountRemaining);
+```
+
+| Status | Meaning |
+|---|---|
+| `draft` | Editable; not yet issued |
+| `open` | Finalized and awaiting payment |
+| `paid` | Settled in full |
+| `void` | Cancelled before payment |
+| `uncollectible` | Written off after dunning |
+
+Paid invoices feed into your [payouts and settlements](/docs/operations) like any other charge.
+
+## Test it
+
+Finalize and send a sandbox invoice, then open the `hostedInvoiceUrl` and pay with a test card:
+
+| Card | Result |
+|---|---|
+| `4242 4242 4242 4242` | Success → `invoice.paid` |
+| `4000 0000 0000 0002` | Declined → `invoice.payment_failed` |
+| `4000 0000 0000 3220` | 3D Secure challenge |
+
+## Next steps
+
+<Cards>
+  <Card title="Create a subscription" href="/docs/billing/subscriptions" description="Recurring invoices on a schedule." />
+  <Card title="Meter usage" href="/docs/guides/meter-usage-and-bill" description="Bill metered usage on each invoice." />
+  <Card title="Accept a payment" href="/docs/guides/accept-a-payment" description="Collect a one-time charge inline." />
+</Cards>

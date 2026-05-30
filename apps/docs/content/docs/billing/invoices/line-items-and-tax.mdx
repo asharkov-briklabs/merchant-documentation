@@ -1,0 +1,150 @@
+---
+title: Line items & tax
+description: Compose amounts, quantities, discounts, and tax.
+persona: ["developer", "finance-manager"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Every invoice is the sum of its line items. This page explains how VINR assembles those items from subscription prices, metered usage, and one-off charges, then layers discounts and tax on top to compute the final amount due.
+
+## What a line item is
+
+A line item is a single billable row on an invoice. Each one carries an amount, an optional quantity, and a reference to where it came from. When an invoice finalizes, VINR sums the line items, applies invoice-level discounts, computes tax, and locks the total.
+
+| Line item source | `type` | Created by |
+|---|---|---|
+| Recurring subscription price | `subscription` | The cycle that owns the subscription |
+| Metered usage | `usage` | Aggregated [usage records](/docs/billing/usage-based-billing) at period close |
+| One-off charge | `invoice_item` | You, via the API before finalization |
+| Proration adjustment | `proration` | A mid-cycle quantity or price change |
+
+<TypeTable
+  type={{
+    amount: { type: "integer", description: "Unit amount in minor units (1000 = EUR 10.00).", default: "from price" },
+    quantity: { type: "integer", description: "Number of units; total = amount × quantity.", default: "1" },
+    currency: { type: "string", description: "ISO-4217 code. Must match the invoice currency.", default: "EUR" },
+    proration: { type: "boolean", description: "Marks the row as a proration credit or charge.", default: "false" },
+    tax_behavior: { type: "string", description: "Whether amount is 'inclusive' or 'exclusive' of tax.", default: "exclusive" },
+  }}
+/>
+
+## How an invoice is assembled
+
+<Steps>
+
+### Collect pending items
+
+When a billing period closes, VINR opens a draft invoice and pulls in every subscription price, any aggregated usage, and any pending one-off invoice items attached to the customer.
+
+### Apply discounts
+
+Coupons and [discounts](/docs/billing/coupons-and-discounts) reduce the subtotal. A percentage coupon applies across all eligible line items; a fixed-amount coupon reduces the subtotal once. Discounts always apply **before** tax.
+
+### Compute tax
+
+VINR resolves the tax rate from the customer's address and the [tax behavior](/docs/billing/tax) of each line item, then adds a tax line item per jurisdiction. With `inclusive` behavior the displayed amount already contains tax; with `exclusive` behavior tax is added on top.
+
+### Finalize and total
+
+The invoice locks. `amount_due = subtotal − discount + tax`. No further line items can be added once finalized.
+
+</Steps>
+
+## Adding a one-off charge
+
+Attach an invoice item to a customer and it lands on their next draft invoice — or on a standalone invoice you create explicitly.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// A one-off setup fee, taxed exclusively, added to the next invoice.
+const item = await vinr.invoiceItems.create({
+  customer: 'cust_8Qd2',
+  amount: 4900,                 // EUR 49.00
+  quantity: 1,
+  currency: 'EUR',
+  description: 'Onboarding setup fee',
+  tax_behavior: 'exclusive',
+});                             // "mbu_..." -> resolves to an invoice item
+```
+
+To preview the assembled total before charging the customer, retrieve the upcoming invoice. This runs the full assemble-discount-tax pipeline without finalizing.
+
+```typescript
+const preview = await vinr.invoices.upcoming({ customer: 'cust_8Qd2' });
+
+console.log(preview.subtotal);    // sum of line items, before tax
+console.log(preview.tax);         // computed tax total
+console.log(preview.amount_due);  // subtotal - discount + tax
+
+for (const line of preview.lines) {
+  console.log(line.type, line.description, line.amount, line.quantity);
+}
+```
+
+## Tax behavior in practice
+
+`tax_behavior` decides whether a line item's `amount` is gross or net.
+
+<Tabs items={["Exclusive", "Inclusive"]}>
+<Tab value="Exclusive">
+
+A EUR 100.00 line item at 20% VAT produces a EUR 20.00 tax line. The customer pays EUR 120.00. Common for B2B invoicing where prices are quoted net.
+
+</Tab>
+<Tab value="Inclusive">
+
+A EUR 100.00 line item at 20% VAT already contains EUR 16.67 of tax. The customer pays EUR 100.00; the tax line is informational. Common for B2C catalogs with tax-included pricing.
+
+</Tab>
+</Tabs>
+
+<Callout type="info">
+Set a customer's `tax_exempt` flag to `reverse` for EU reverse-charge or `exempt` for non-taxable entities. VINR then emits a zero-rated tax line with the reason recorded for your records.
+</Callout>
+
+## Resulting events
+
+| Event | When it fires |
+|---|---|
+| `invoice.created` | A draft invoice opens and line items are attached. |
+| `invoice.finalized` | Discounts and tax are computed; the total is locked. |
+| `invoice.paid` | Collection against the customer's default method succeeds. |
+
+Verify the signature on every webhook before trusting its contents.
+
+```typescript
+const event = vinr.webhooks.verify(payload, request.headers['x-vinr-signature']);
+
+if (event.type === 'invoice.finalized') {
+  const inv = event.data.object;       // "inv_..."
+  console.log('Locked total', inv.amount_due, inv.currency);
+}
+```
+
+## Edge cases
+
+<Accordions>
+<Accordion title="Mixed currencies on one invoice">
+Every line item must share the invoice currency. A subscription priced in USD cannot share an invoice with a EUR one-off charge; VINR rejects the mismatched `invoiceItems.create` call. Use separate invoices per currency.
+</Accordion>
+<Accordion title="Proration rounding">
+Proration amounts are computed to the second, then rounded to the minor unit at finalization. A credit and its matching charge are rounded independently, so a mid-cycle swap may leave a one-cent residual on the next invoice. This is expected.
+</Accordion>
+<Accordion title="Discounts larger than the subtotal">
+A fixed-amount coupon that exceeds the subtotal floors `amount_due` at zero — VINR never produces a negative invoice. Any unused discount is not carried forward unless the coupon is configured as recurring.
+</Accordion>
+<Accordion title="Tax with no resolvable address">
+If the customer has no usable address, VINR cannot compute jurisdiction-based tax and finalizes with a zero tax line. Collect a billing address before finalization to avoid under-charging.
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Tax" href="/docs/billing/tax" description="Configure rates, jurisdictions, and exemptions." />
+  <Card title="Coupons & discounts" href="/docs/billing/coupons-and-discounts" description="Reduce the subtotal before tax." />
+  <Card title="Usage-based billing" href="/docs/billing/usage-based-billing" description="Turn metered usage into line items." />
+</Cards>

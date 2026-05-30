@@ -1,0 +1,121 @@
+---
+title: Rewards catalog
+description: Define what members can redeem points for.
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+The rewards catalog is the menu of everything a member can spend points on — a percentage discount, a free product, store credit, or a partner perk. Each entry declares what it costs, when it is available, and who qualifies, so [redemption](/docs/engagement/redemption) can validate and issue it without bespoke logic.
+
+## The reward object
+
+A `reward` (prefix `rwd_`) is a reusable catalog template. Redeeming one produces a `redemption` (prefix `rdm_`) — the record of a specific member spending points at a specific time. Rewards live in your program, are referenced at checkout, and emit events when redeemed.
+
+<TypeTable type={{
+  id: { type: "string", description: "Reward identifier, e.g. rwd_freecoffee." },
+  type: { type: "enum", description: "discount_percent | discount_amount | store_credit | free_product | partner.", default: "discount_amount" },
+  cost: { type: "integer", description: "Points required to redeem one unit." },
+  value: { type: "object", description: "Type-specific payload — see Reward types below." },
+  active: { type: "boolean", description: "Whether the reward can currently be redeemed.", default: "true" },
+  inventory: { type: "integer | null", description: "Remaining redeemable units, or null for unlimited.", default: "null" },
+}} />
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// A 500-point reward worth EUR 5.00 off the cart.
+const reward = await vinr.loyalty.rewards.create({
+  program: 'prog_default',
+  name: '€5 off your order',
+  type: 'discount_amount',
+  cost: 500,
+  value: { amount: 500, currency: 'EUR' },   // minor units
+});                                            // "rwd_..."
+```
+
+## Reward types
+
+The `type` field selects how the reward applies once redeemed. The `value` payload differs per type.
+
+| Type | `value` shape | Applied as |
+|---|---|---|
+| `discount_percent` | `{ percent: 10 }` | Percent off the eligible cart subtotal. |
+| `discount_amount` | `{ amount: 500, currency: 'EUR' }` | Fixed minor-unit discount at [checkout](/docs/engagement/redemption). |
+| `store_credit` | `{ amount: 1000, currency: 'EUR' }` | Balance added to the linked [customer](/docs/payments/customers). |
+| `free_product` | `{ product: 'prod_...', quantity: 1 }` | A catalog [product](/docs/billing/products-and-prices) added at zero cost. |
+| `partner` | `{ partner: 'acme', sku: 'GIFT20' }` | An external fulfillment reference VINR records but does not ship. |
+
+<Callout type="info">
+`discount_percent` and `discount_amount` redemptions return a discount token your checkout passes to the [payment](/docs/payments) so the member sees the reduction at the moment of paying.
+</Callout>
+
+## Cost & availability
+
+`cost` is always expressed in points, never currency. The relationship between points and money is set by your earning rules — VINR does not assume a fixed conversion. Two controls gate availability:
+
+- **`active`** — a master switch. Flip to `false` to retire a reward without deleting its history.
+- **`inventory`** — optional scarcity. Each successful redemption decrements it; at `0` the reward is shown but cannot be redeemed. Use `null` for unlimited.
+
+```typescript
+// Limited drop: 200 units, then it sells out.
+await vinr.loyalty.rewards.update('rwd_limited', {
+  active: true,
+  inventory: 200,
+});
+```
+
+You can also window availability with `availableFrom` and `availableUntil` ISO-8601 timestamps for seasonal or [campaign](/docs/engagement/campaigns)-bound rewards.
+
+## Eligibility rules
+
+Beyond cost and inventory, an optional `eligibility` block restricts who can redeem. Rules are evaluated at redemption time against the member's state; failing any rule returns a `reward_not_eligible` error.
+
+```typescript
+await vinr.loyalty.rewards.update('rwd_goldperk', {
+  eligibility: {
+    minTier: 'gold',                 // see Tiers & status
+    firstTimeOnly: false,
+    maxPerMember: 2,                  // lifetime cap
+    minAccountAgeDays: 30,
+  },
+});
+```
+
+| Rule | Effect |
+|---|---|
+| `minTier` | Member must be at or above this [tier](/docs/engagement/tiers-and-status). |
+| `maxPerMember` | Lifetime redemption cap per `loyalty_account`. |
+| `firstTimeOnly` | Redeemable only if the member has never redeemed it. |
+| `minAccountAgeDays` | Guards against same-day signup abuse. |
+
+<Callout type="warn">
+Eligibility is enforced server-side on every redemption. Never gate rewards purely in your UI — a member can call the API directly, and only the VINR check is authoritative.
+</Callout>
+
+## Managing the catalog
+
+List, filter, and archive rewards as your program evolves. Listing supports filtering by `active` and `type`.
+
+```typescript
+// Show the live menu a member could browse.
+const { data } = await vinr.loyalty.rewards.list({
+  program: 'prog_default',
+  active: true,
+});
+
+for (const r of data) {
+  console.log(`${r.name} — ${r.cost} pts`);
+}
+```
+
+Prefer `active: false` over deletion: redemptions reference their reward, and archiving preserves that audit trail. Catalog changes emit `loyalty.reward.created` and `loyalty.reward.updated`; redemptions emit `loyalty.reward.redeemed`. Subscribe to keep downstream systems (analytics, fulfillment) in sync — verify each delivery with `vinr.webhooks.verify(payload, signature)`.
+
+## Next steps
+
+<Cards>
+  <Card title="Redemption" href="/docs/engagement/redemption" description="Spend points and apply rewards at checkout." />
+  <Card title="Tiers & status" href="/docs/engagement/tiers-and-status" description="Gate premium rewards by member tier." />
+  <Card title="Earning rules" href="/docs/engagement/earning-rules" description="Set how members accumulate the points rewards cost." />
+</Cards>

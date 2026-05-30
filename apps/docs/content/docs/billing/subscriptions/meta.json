@@ -1,0 +1,14 @@
+{
+  "title": "Subscriptions",
+  "pages": [
+    "index",
+    "lifecycle",
+    "creating-subscriptions",
+    "managing-subscriptions",
+    "upgrades-and-downgrades",
+    "pausing-and-resuming",
+    "cancellations",
+    "subscription-schedules",
+    "webhooks-and-events"
+  ]
+}

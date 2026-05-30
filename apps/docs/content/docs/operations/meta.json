@@ -1,0 +1,15 @@
+{
+  "root": true,
+  "title": "Operations",
+  "icon": "Activity",
+  "pages": [
+    "index",
+    "dashboard",
+    "settlement",
+    "payouts",
+    "reconciliation",
+    "reporting",
+    "balances",
+    "monitoring-and-alerts"
+  ]
+}

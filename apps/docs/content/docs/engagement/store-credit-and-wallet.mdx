@@ -1,0 +1,145 @@
+---
+title: Store credit & wallet
+description: Hold balances members can spend like cash.
+persona: ["developer", "finance-manager"]
+priority: "P2"
+lastUpdated: "2026-05-30"
+---
+
+Store credit is a cash-like balance attached to a member's [loyalty account](/docs/engagement/loyalty-accounts). Unlike points, it carries a real monetary value, denominated in a currency, that can be applied directly against the amount due at checkout. Use it for refunds-to-credit, goodwill gestures, prepaid top-ups, and reward payouts.
+
+## Store credit vs. points
+
+Both live on the loyalty account, but they behave differently and you should not conflate them.
+
+| | Points | Store credit |
+|---|---|---|
+| Unit | Abstract currency (e.g. "stars") | Money, in minor units + currency |
+| Value | Variable — set by reward pricing | Fixed — `1000` credit = EUR 10.00 |
+| Spent on | Rewards from the catalog | Any purchase, like cash |
+| Expiry | Common | Optional; often regulated |
+| On the books | Marketing liability | A redeemable monetary liability |
+
+<Callout type="warn">
+Store credit is real value you owe the member. In many jurisdictions it is treated like a gift card or prepaid balance, with rules on expiry and escheatment. This affects how it appears in [settlement reporting](/docs/operations/reconciliation). Treat the balance as a liability, not revenue.
+</Callout>
+
+The credit balance is held in a `wallet` on the loyalty account. Each mutation produces a `credit_transaction` (prefix `ptx_`, the same ledger family as points) so every change is auditable.
+
+## Issuing credit
+
+Credit the wallet for a refund, a reward payout, a promotion, or a customer-funded top-up. Always set a `reason` and an idempotency key — issuing is a financial write.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// Grant EUR 15.00 of goodwill credit to a member.
+const txn = await vinr.loyalty.credit.issue(
+  {
+    account: 'loy_8h2k',
+    amount: 1500,            // minor units
+    currency: 'EUR',
+    reason: 'goodwill',      // shows in the audit ledger
+    expiresAt: '2026-12-31', // optional
+    metadata: { ticket: 'ZD-4821' },
+  },
+  { idempotencyKey: 'goodwill-ZD-4821' },
+);
+
+console.log(txn.id, txn.walletBalance); // "ptx_...", 1500
+```
+
+<TypeTable type={{
+  account: { type: "string", description: "Loyalty account to credit (loy_...).", default: "—" },
+  amount: { type: "integer", description: "Positive amount in minor units.", default: "—" },
+  currency: { type: "string", description: "ISO currency; must match an existing wallet balance.", default: "EUR" },
+  reason: { type: "string", description: "refund | reward | promotion | topup | goodwill | adjustment.", default: "—" },
+  expiresAt: { type: "string", description: "ISO date after which the balance lapses.", default: "null" }
+}} />
+
+A wallet holds one balance per currency. Issuing in a new currency opens a new balance rather than converting — VINR never auto-converts member funds.
+
+## Spending at checkout
+
+Credit is applied as a payment source, reducing the amount the customer pays by card. Reserve the credit when you create the payment, then it captures atomically with the charge.
+
+```typescript
+// Apply up to the member's available credit to a EUR 40.00 order.
+const payment = await vinr.payments.create({
+  amount: 4000,
+  currency: 'EUR',
+  customer: 'cust_abc123',
+  sources: [
+    { type: 'store_credit', account: 'loy_8h2k', maxAmount: 4000 },
+    { type: 'card', token: 'tok_visa' },
+  ],
+});
+
+// payment.allocations shows how the total was split.
+// [{ source: 'store_credit', amount: 1500 }, { source: 'card', amount: 2500 }]
+```
+
+<Steps>
+
+### Reserve
+
+When the payment is created, VINR places a hold on the lesser of `maxAmount` and the available balance. The held amount cannot be spent twice.
+
+### Capture
+
+On `payment.completed`, the held credit is debited and a `credit_transaction` with reason `spend` is written. The card is charged only for the remainder.
+
+### Release
+
+If the payment fails or is cancelled, the hold is released automatically and the balance returns to available.
+
+</Steps>
+
+<Callout type="info">
+Order the `sources` array credit-first so the smaller card charge minimizes processing fees. If credit covers the full amount, no card source is needed.
+</Callout>
+
+## Refunds to credit
+
+Refunding to store credit instead of the original card keeps funds in your ecosystem and settles instantly. Pass `destination: 'store_credit'` when refunding a payment.
+
+```typescript
+const refund = await vinr.payments.refund('pay_9f1c', {
+  amount: 2000,
+  destination: 'store_credit',
+  account: 'loy_8h2k',
+});
+
+// Emits refund.completed AND loyalty.credit.issued (reason: 'refund').
+```
+
+If the original purchase earned points, the refund-to-credit still claws those points back — see [Linking payments & loyalty](/docs/engagement/linking-payments-and-loyalty). Refunding to credit does not move money off your settlement balance; refunding to card does.
+
+## Balance reporting
+
+Read a wallet's live balances, or page the ledger for reconciliation. Every entry references the originating object (`pay_`, `re_`, `rdm_`).
+
+```typescript
+const wallet = await vinr.loyalty.credit.balance('loy_8h2k');
+// { balances: [{ currency: 'EUR', available: 3500, reserved: 0 }] }
+
+const ledger = await vinr.loyalty.credit.transactions.list({
+  account: 'loy_8h2k',
+  limit: 50,
+});
+```
+
+For finance teams, the outstanding credit liability across all members is exported nightly and reconciled against your ledger in [Reconciliation & reporting](/docs/operations/reconciliation). Track the `loyalty.credit.issued` and `loyalty.credit.spent` [webhooks](/docs/integration/webhooks) to mirror balances into your own accounting system in real time.
+
+<Callout type="warn">
+Never compute a spendable balance from `available + reserved`. Spend only against `available`; the `reserved` portion is already committed to in-flight payments.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Loyalty accounts" href="/docs/engagement/loyalty-accounts" description="Where the wallet lives." />
+  <Card title="Linking payments & loyalty" href="/docs/engagement/linking-payments-and-loyalty" description="Apply and claw back at checkout." />
+  <Card title="Reconciliation & reporting" href="/docs/operations/reconciliation" description="Account for the credit liability." />
+</Cards>

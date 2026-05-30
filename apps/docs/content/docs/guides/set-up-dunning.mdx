@@ -1,0 +1,182 @@
+---
+title: Set up dunning & recovery
+description: Set up dunning & recovery — a runnable, end-to-end guide verified against the VINR sandbox.
+category: "billing"
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+When a recurring charge fails — an expired card, insufficient funds, a bank decline — the subscription doesn't have to be lost. Dunning is the automated retry-and-notify loop that recovers those payments. This guide configures a dunning policy, wires the events that drive your in-app messaging, and verifies recovery end-to-end against the VINR sandbox.
+
+## How dunning works
+
+A failed invoice doesn't immediately cancel the subscription. VINR moves it into a recovery window and works your dunning policy until the payment succeeds or the window expires.
+
+```
+invoice.payment_failed
+        │
+        ▼
+  ┌─────────────┐   retry 1   retry 2   retry 3
+  │ recovery on │──────────────────────────────►  invoice.paid  ✅
+  │ (subscription│  + dunning email each attempt
+  │  = past_due) │
+  └─────────────┘──────────────────────────────►  window expires
+                                                   subscription.deleted ❌
+```
+
+While an invoice is unpaid, the subscription sits in `past_due`. Each retry either resolves it (`invoice.paid`, subscription back to `active`) or, once attempts are exhausted, triggers your configured terminal action.
+
+## Configure a dunning policy
+
+A dunning policy defines the retry schedule, the email cadence, and what happens when recovery fails. Create one and attach it to a subscription, or set it as your account default in the [Dashboard](/docs/billing).
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const policy = await vinr.dunning.policies.create({
+  name: 'Standard recovery',
+  retrySchedule: {
+    mode: 'smart',              // or 'fixed' with explicit offsets
+    maxAttempts: 4,
+    windowDays: 21,             // give up after 21 days past_due
+  },
+  emails: {
+    onFailure: true,            // send on each failed attempt
+    onFinalAttempt: true,       // last-chance reminder
+  },
+  terminalAction: 'cancel',     // 'cancel' | 'pause' | 'leave_past_due'
+});
+```
+
+Attach it when creating or updating a subscription:
+
+```typescript
+await vinr.subscriptions.update('sub_8Qz2vH', {
+  dunningPolicy: policy.id,
+});
+```
+
+<TypeTable
+  type={{
+    "retrySchedule.mode": { type: "'smart' | 'fixed'", description: "Smart retries optimize timing per decline reason; fixed uses your offsets.", default: "smart" },
+    "retrySchedule.maxAttempts": { type: "number", description: "Total retry attempts before the terminal action.", default: "4" },
+    "retrySchedule.windowDays": { type: "number", description: "Days an invoice may stay in recovery before giving up.", default: "21" },
+    "terminalAction": { type: "string", description: "What to do when recovery is exhausted: cancel, pause, or leave_past_due.", default: "cancel" },
+  }}
+/>
+
+## Choose smart or fixed retries
+
+Smart retries let VINR pick each attempt's timing from the decline code and historical recovery data — a `insufficient_funds` decline is retried near a likely payday, while a hard `card_declined` backs off longer. Most merchants should leave this on.
+
+If you need deterministic timing (for predictable customer messaging or compliance), use a fixed schedule with explicit offsets measured in hours from the first failure:
+
+```typescript
+const policy = await vinr.dunning.policies.create({
+  name: 'Fixed cadence',
+  retrySchedule: {
+    mode: 'fixed',
+    offsetsHours: [24, 72, 168, 336],   // +1d, +3d, +7d, +14d
+    windowDays: 21,
+  },
+  terminalAction: 'pause',
+});
+```
+
+<Callout type="info">
+Hard declines (lost or stolen card, `do_not_honor`) are never retried — they will only succeed once the customer updates their payment method. Drive those through [the customer portal](/docs/billing/customer-portal) instead.
+</Callout>
+
+## Customer communications
+
+Each retry can fire a dunning email from VINR, but the highest-recovery move is getting the customer to fix their card. Use the events to surface an in-app banner and a one-click update link.
+
+```typescript
+export async function POST(req: Request) {
+  const event = vinr.webhooks.verify(
+    await req.text(),
+    req.headers.get('x-vinr-signature'),
+  );
+
+  switch (event.type) {
+    case 'invoice.payment_failed': {
+      const inv = event.data;
+      // inv.dunning.attempt, inv.dunning.nextRetryAt available
+      await showBillingBanner(inv.customer, {
+        message: 'Your payment failed — please update your card.',
+        portalUrl: await createPortalLink(inv.customer),
+      });
+      break;
+    }
+    case 'invoice.paid':
+      await clearBillingBanner(event.data.customer);   // recovered
+      break;
+    case 'subscription.deleted':
+      await revokeAccess(event.data.customer);          // recovery exhausted
+      break;
+  }
+  return new Response('OK', { status: 200 });
+}
+```
+
+Generate the portal link so the customer can replace their card without leaving your app:
+
+```typescript
+async function createPortalLink(customerId: string) {
+  const session = await vinr.billing.portalSessions.create({
+    customer: customerId,
+    returnUrl: 'https://yoursite.com/account/billing',
+  });
+  return session.url;
+}
+```
+
+## Recovery reporting
+
+Track how much revenue the policy is recovering. The dunning summary aggregates attempts, recovered amount, and active recoveries over a period.
+
+```typescript
+const report = await vinr.dunning.summary.retrieve({
+  from: '2026-05-01',
+  to: '2026-05-31',
+});
+
+console.log(report.recoveredAmount);   // minor units, e.g. 184500 = €1,845.00
+console.log(report.recoveryRate);      // 0.62
+console.log(report.inRecovery);        // invoices still being worked
+```
+
+<Callout type="info">
+Recovered amounts are reported in minor units (`184500` = EUR 1,845.00). The same figures appear under Billing → Recovery in the [Dashboard](/docs/billing).
+</Callout>
+
+## Test it in the sandbox
+
+Force a failed renewal, then watch it recover:
+
+<Steps>
+
+### Create a subscription with a card that will decline
+
+Attach the always-declines card `4000 0000 0000 0002` to a sandbox customer and start a subscription on a short interval.
+
+### Trigger a renewal
+
+Advance the billing clock from the Dashboard (or wait for the renewal). You'll receive `invoice.payment_failed` and the subscription moves to `past_due`.
+
+### Swap to a good card and retry
+
+Update the customer's default method to `4242 4242 4242 4242`, then trigger the next retry. You'll receive `invoice.paid` and the subscription returns to `active`.
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="Create a subscription" href="/docs/guides/create-a-subscription" description="Set up recurring billing before adding recovery." />
+  <Card title="Customer portal" href="/docs/billing/customer-portal" description="Let customers update cards and fix failed payments." />
+  <Card title="Billing overview" href="/docs/billing" description="Invoices, subscriptions, and the recovery dashboard." />
+</Cards>

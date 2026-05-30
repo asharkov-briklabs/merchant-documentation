@@ -1,0 +1,201 @@
+---
+title: Earn & redeem loyalty at checkout
+description: Earn & redeem loyalty at checkout — a runnable, end-to-end guide verified against the VINR sandbox.
+category: "engagement"
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+This guide wires VINR [Engagement](/docs/engagement) into the checkout you already built in [Accept a one-time payment](/docs/guides/accept-a-payment): link the payer to a loyalty account, let them spend points for an instant discount, award fresh points when the charge completes, and claw points back if the order is refunded. It's runnable against the sandbox — swap your test keys in and follow along.
+
+## Overview
+
+```
+your server            VINR                customer
+    │  resolve member  │                     │
+    │─────────────────►│                     │
+    │  redeem points   │                     │
+    │─────────────────►│  discount applied   │
+    │  create payment  │                     │
+    │─────────────────►│  redirect ─────────►│ pays on hosted page
+    │  payment.completed (webhook)           │
+    │◄─────────────────│◄────────────────────│
+    │  award points    │                     │
+    │  payment.refunded → clawback points    │
+```
+
+Points are *redeemed before* the charge (they reduce the amount) and *earned after* the charge (so a failed payment never mints points). Both steps key off the same order, so a single `orderId` ties the payment, the redemption, and the points transaction together.
+
+<Callout type="info">
+You need a loyalty program (`prog_…`) before you start. Create one in the [Dashboard](/docs/engagement/programs) or via the API, and note its earn rate (here: 1 point per €1, i.e. 1 point per 100 minor units).
+</Callout>
+
+## Resolve the loyalty account
+
+Look up the member's loyalty account from your own customer ID. If they've never enrolled, create the account on the fly so first-time buyers still earn.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+async function getLoyaltyAccount(customerId: string) {
+  const existing = await vinr.loyalty.accounts.list({
+    program: 'prog_summer',
+    customer: customerId,
+  });
+  if (existing.data.length > 0) return existing.data[0];
+
+  return vinr.loyalty.accounts.create({
+    program: 'prog_summer',
+    customer: customerId,          // cust_…
+  });
+}
+```
+
+## Redeem points for a discount
+
+Offer the member their balance as a discount, capped so they can't drive the order below your minimum. Reserve the redemption *before* creating the payment; you'll commit or release it based on the outcome.
+
+```typescript
+async function applyRedemption(account, orderTotal: number) {
+  // 100 points = €1.00 (100 minor units). Never discount more than 50%.
+  const maxPoints = Math.min(account.balance, Math.floor(orderTotal / 2));
+  if (maxPoints <= 0) return { discount: 0, redemption: null };
+
+  const redemption = await vinr.loyalty.redemptions.create(
+    {
+      account: account.id,         // loy_…
+      points: maxPoints,
+      state: 'reserved',           // hold, don't burn yet
+    },
+    { idempotencyKey: `redeem-${orderTotal}-${account.id}` },
+  );
+
+  return { discount: redemption.value, redemption }; // value in minor units
+}
+```
+
+<Callout type="warn">
+A `reserved` redemption holds the points but does not deduct them. You **must** either `commit` it on success or `release` it on failure, or the hold expires after 30 minutes and the points return automatically.
+</Callout>
+
+## Create the discounted payment
+
+Subtract the redemption value from the order total, then create the payment exactly as in [Accept a payment](/docs/guides/accept-a-payment). Carry the IDs in `metadata` so the webhook can finish the job.
+
+```typescript
+export async function POST(req: Request) {
+  const { orderId, customerId, orderTotal } = await req.json();
+
+  const account = await getLoyaltyAccount(customerId);
+  const { discount, redemption } = await applyRedemption(account, orderTotal);
+
+  const payment = await vinr.payments.create(
+    {
+      amount: orderTotal - discount,
+      currency: 'EUR',
+      description: `Order ${orderId}`,
+      returnUrl: `https://yoursite.com/orders/${orderId}/complete`,
+      metadata: {
+        orderId,
+        loyaltyAccount: account.id,
+        redemptionId: redemption?.id ?? '',
+        grossAmount: String(orderTotal),   // pre-discount, for earning
+      },
+    },
+    { idempotencyKey: `order-${orderId}` },
+  );
+
+  return Response.json({ checkoutUrl: payment.checkoutUrl });
+}
+```
+
+## Award & commit on the webhook
+
+Fulfil from the webhook so points are earned exactly once. On success, commit the redemption and award points on the **gross** amount; on failure, release the hold so nothing is lost.
+
+```typescript
+export async function POST(req: Request) {
+  const event = vinr.webhooks.verify(
+    await req.text(),
+    req.headers.get('x-vinr-signature'),
+  );
+  const m = event.data.metadata;
+
+  switch (event.type) {
+    case 'payment.completed':
+      if (m.redemptionId) {
+        await vinr.loyalty.redemptions.commit(m.redemptionId); // burn points
+      }
+      await vinr.loyalty.points.earn(                          // mint points
+        {
+          account: m.loyaltyAccount,
+          points: Math.floor(Number(m.grossAmount) / 100),     // 1 pt / €1
+          reason: 'purchase',
+          source: { payment: event.data.id },
+        },
+        { idempotencyKey: `earn-${m.orderId}` },
+      );
+      break;
+
+    case 'payment.failed':
+      if (m.redemptionId) {
+        await vinr.loyalty.redemptions.release(m.redemptionId); // return hold
+      }
+      break;
+  }
+  return new Response('OK', { status: 200 });
+}
+```
+
+## Refund & clawback handling
+
+When an order is refunded, reverse the points you minted for it. Listen for `payment.refunded` and issue a negative points transaction scoped to the original payment so balances can't go stale.
+
+```typescript
+case 'payment.refunded': {
+  const earned = await vinr.loyalty.points.list({
+    account: m.loyaltyAccount,
+    source: { payment: event.data.id },
+    reason: 'purchase',
+  });
+  for (const ptx of earned.data) {
+    await vinr.loyalty.points.clawback(
+      { transaction: ptx.id, reason: 'refund' }, // ptx_…
+      { idempotencyKey: `clawback-${ptx.id}` },
+    );
+  }
+  break;
+}
+```
+
+<Callout type="info">
+Clawbacks can push a balance negative if the member already spent the points elsewhere. VINR allows this by default; the next earn event settles it. Set the program's `allowNegativeBalance` flag to `false` to block redemptions instead.
+</Callout>
+
+## Test it
+
+Drive the full loop in the sandbox with these cards on the hosted page:
+
+| Card | Result | Loyalty effect |
+|---|---|---|
+| `4242 4242 4242 4242` | Success | Redemption committed, points earned |
+| `4000 0000 0000 0002` | Declined | Redemption released, no points |
+| `4000 0000 0000 3220` | 3D Secure challenge | Earns on completion after SCA |
+
+After a successful run, retrieve the account and confirm the math: new balance equals old balance, minus committed points, plus earned points.
+
+```bash
+curl https://sandbox.api.vinr.com/v1/loyalty/accounts/loy_123 \
+  -H "X-Api-Key: $VINR_SECRET_KEY"
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Engagement overview" href="/docs/engagement" description="Programs, tiers, points, and rewards." />
+  <Card title="Loyalty webhook events" href="/docs/engagement/loyalty-events" description="Every loyalty.points.* event and its payload." />
+  <Card title="Accept a one-time payment" href="/docs/guides/accept-a-payment" description="The checkout flow this guide extends." />
+</Cards>

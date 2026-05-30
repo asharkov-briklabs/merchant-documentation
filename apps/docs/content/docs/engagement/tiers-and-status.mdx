@@ -1,0 +1,158 @@
+---
+title: Tiers & status
+description: Reward your best customers with status levels.
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Tiers grant escalating benefits as members qualify through spend or points. VINR tracks qualification, promotion, and demotion automatically, emitting events at every transition so your app and your member communications stay in sync.
+
+## How tiers fit a program
+
+A program holds an ordered list of tiers, each with a numeric `rank` (0 is the entry tier). A member always sits in exactly one tier. VINR continuously evaluates each member's **qualifying value** against tier thresholds and moves them up or down — you never write promotion logic yourself.
+
+| Concept | Meaning |
+|---|---|
+| `tier` | A status level: a name, a `rank`, a threshold, and benefits. |
+| Qualifying value | The metric measured against thresholds (points, spend, or a custom counter). |
+| Tier period | The rolling or fixed window over which qualifying value accumulates. |
+| Promotion / demotion | Automatic transitions when qualifying value crosses a threshold. |
+
+<Callout type="info">
+Tiers are **status**, not a balance. A member can spend their entire points balance on rewards and keep their Gold tier — qualification and spendable points are tracked separately.
+</Callout>
+
+## Defining tiers
+
+Define tiers on the program, lowest rank first. Each tier names a `threshold` expressed in the program's qualifying metric.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+await vinr.loyalty.programs.update('prog_default', {
+  tierConfig: {
+    qualifyOn: 'spend',          // 'spend' | 'points' | 'custom'
+    period: { type: 'rolling', months: 12 },
+    tiers: [
+      { name: 'Member', rank: 0, threshold: 0 },
+      { name: 'Silver', rank: 1, threshold: 50000 },   // EUR 500 spend
+      { name: 'Gold',   rank: 2, threshold: 150000 },  // EUR 1,500
+      { name: 'Platinum', rank: 3, threshold: 500000 },// EUR 5,000
+    ],
+  },
+});
+```
+
+Thresholds use the same minor-unit integers as everywhere else in VINR when `qualifyOn` is `spend` (`50000` = EUR 500.00), or raw point counts when `qualifyOn` is `points`.
+
+<TypeTable
+  type={{
+    qualifyOn: { type: "'spend' | 'points' | 'custom'", description: "The metric measured for qualification.", default: "'spend'" },
+    period: { type: "object", description: "Rolling or fixed-calendar accumulation window.", default: "rolling 12 months" },
+    tiers: { type: "Tier[]", description: "Ordered tiers; rank 0 is the entry tier.", default: "—" },
+  }}
+/>
+
+## Qualification criteria
+
+The `qualifyOn` setting decides what counts toward status:
+
+| `qualifyOn` | Qualifying value | Typical use |
+|---|---|---|
+| `spend` | Sum of completed payment amounts in the period. | Spend-based status (airlines, retail). |
+| `points` | Points **earned** in the period (not balance). | Points-as-status programs. |
+| `custom` | A counter you increment via the API. | Visits, nights, or any domain metric. |
+
+For `custom`, advance a member's qualifying value yourself — for example, one credit per completed stay:
+
+```typescript
+await vinr.loyalty.accounts.recordQualifyingActivity('loy_abc123', {
+  amount: 1,                       // one qualifying unit
+  reason: 'stay.completed',
+  reference: 'pay_9f2a',
+});
+```
+
+<Callout type="warn">
+When `qualifyOn` is `points`, **earned** points drive status, not the redeemable balance. Redeeming or expiring points never demotes a member within the active period.
+</Callout>
+
+## Promotion & demotion
+
+VINR re-evaluates a member whenever their qualifying value changes — after a `payment.completed`, a points award, or a recorded custom activity. Transitions are immediate and idempotent.
+
+<Steps>
+
+### Qualifying value updates
+
+A payment completes or a custom activity is recorded. Engagement recomputes the member's qualifying value for the current period.
+
+### Threshold crossed upward
+
+If the value now meets a higher tier's `threshold`, the member is promoted at once. VINR emits `loyalty.tier.changed` with `direction: "up"`.
+
+### Period closes below threshold
+
+At period close (or on each rolling recalculation), if accumulated value falls below the current tier's threshold, the member is demoted by one rank and `loyalty.tier.changed` fires with `direction: "down"`.
+
+</Steps>
+
+Subscribe to the transition event to trigger member communications or unlock app features:
+
+```typescript
+const event = vinr.webhooks.verify(payload, signature); // x-vinr-signature
+
+if (event.type === 'loyalty.tier.changed' && event.data.direction === 'up') {
+  await sendCongratsEmail(event.data.account, event.data.toTier);
+}
+```
+
+## Tier benefits
+
+Benefits are configuration, not code — VINR applies them automatically when a member acts. Common benefits:
+
+- **Earn multipliers** — Gold earns 1.5x points per euro. Stacks with [earning rules](/docs/engagement/earning-rules).
+- **Exclusive rewards** — gate catalog items to a minimum `rank` so only Platinum can redeem them.
+- **Reduced redemption cost** — discount the points price of [rewards](/docs/engagement/rewards-catalog) for higher tiers.
+
+Read a member's current tier and active benefits at any time:
+
+```typescript
+const member = await vinr.loyalty.accounts.retrieve('loy_abc123');
+console.log(member.tier.name);            // "Gold"
+console.log(member.tier.earnMultiplier);  // 1.5
+console.log(member.qualifyingValue);      // 162000 (EUR 1,620 this period)
+```
+
+## Tier periods & resets
+
+The `period` controls how qualifying value accumulates and when it resets.
+
+| `period.type` | Behaviour |
+|---|---|
+| `rolling` | A moving window (e.g. trailing 12 months). Status reflects recent activity continuously. |
+| `calendar` | A fixed window (e.g. each calendar year) that resets all members at once on a reset date. |
+
+<Callout type="info">
+Many programs grant a **grace period** after demotion. Set `softLanding: true` so a demoted member drops only one rank per period rather than falling straight to entry level — a common retention practice.
+</Callout>
+
+A reset re-baselines qualifying value to zero but never touches a member's redeemable points balance. To preview where members stand before a calendar reset, query qualification without waiting for the period to close:
+
+```typescript
+const standings = await vinr.loyalty.accounts.list({
+  program: 'prog_default',
+  tier: 'Gold',
+  atRisk: true,          // below threshold for next period
+});
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Earning rules" href="/docs/engagement/earning-rules" description="Configure how members accrue points and multipliers." />
+  <Card title="Rewards catalog" href="/docs/engagement/rewards-catalog" description="Gate rewards to tiers and discount their cost." />
+  <Card title="How engagement works" href="/docs/engagement/how-engagement-works" description="The object graph and event loop behind tiers." />
+</Cards>

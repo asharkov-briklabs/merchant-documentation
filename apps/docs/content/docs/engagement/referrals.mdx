@@ -1,0 +1,139 @@
+---
+title: Referrals
+description: Turn members into advocates.
+persona: ["developer", "business-owner"]
+priority: "P2"
+lastUpdated: "2026-05-30"
+---
+
+Referrals turn your existing members into a low-cost acquisition channel: a member shares a code, a new customer converts, and both sides earn a reward. VINR handles the unique codes, attribution, double-sided payouts, and the fraud controls that keep the program honest.
+
+## Referral mechanics
+
+A referral is a small state machine attached to a loyalty program. Each step emits an event so Engagement (and your webhooks) can react.
+
+| State | Meaning | Event |
+|---|---|---|
+| `pending` | A code was shared; nobody has signed up against it yet. | `referral.created` |
+| `attributed` | A new customer signed up or made a first purchase using the code. | `referral.attributed` |
+| `converted` | The referee met the qualifying condition (e.g. first payment over the minimum). Rewards are issued. | `referral.converted` |
+| `rejected` | Fraud controls or eligibility rules blocked the referral. | `referral.rejected` |
+
+The **referrer** is the existing member who shares the code. The **referee** is the new customer who redeems it. Rewards only fire on `converted`, so a signup alone never costs you anything.
+
+<Callout type="info">
+Referrals live inside a loyalty [program](/docs/engagement/how-engagement-works). Configure the qualifying condition and reward amounts once on the program; every code inherits them.
+</Callout>
+
+## Generating referral codes
+
+Every loyalty account can mint a referral code. Codes are short, human-shareable, and tied to the referrer for attribution.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// Mint a referral code for an existing member.
+const referral = await vinr.loyalty.referrals.create({
+  program: 'prog_default',
+  referrer: 'loy_abc123',          // the member doing the referring
+  reward: {
+    referrer: { points: 500 },     // both sides earn on conversion
+    referee: { points: 250 },
+  },
+  qualify: {
+    firstPaymentMinimum: 2000,     // referee must spend ≥ EUR 20.00
+    windowDays: 30,                // within 30 days of signup
+  },
+});
+
+console.log(referral.code);        // e.g. "ANNA-7F3K"
+console.log(referral.shareUrl);    // hosted landing page with the code prefilled
+```
+
+Reuse the same code per member — do not generate a fresh code per share. The `shareUrl` is a hosted page you can drop into emails or social posts; it sets a short-lived attribution cookie and forwards to your signup flow.
+
+## Attribution
+
+Attribution links a new customer back to the referrer. Pass the code when you create the customer (or on their first payment), and VINR records the link.
+
+<Tabs items={["SDK", "REST"]}>
+<Tab value="SDK">
+
+```typescript
+// Attribute a new customer to a referral at signup.
+await vinr.loyalty.referrals.attribute({
+  code: 'ANNA-7F3K',
+  customer: 'cust_new789',
+});
+```
+
+</Tab>
+<Tab value="REST">
+
+```bash
+curl https://api.vinr.com/v1/loyalty/referrals/attribute \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -d code=ANNA-7F3K \
+  -d customer=cust_new789
+```
+
+</Tab>
+</Tabs>
+
+VINR resolves attribution in priority order:
+
+1. **Explicit code** passed to `attribute` or to the customer's `metadata.referral_code`.
+2. **Click attribution** from a `shareUrl` visit, matched by the cookie set on the landing page.
+
+First touch wins — once a customer is attributed, a later code does not overwrite it. Self-referral (the referrer's own customer) is rejected automatically.
+
+## Double-sided rewards
+
+Rewards are defined on the referral and issued only when the referee **converts**. Listen for `referral.converted` to confirm both transactions landed.
+
+```typescript
+// In your webhook handler.
+const event = vinr.webhooks.verify(payload, req.headers['x-vinr-signature']);
+
+if (event.type === 'referral.converted') {
+  const { referrer, referee, transactions } = event.data;
+  // transactions: ["ptx_referrer...", "ptx_referee..."]
+  // Both points_transactions are already posted; notify both members.
+}
+```
+
+You can reward either side with points, a [reward](/docs/engagement/rewards-catalog) from the catalog, or store credit. If the referee's qualifying payment is later refunded, Engagement claws back both reward transactions — see [Linking payments & loyalty](/docs/engagement/linking-payments-and-loyalty).
+
+<TypeTable
+  type={{
+    "reward.referrer": { type: "Reward", description: "Points or reward issued to the existing member.", default: "—" },
+    "reward.referee": { type: "Reward", description: "Points or reward issued to the new customer.", default: "—" },
+    qualify: { type: "QualifyRule", description: "Condition the referee must meet to convert.", default: "first payment > 0" },
+  }}
+/>
+
+## Fraud controls
+
+Referral programs are a common abuse target. VINR rejects suspicious referrals before rewards are issued and surfaces the reason on the `referral.rejected` event.
+
+| Control | What it blocks |
+|---|---|
+| Self-referral | Referrer and referee resolve to the same customer or payment instrument. |
+| Velocity caps | More than N conversions per referrer per `windowDays`. |
+| Shared fingerprint | Multiple referees sharing a device fingerprint or card. |
+| Refund clawback | A converted referee whose qualifying payment is refunded. |
+
+<Callout type="warn">
+Set a sensible `velocity.maxConversionsPerWindow` on the program. Without a cap, a single leaked code can drain your rewards budget. Start conservative (e.g. 10 per 30 days) and raise it as you gain confidence.
+</Callout>
+
+Test the full loop in sandbox using card `4242 4242 4242 4242` for a clean conversion and `4000 0000 0000 0002` to confirm a declined first payment never converts the referral.
+
+## Next steps
+
+<Cards>
+  <Card title="How engagement works" href="/docs/engagement/how-engagement-works" description="The object graph and event loop behind referrals." />
+  <Card title="Rewards catalog" href="/docs/engagement/rewards-catalog" description="Define what referral rewards pay out." />
+  <Card title="Linking payments & loyalty" href="/docs/engagement/linking-payments-and-loyalty" description="How conversions and clawbacks tie to payments." />
+</Cards>

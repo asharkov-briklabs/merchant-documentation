@@ -1,0 +1,142 @@
+---
+title: AML & sanctions
+description: Anti-money-laundering and sanctions screening obligations.
+persona: ["compliance-officer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Anti-money-laundering (AML) and sanctions screening protect the financial system from being used to launder proceeds of crime or to pay sanctioned parties. As a VINR merchant you operate on top of our licensed infrastructure, but you retain obligations of your own — over your customers, your transactions, and the parties you pay. This page explains how those obligations are split and what VINR does automatically on your behalf.
+
+This page is informational and not legal advice; consult your compliance counsel for binding decisions.
+
+## Regulatory background
+
+VINR operates as a regulated payment institution and is bound by AML frameworks in the jurisdictions where it is licensed — broadly, customer due diligence (CDD), ongoing transaction monitoring, sanctions screening, and reporting of suspicious activity. These obligations flow from EU AML directives, national transposition, and sanctions regimes maintained by the EU, the UN, OFAC, and equivalent bodies.
+
+You inherit a share of these duties as the party with the direct customer relationship. The split is roughly:
+
+| Obligation | VINR | Merchant |
+|---|---|---|
+| Onboarding KYC/KYB of merchants | Yes | — |
+| Sanctions screening of payers & payees | Yes (automated) | Provide accurate data |
+| Transaction monitoring & scoring | Yes | Review flagged cases |
+| Know-your-customer on _your_ end users | Shared | Yes, for high-risk flows |
+| Suspicious activity reporting to authorities | Yes | Escalate to VINR |
+| Record retention | Yes | Yes, for your own records |
+
+<Callout type="info">
+VINR never asks you to file a Suspicious Activity Report (SAR) directly. You escalate to VINR through the dashboard or the API, and our financial-crime team handles regulatory filing. Filing — or tipping off a customer that a report was made — is something only the regulated institution may do.
+</Callout>
+
+## Screening & monitoring
+
+Every payment, customer, and payout is screened automatically before and as it settles. Screening runs against live sanctions and watchlists; monitoring scores transactions for patterns associated with laundering (structuring, rapid in-out movement, high-risk geographies).
+
+You do not call a screening API yourself — it is part of the rails. What you _can_ do is read the risk signals VINR attaches to objects and react to them.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.retrieve('pay_3Nq8x2');
+
+// Screening outcome lives on the risk block.
+if (payment.risk.sanctions === 'hit') {
+  // The payment is held; settlement is blocked pending review.
+  console.warn(`Sanctions hit on ${payment.id} — do not fulfil the order.`);
+}
+
+console.log(payment.risk.score);        // 0-100 monitoring score
+console.log(payment.risk.review_status); // "clear" | "in_review" | "blocked"
+```
+
+A sanctions hit places the payment in a held state and emits an event so you can pause fulfilment automatically:
+
+```typescript
+// In your webhook handler
+const event = vinr.webhooks.verify(payload, req.headers['x-vinr-signature']);
+
+if (event.type === 'payment.flagged') {
+  const { id, risk } = event.data;
+  if (risk.review_status === 'blocked') {
+    await pauseFulfilment(id); // do not ship goods / grant access
+  }
+}
+```
+
+<Callout type="warn">
+A held payment is **not** a decline you should retry. Retrying or splitting a held transaction into smaller amounts can itself look like evasion. Wait for the review outcome.
+</Callout>
+
+## Suspicious activity
+
+If you observe behaviour that screening did not catch — a customer whose orders do not match their stated business, refunds routed to a different card, reluctance to provide identity — escalate it. Do not investigate covertly or confront the customer.
+
+<Steps>
+
+### Gather the context
+
+Note the relevant `pay_`, `cust_`, and `po_` identifiers and a short factual description. Stick to observations, not conclusions.
+
+### Escalate to VINR
+
+Raise a financial-crime report from the dashboard (Compliance → Report activity) or via the API. This is an internal escalation, not a regulatory filing.
+
+```bash
+curl -X POST https://api.vinr.com/v1/compliance/reports \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subject": "cust_abc123",
+    "reason": "transaction_pattern",
+    "note": "Six EUR 9,900 orders in 24h, refunds to a new card."
+  }'
+```
+
+### Let VINR assess and file
+
+Our team reviews, decides whether a SAR is warranted, and files with the authorities where required. You will receive an outcome reference but not the filing itself.
+
+### Do not tip off
+
+Never tell the customer a report was made. Tipping off is a criminal offence in most jurisdictions and is VINR's responsibility to avoid in any external filing.
+
+</Steps>
+
+## Record keeping
+
+Both parties must retain records. VINR retains transaction, screening, and KYC data for the statutory period (typically five years after the relationship ends) and can produce it for regulators. You should retain your own commercial records — order details, customer correspondence, and the business rationale for unusual transactions — for at least the same period.
+
+The API exposes immutable audit data you can export into your own retention store:
+
+```typescript
+const records = await vinr.compliance.records.list({
+  customer: 'cust_abc123',
+  created: { gte: 1735689600 }, // unix seconds
+});
+// Persist `records.data` to your retained-records system.
+```
+
+<Callout type="info">
+Records must be retrievable and tamper-evident. Exporting to an append-only store (or a WORM bucket) satisfies most "complete and accurate records" requirements better than a mutable database table.
+</Callout>
+
+## Your responsibilities
+
+In short, to stay compliant on VINR:
+
+- **Provide accurate data.** Screening is only as good as the names, addresses, and business details you submit. Garbage in, missed hit out.
+- **Act on holds.** Pause fulfilment on blocked payments; never retry or restructure them.
+- **Escalate, don't investigate.** Report suspicious activity to VINR and let the regulated entity handle filing.
+- **Keep your records.** Retain your own commercial evidence alongside VINR's transaction data.
+- **Know your end users for high-risk flows.** If you handle large transfers, payouts to third parties, or regulated goods, apply your own KYC in addition to VINR's screening.
+
+## Next steps
+
+<Cards>
+  <Card title="Compliance overview" href="/docs/compliance" description="How responsibilities are shared across the platform." />
+  <Card title="Customers" href="/docs/payments/customers" description="The data that feeds screening and CDD." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="React to payment.flagged and review events." />
+</Cards>

@@ -1,0 +1,136 @@
+---
+title: Quotes
+description: Generate quotes that convert into subscriptions or invoices.
+persona: ["developer", "finance-manager"]
+priority: "P2"
+lastUpdated: "2026-05-30"
+---
+
+Quotes let sales and finance teams propose negotiated pricing as a formal, shareable document. Once the customer accepts, VINR provisions the agreed terms automatically — spinning up a [subscription](/docs/billing/subscriptions) for recurring lines or finalizing an [invoice](/docs/billing/how-billing-works) for one-off charges — so nobody re-keys numbers between the deal and the bill.
+
+## The quote lifecycle
+
+A quote moves through a small, predictable state machine. Each transition emits an event you can react to.
+
+| Status | Meaning |
+|---|---|
+| `draft` | Editable. Line items, discounts, and terms can still change. |
+| `open` | Finalized and sent. The customer can accept; the price is locked. |
+| `accepted` | Customer agreed. VINR provisions the subscription or invoice. |
+| `canceled` | Withdrawn by you, or expired past its `expires_at`. |
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const quote = await vinr.quotes.create({
+  customer: 'cust_8sJ2',
+  expiresAt: '2026-07-15T00:00:00Z',
+  lineItems: [
+    { price: 'price_pro_monthly', quantity: 25 },     // 25 seats, recurring
+    { description: 'Onboarding & migration', amount: 250000 }, // €2,500 one-off
+  ],
+});                                                     // "quote_..." in draft
+```
+
+<Callout type="info">
+A quote can mix **recurring** line items (referencing a `price` with a `recurring` interval) and **one-off** line items (an inline `amount`). On acceptance the recurring lines become a subscription and the one-off lines land on the subscription's first invoice — or, if there are no recurring lines, on a standalone invoice.
+</Callout>
+
+## Line items & discounts
+
+Line items reference an existing [price](/docs/billing/products-and-prices) or carry an inline `amount` in minor units (so `250000` is EUR 2,500.00). Apply discounts either per line or across the whole quote.
+
+```typescript
+const quote = await vinr.quotes.create({
+  customer: 'cust_8sJ2',
+  lineItems: [
+    { price: 'price_pro_monthly', quantity: 25 },
+  ],
+  discounts: [
+    { coupon: 'LAUNCH20' },          // 20% off the whole quote
+  ],
+  collectionMethod: 'send_invoice',  // bill via invoice rather than auto-charge
+  daysUntilDue: 30,                  // net-30 terms once accepted
+});
+```
+
+<TypeTable
+  type={{
+    collectionMethod: { type: "string", description: "charge_automatically or send_invoice.", default: "charge_automatically" },
+    daysUntilDue: { type: "integer", description: "Payment window when collectionMethod is send_invoice.", default: "—" },
+    discounts: { type: "array", description: "Coupons or amount-off adjustments applied to the quote total." },
+    footer: { type: "string", description: "Custom note rendered on the quote PDF." },
+  }}
+/>
+
+VINR computes and stores three totals on every quote: `subtotal`, `totalDiscount`, and `total` (after [tax](/docs/billing/tax) is estimated). These are recalculated on each draft edit and frozen the moment you finalize.
+
+## Acceptance & expiry
+
+Finalizing transitions the quote from `draft` to `open`. The amounts are now locked, and you can hand the customer a link or PDF to accept.
+
+<Steps>
+
+### Finalize the quote
+
+```typescript
+await vinr.quotes.finalize('quote_4Kp9');  // draft -> open
+```
+
+### Share for acceptance
+
+Send the customer the hosted acceptance URL (`quote.hostedUrl`) or the [PDF](#pdf--sharing). Acceptance can happen in the hosted page or via API on the customer's behalf.
+
+### Accept
+
+```typescript
+const accepted = await vinr.quotes.accept('quote_4Kp9');
+console.log(accepted.subscription); // "sub_..." (or accepted.invoice)
+```
+
+</Steps>
+
+A quote with an `expiresAt` in the past auto-transitions to `canceled` and can no longer be accepted; VINR emits `quote.canceled`. Re-quoting is a fresh `draft` — never reopen an expired one, so pricing intent stays auditable.
+
+## Converting to a subscription
+
+Acceptance is where the deal becomes billable. VINR provisions atomically — either the full conversion succeeds or the quote stays `open`.
+
+- **Recurring lines present** → a [subscription](/docs/billing/subscriptions) is created with the quoted prices, quantities, discounts, and collection method. Its [billing cycle anchor](/docs/billing/how-billing-works) defaults to the acceptance time.
+- **One-off lines only** → a finalized invoice is created and collected per the quote's `collectionMethod`.
+
+React to acceptance through the [webhook](/docs/integration/webhooks), not the API response, so provisioning is resilient to retries:
+
+```typescript
+const evt = vinr.webhooks.verify(payload, req.headers['x-vinr-signature']);
+
+if (evt.type === 'quote.accepted') {
+  const { subscription, customer } = evt.data;
+  await grantSeats(customer, subscription); // your fulfilment
+}
+```
+
+<Callout type="warn">
+Quote acceptance is idempotent: a duplicated `quote.accepted` delivery returns the same `subscription` / `invoice` IDs. Always key your fulfilment on those IDs rather than provisioning blindly on every event.
+</Callout>
+
+## PDF & sharing
+
+Every `open` or `accepted` quote exposes a rendered PDF and a hosted acceptance page. Customize the header logo, footer text, and currency formatting in **Dashboard → Branding**.
+
+```bash
+curl https://api.vinr.com/v1/quotes/quote_4Kp9/pdf \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -o quote_4Kp9.pdf
+```
+
+The hosted URL (`quote.hostedUrl`) renders the same document with an **Accept** action, locale-aware totals, and a signed expiry — ideal for embedding in a sales email or CRM. In the sandbox (`https://sandbox.api.vinr.com`) the PDF is watermarked and acceptance never triggers a real charge.
+
+## Next steps
+
+<Cards>
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="Where accepted recurring quotes land." />
+  <Card title="Products & prices" href="/docs/billing/products-and-prices" description="Build the catalog quotes reference." />
+  <Card title="Coupons & discounts" href="/docs/billing/coupons-and-discounts" description="Model the discounts you negotiate on quotes." />
+</Cards>

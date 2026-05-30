@@ -1,0 +1,12 @@
+{
+  "title": "Invoices",
+  "pages": [
+    "index",
+    "invoice-lifecycle",
+    "creating-invoices",
+    "finalization-and-payment",
+    "line-items-and-tax",
+    "invoice-customization",
+    "hosted-invoice-page"
+  ]
+}

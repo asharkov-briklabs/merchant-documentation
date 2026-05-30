@@ -1,0 +1,170 @@
+---
+title: Debugging integrations
+description: Tools and techniques to debug your VINR integration.
+persona: ["developer", "operations"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+When a charge fails, a webhook never lands, or a subscription drifts out of sync, the fastest path to a fix is reading what VINR actually saw. This page covers the request log, webhook delivery inspection, idempotency replays, and a repeatable sandbox workflow so you can reproduce and resolve issues without guessing.
+
+## Start with the request ID
+
+Every API response carries a request ID in the `x-vinr-request-id` header, and every error body echoes it. Capture and log it on the client side — it is the single fastest way to find the corresponding entry in the Dashboard or to hand to support.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+try {
+  const payment = await vinr.payments.create({
+    amount: 1000,
+    currency: 'EUR',
+    customer: 'cust_8sQ2',
+  });
+  console.log('ok', payment.id);
+} catch (err) {
+  // VinrError exposes the request ID, HTTP status, and a stable code.
+  console.error('vinr error', {
+    requestId: err.requestId,
+    status: err.status,
+    code: err.code,        // e.g. card_declined, idempotency_conflict
+    message: err.message,
+  });
+}
+```
+
+<Callout type="info">
+Codes (`err.code`) are stable across versions and safe to branch on. The human-readable `message` is for logs and is not a contract — never parse it.
+</Callout>
+
+## Request logs
+
+The Dashboard logs every API request against your account: method, path, status, latency, the request ID, and the redacted request/response bodies. Filter by status code to surface failures, or paste a request ID straight into the search box.
+
+You can also pull the same data programmatically to wire it into your own observability:
+
+```bash
+curl https://api.vinr.com/v1/request_logs?status=4xx \
+  -H "X-Api-Key: $VINR_SECRET_KEY"
+```
+
+| Filter | Use it to find |
+|---|---|
+| `status=4xx` | Bad input, auth failures, idempotency conflicts |
+| `status=5xx` | Transient VINR-side errors worth retrying |
+| `resource=payment` | Every call touching a specific resource type |
+| `request_id=req_…` | A single exact request |
+
+<Callout type="warn">
+Logs in the live account are retained for 30 days; sandbox logs for 7. Export anything you need to keep beyond that window.
+</Callout>
+
+## Inspecting webhook delivery
+
+Most "the event never arrived" reports are delivery failures you can see and replay. Open the webhook endpoint in the Dashboard to view every attempt, the HTTP status your server returned, the response body, and the next scheduled retry.
+
+<Steps>
+
+### Confirm the event was generated
+
+Find the resource (for example `pay_…`) in its log and check that the expected transition happened at all. A payment stuck in `requires_authentication` never fires `payment.completed`.
+
+### Check the delivery attempts
+
+A non-2xx response or a timeout (over 10 seconds) counts as a failure. VINR retries with exponential backoff for up to 72 hours.
+
+### Verify the signature locally
+
+A silent `400` from your own handler is the most common cause. Confirm you pass the **raw** request body — not a parsed object — to the verifier.
+
+### Replay the delivery
+
+Once your endpoint is fixed, click **Resend** on any past attempt, or replay from code (see below).
+
+</Steps>
+
+```typescript
+// The body MUST be the raw bytes. Re-serializing JSON changes the
+// signature and verification will fail.
+export async function POST(req: Request) {
+  try {
+    const event = vinr.webhooks.verify(
+      await req.text(),
+      req.headers.get('x-vinr-signature'),
+    );
+    console.log('verified', event.id, event.type);
+    return new Response('OK', { status: 200 });
+  } catch (err) {
+    console.error('signature verification failed', err.message);
+    return new Response('bad signature', { status: 400 });
+  }
+}
+```
+
+## Idempotency replays
+
+When you send an [idempotency key](/docs/integration/idempotency), VINR returns the original stored response for any retry with the same key. That makes debugging deterministic: replay the exact request and compare. A response carrying `x-vinr-idempotent-replay: true` means you hit the cache, not a fresh execution.
+
+```bash
+curl https://sandbox.api.vinr.com/v1/payments \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Idempotency-Key: order-4711-attempt-1" \
+  -H "Content-Type: application/json" \
+  -d '{"amount":1000,"currency":"EUR","customer":"cust_8sQ2"}'
+```
+
+<Callout type="error">
+An `idempotency_conflict` error means you reused a key with a **different** body. Generate a fresh key per logical operation; do not recycle keys across distinct requests.
+</Callout>
+
+## Common pitfalls
+
+<Accordions>
+
+<Accordion title="Charging the wrong amount">
+Amounts are integers in minor units. `1000` is EUR 10.00, not EUR 1000. Passing `10.00` is rejected or silently truncated depending on the field.
+</Accordion>
+
+<Accordion title="Fulfilling on the API response">
+The synchronous create response can return `requires_authentication`. Fulfil on the `payment.completed` webhook instead — see the [payment lifecycle](/docs/payments/payment-lifecycle).
+</Accordion>
+
+<Accordion title="Mixing sandbox and live keys">
+Sandbox keys only work against `sandbox.api.vinr.com`, and IDs are not portable between environments. A `cust_…` created in sandbox does not exist in live.
+</Accordion>
+
+<Accordion title="Parsing the webhook body before verifying">
+Frameworks that auto-parse JSON destroy the byte-exact payload the signature was computed over. Read the raw body first, then verify.
+</Accordion>
+
+</Accordions>
+
+## Reproducing in sandbox
+
+The sandbox mirrors live behavior with deterministic [test cards](/docs/getting-started/test-data), so you can trigger any branch on demand.
+
+| Card number | Outcome |
+|---|---|
+| 4242 4242 4242 4242 | Succeeds → `payment.completed` |
+| 4000 0000 0000 0002 | Declined → `payment.failed` (`card_declined`) |
+| 4000 0000 0000 3220 | Triggers 3DS → `payment.requires_authentication` |
+
+To debug webhooks without a public URL, run the CLI to forward live deliveries to localhost:
+
+```bash
+vinr listen --forward-to http://localhost:3000/api/webhooks
+```
+
+<Callout type="info">
+The CLI prints the signing secret for the forwarding session and logs every event it relays, so you can step through handlers in your debugger.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Receive, verify, and retry events reliably." />
+  <Card title="Idempotency" href="/docs/integration/idempotency" description="Make every request safe to retry." />
+  <Card title="Error reference" href="/docs/api-reference/errors" description="Every error code and how to handle it." />
+</Cards>

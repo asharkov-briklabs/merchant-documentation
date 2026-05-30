@@ -1,0 +1,133 @@
+---
+title: PCI DSS
+description: How VINR reduces your PCI scope and what you remain responsible for.
+persona: ["compliance-officer", "developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+VINR is built so that raw cardholder data never touches your servers. By keeping payment details inside VINR's vault and exchanging them for tokens, most integrations qualify for the lightest self-assessment. This page explains what VINR carries for you, what stays your responsibility, and how to keep that boundary intact.
+
+This page is informational and not legal advice; consult your compliance counsel for binding decisions.
+
+## VINR's PCI status
+
+VINR operates as a **PCI DSS Level 1 Service Provider** — the highest assurance tier, covering the largest transaction volumes. We are assessed annually by a Qualified Security Assessor (QSA), undergo quarterly network scans by an Approved Scanning Vendor, and maintain a current Attestation of Compliance (AOC).
+
+Because VINR stores, processes, and transmits cardholder data on your behalf, the heavy lifting — encrypted vaults, key rotation, segmented networks, intrusion monitoring — is ours. Your obligation is to ensure card data flows **only** through VINR's collection surfaces and never lands in your own systems, logs, or analytics.
+
+<Callout type="info">
+Request VINR's AOC and Responsibility Matrix from the [Dashboard](/docs/operations) under **Settings → Compliance**, or from your account team. Your assessor will ask for both.
+</Callout>
+
+## Your scope by integration type
+
+How much PCI scope you carry depends entirely on how card data is captured. The table below maps each VINR integration to the most likely Self-Assessment Questionnaire (SAQ) and the question count you face.
+
+| Integration | How card data is captured | Likely SAQ | Your scope |
+|---|---|---|---|
+| Hosted Checkout (redirect) | Customer enters card on VINR's domain | **SAQ A** | Smallest |
+| VINR Elements (iframe fields) | Fields hosted by VINR, embedded in your page | **SAQ A** | Smallest |
+| Drop-in / mobile SDK | VINR UI inside your app, tokenizes on-device | **SAQ A** | Smallest |
+| Direct API with your own form | Your form posts the PAN to your server | **SAQ D** | Largest |
+
+The pattern is simple: if the card number is **tokenized before it reaches your backend**, you stay in SAQ A territory. The moment a Primary Account Number (PAN) transits your servers, you fall into SAQ D and inherit dozens of additional controls.
+
+<Callout type="warn">
+The Direct API path requires you to hold a current PCI DSS attestation and is gated behind manual approval. Unless you have a compelling reason and existing PCI program, use [Hosted Checkout](/docs/payments) or Elements — they keep you in SAQ A.
+</Callout>
+
+## Keeping card data off your servers
+
+The safe pattern collects the card on a VINR-hosted surface, receives back only a token, and uses that token for every subsequent call. Tokens carry **no** sensitive data and are safe to log and store.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// The browser (via Elements/Drop-in) returns a single-use token.
+// Your server never sees the PAN, CVV, or expiry.
+const payment = await vinr.payments.create({
+  amount: 4999,                      // EUR 49.99 in minor units
+  currency: 'eur',
+  customer: 'cust_abc123',
+  source: token,                     // "tok_..." from the client, NOT a card number
+});
+
+console.log(payment.id);             // "pay_..."
+```
+
+If you ever find yourself reading, transmitting, or persisting a 13-19 digit PAN in your own code, your integration has slipped out of SAQ A. Treat that as an incident.
+
+## Cardholder data handling rules
+
+These rules apply regardless of integration type. Violating any one of them expands your scope or breaches the standard:
+
+- **Never store the full PAN** in your database, files, or backups. Store VINR's `pay_` / `cust_` IDs and the returned card brand and last four instead.
+- **Never store the CVV/CVC** after authorization — not even encrypted. PCI DSS prohibits it absolutely.
+- **Keep card data out of logs.** Scrub request bodies before logging; never log the raw client token alongside other PII in a way that reconstructs a card.
+- **Use TLS everywhere.** All VINR endpoints require TLS 1.2+; plaintext requests are refused.
+- **Display only safe fields.** Show the brand and last four (returned on the `payment` object) when you need to reference a card to the customer.
+
+<Accordions>
+<Accordion title="What can I safely store?">
+Tokens (`tok_`), payment IDs (`pay_`), customer IDs (`cust_`), card brand, expiry month/year, and the last four digits. These are not cardholder data under PCI DSS and let you build receipts, dashboards, and reconciliation without scope.
+</Accordion>
+<Accordion title="A PAN ended up in our logs. Now what?">
+Treat it as a data exposure: purge the affected logs and backups, rotate any leaked tokens, document the incident, and review the code path that logged it. Then fix the logger to redact request bodies. See [Webhooks & event security](/docs/integration) for safe payload handling patterns.
+</Accordion>
+</Accordions>
+
+## Securing the integration boundary
+
+The controls that remain yours center on the keys and callbacks that connect your systems to VINR.
+
+<Steps>
+
+### Protect your secret key
+
+`VINR_SECRET_KEY` can move money — treat it like a password. Keep it in a secrets manager, never in client-side code or version control, and scope it to server environments only. Rotate it from the Dashboard if exposure is suspected.
+
+### Verify every webhook
+
+Confirm each incoming event genuinely came from VINR before acting on it. This prevents forged `payment.completed` events from triggering fulfilment.
+
+```typescript
+const event = vinr.webhooks.verify(payload, signature); // throws if invalid
+if (event.type === 'payment.completed') {
+  // safe to act on
+}
+```
+
+The `signature` comes from the `x-vinr-signature` header.
+
+### Restrict and monitor access
+
+Limit who can view payment data in the Dashboard using role-based access, enable two-factor authentication for all team members, and review the audit log periodically for unexpected activity.
+
+</Steps>
+
+## Annual requirements
+
+Even on SAQ A, you have recurring obligations. Build these into your compliance calendar:
+
+| Cadence | What you must do |
+|---|---|
+| Annually | Complete and sign the applicable SAQ (usually SAQ A). |
+| Annually | Obtain VINR's current AOC and confirm our Level 1 status. |
+| Annually | Review your data flows to confirm no PAN has entered your systems. |
+| Per change | Re-assess scope whenever you alter how cards are collected. |
+| Ongoing | Maintain TLS, key hygiene, and access controls described above. |
+
+<Callout type="info">
+Acquirers and card brands — not VINR — determine which SAQ you must file and where to submit it. Confirm the exact form and deadline with your acquiring bank.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Compliance overview" href="/docs/compliance" description="The full picture of VINR's certifications and your obligations." />
+  <Card title="Accept your first payment" href="/docs/payments" description="Use Hosted Checkout or Elements to stay in SAQ A." />
+  <Card title="Webhooks & event security" href="/docs/integration" description="Verify events so only genuine VINR calls reach your systems." />
+</Cards>

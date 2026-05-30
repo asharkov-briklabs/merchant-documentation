@@ -1,0 +1,181 @@
+---
+title: Testing your integration
+description: Simulate methods, outcomes, and events across products before going live.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Use the sandbox to drive every code path before you flip to live keys: successful payments, declines, authentication challenges, refunds, subscription cycles, and webhook delivery. The sandbox is a fully isolated environment — its data, keys, and balances never touch production — so you can run destructive tests freely and reset whenever you like.
+
+## Test data overview
+
+The sandbox is reachable at `https://sandbox.api.vinr.com` and uses keys prefixed `sk_test_`. Point the SDK at it by supplying a sandbox secret key; no other configuration changes are required.
+
+```ts
+import { Vinr } from '@vinr/sdk';
+
+// VINR_SECRET_KEY = sk_test_... selects the sandbox automatically.
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+```
+
+<Callout type="warn">
+Test (`sk_test_`) and live (`sk_live_`) keys address separate datasets. A `cust_` or `sub_` created in the sandbox does not exist in production, and vice versa. Keep them in distinct environment files so you never cross the streams.
+</Callout>
+
+Sandbox objects carry the same ID prefixes as production (`pay_`, `cust_`, `sub_`, `inv_`, `loy_`, …) and the same shapes, so code written against the sandbox needs zero changes for launch. Clearing house, settlement, and payout timing is accelerated — payouts that take days in production settle in minutes — so you can exercise full lifecycles in a single test run.
+
+## Simulating outcomes
+
+In the sandbox, the **card number determines the outcome**. Use the magic cards below with any future expiry, any 3-digit CVC, and any postal code.
+
+| Card number | Outcome |
+|---|---|
+| `4242 4242 4242 4242` | Payment succeeds |
+| `4000 0000 0000 0002` | Generic decline (`card_declined`) |
+| `4000 0000 0000 9995` | Decline — insufficient funds |
+| `4000 0000 0000 3220` | Requires 3DS authentication challenge |
+
+Each declined card returns the same error structure your live integration must handle, so wire up your failure paths against them.
+
+```ts
+const payment = await vinr.payments.create({
+  amount: 4900,            // EUR 49.00
+  currency: 'EUR',
+  customer: 'cust_test_001',
+  card: { number: '4000000000000002', expMonth: 12, expYear: 2030, cvc: '123' },
+});
+
+console.log(payment.status); // "failed"
+console.log(payment.declineCode); // "card_declined"
+```
+
+For the 3DS card (`4000 0000 0000 3220`), the sandbox returns a payment in `requires_action` with a hosted challenge URL. Approve or fail the challenge from the URL, or from **Dashboard → Sandbox → Authentication** to script the outcome.
+
+## Test cards & accounts
+
+Beyond payments, you can seed customers, loyalty accounts, and subscriptions to test downstream products without manual setup.
+
+<Tabs items={["Customer + loyalty", "Subscription"]}>
+<Tab value="Customer + loyalty">
+
+```ts
+const customer = await vinr.customers.create({
+  email: 'jane@example.com',
+  name: 'Jane Smith',
+});
+
+const account = await vinr.loyalty.accounts.create({
+  program: 'prog_test_default',
+  customer: customer.id, // cust_...
+});
+// account.id -> loy_...
+```
+
+</Tab>
+<Tab value="Subscription">
+
+```ts
+const subscription = await vinr.subscriptions.create({
+  customer: 'cust_test_001',
+  price: 'price_test_monthly',
+  card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123' },
+});
+// subscription.id -> sub_..., status "active"
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="info">
+Sandbox seed objects such as `prog_test_default` and `price_test_monthly` are created automatically for every account. Find their IDs under **Dashboard → Sandbox → Seed data**, or create your own.
+</Callout>
+
+## Simulating billing cycles
+
+You don't have to wait a month for a renewal. The **test clock** lets you fast-forward a subscription through its cycles and observe the invoices, charges, and webhooks it generates.
+
+<Steps>
+
+### Create a test clock
+
+```ts
+const clock = await vinr.testClocks.create({ frozenTime: '2026-06-01T00:00:00Z' });
+```
+
+### Attach a subscription to the clock
+
+Pass `testClock` when creating the customer; any subscription on that customer advances with the clock.
+
+```ts
+const customer = await vinr.customers.create({
+  email: 'cycle@example.com',
+  testClock: clock.id,
+});
+```
+
+### Advance time and inspect the results
+
+```ts
+await vinr.testClocks.advance(clock.id, { frozenTime: '2026-07-01T00:00:00Z' });
+const invoices = await vinr.invoices.list({ customer: customer.id });
+// A second inv_... appears for the renewed period.
+```
+
+</Steps>
+
+Advancing the clock fires the same events a real renewal would — `invoice.paid`, `payment.completed`, and `loyalty.points.earned` if the subscription accrues points — so your handlers get exercised end to end.
+
+## Replaying webhooks
+
+Test event delivery without triggering real charges. The SDK includes a CLI that forwards sandbox events to a local URL and lets you replay any past event.
+
+```bash
+# Forward all sandbox events to your local server
+vinr listen --forward-to http://localhost:3000/webhooks
+
+# Trigger a synthetic event on demand
+vinr trigger payment.completed
+
+# Replay a specific historical event by ID
+vinr events resend evt_1a2b3c
+```
+
+Always verify the signature exactly as you will in production. The CLI signs forwarded events with your sandbox webhook secret.
+
+```ts
+app.post('/webhooks', async (req, res) => {
+  const event = vinr.webhooks.verify(req.rawBody, req.headers['x-vinr-signature']);
+  if (event.type === 'payment.completed') {
+    // fulfill the order
+  }
+  res.sendStatus(200);
+});
+```
+
+<Callout type="warn">
+Verify with the raw request body — not the parsed JSON. Re-serializing changes byte order and whitespace, which breaks the signature check. See [Webhooks](/docs/integration/webhooks) for framework-specific raw-body setup.
+</Callout>
+
+## End-to-end test checklist
+
+Before requesting live access, confirm each path returns the result your code expects:
+
+- [ ] Successful payment with `4242 4242 4242 4242` → `payment.completed` received and verified.
+- [ ] Declined payment with `4000 0000 0000 0002` → failure path surfaces the decline to the user.
+- [ ] 3DS payment with `4000 0000 0000 3220` → challenge completes and `requires_action` resolves.
+- [ ] Refund via `vinr.refunds.create` → `re_...` issued and `payment.refunded` received.
+- [ ] Subscription renewal advanced with a test clock → second `inv_...` and `invoice.paid`.
+- [ ] Loyalty points accrue and redeem → `loyalty.points.earned` and a `rdm_...` redemption.
+- [ ] Webhook signature verification rejects a tampered payload.
+- [ ] Idempotency: re-sending the same request key does not double-charge.
+
+When every box is checked, swap `sk_test_` for `sk_live_`, repoint to `https://api.vinr.com`, and re-register your webhook endpoints against the live signing secret.
+
+## Next steps
+
+<Cards>
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Register endpoints, verify signatures, and handle the retry schedule for live events." />
+  <Card title="Go-live checklist" href="/docs/operations" description="Operational steps for promoting your integration from sandbox to production." />
+  <Card title="Checkout integration" href="/docs/integration/checkout" description="The hosted payment flow you'll exercise with the sandbox test cards above." />
+</Cards>

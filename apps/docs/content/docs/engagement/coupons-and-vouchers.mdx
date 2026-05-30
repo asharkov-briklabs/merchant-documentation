@@ -1,0 +1,153 @@
+---
+title: Coupons & vouchers
+description: Issue codes redeemable for value.
+persona: ["developer"]
+priority: "P2"
+lastUpdated: "2026-05-30"
+---
+
+Coupons and vouchers are redeemable codes that grant a discount, points, or a reward when a customer enters them. They are the bridge between an offline campaign — a printed card, an email blast, an influencer link — and the on-platform value it unlocks. This page covers the two object types, how to mint codes in bulk, and how to validate and redeem them safely.
+
+## Coupons vs. vouchers
+
+Both are codes, but they model different intents:
+
+| | `coupon` | `voucher` |
+|---|---|---|
+| Backed by value | No — a rule (e.g. "10% off") | Yes — a stored balance or fixed reward |
+| Typical use | Promotions, marketing campaigns | Gift cards, refunds-as-credit, prizes |
+| Reusable | Often (shared code, capped uses) | Usually single-issue, single-holder |
+| Balance | None | Decremented as it's spent |
+
+A coupon is a **rule with a code attached**; a voucher is **money (or points) with a code attached**. When in doubt: if redeeming it should draw down a balance, use a voucher.
+
+<Callout type="info">
+Coupons and vouchers both emit events and reverse cleanly on refund, just like a [points transaction](/docs/engagement/how-engagement-works). Engagement never collects money — a coupon discounts a [payment](/docs/payments), a voucher offsets one.
+</Callout>
+
+## Generating codes
+
+Create a single coupon with an explicit code, or mint a batch of unique random codes from a template. Amounts are integers in minor units (`1000` = EUR 10.00).
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// One shared promotional coupon: 15% off, capped at 500 redemptions.
+const coupon = await vinr.coupons.create({
+  code: 'SPRING15',
+  discount: { type: 'percentage', value: 15 },
+  maxRedemptions: 500,
+  expiresAt: '2026-06-30T23:59:59Z',
+});                                   // "coupon SPRING15"
+
+// A batch of 1,000 unique single-use gift vouchers worth EUR 25 each.
+const batch = await vinr.vouchers.createBatch({
+  count: 1000,
+  prefix: 'GIFT',                     // codes like GIFT-7K2P-9QXM
+  value: 2500,
+  currency: 'EUR',
+  singleUse: true,
+});                                   // batch.id, batch.codes[]
+```
+
+<Callout type="warn">
+Batch generation is asynchronous for large counts. Poll the batch or subscribe to `coupon.batch.completed` rather than assuming `codes[]` is populated on the create response.
+</Callout>
+
+## Single vs. multi-use
+
+Redemption limits are enforced server-side; never rely on the client to stop reuse.
+
+<TypeTable
+  type={{
+    maxRedemptions: { type: "integer", description: "Total redemptions allowed across all customers. Omit for unlimited.", default: "unlimited" },
+    perCustomerLimit: { type: "integer", description: "How many times one customer may redeem the same code.", default: "1" },
+    singleUse: { type: "boolean", description: "Shorthand for a one-and-done code; sets both limits to 1.", default: "false" },
+    minOrderAmount: { type: "integer", description: "Minimum order subtotal (minor units) before the code applies.", default: "0" },
+  }}
+/>
+
+- **Shared, multi-use** (`SPRING15`): one code, many customers, capped by `maxRedemptions`. Good for public promotions.
+- **Unique, single-use** (`GIFT-7K2P-9QXM`): one code per holder, consumed on first redemption. Good for gift cards and one-to-one offers.
+
+## Redemption & validation
+
+Validation is a read-only dry run — it tells you whether a code applies and what it's worth, without consuming it. Redemption is the committing write. Always validate before showing a discount, then redeem inside the same flow that captures the payment.
+
+<Steps>
+
+### Validate the code
+
+Check eligibility against the customer and cart. This never decrements a balance.
+
+```typescript
+const check = await vinr.coupons.validate({
+  code: 'SPRING15',
+  customer: 'cust_abc123',
+  orderAmount: 8000,                  // EUR 80.00 subtotal
+});
+
+if (!check.valid) {
+  // check.reason: "expired" | "limit_reached" | "below_minimum" | "not_found"
+  console.warn('Code rejected:', check.reason);
+}
+```
+
+### Redeem at checkout
+
+Attach the code to the payment so the discount is applied and the redemption is recorded atomically. If the payment fails, the redemption does not count.
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 8000,
+  currency: 'EUR',
+  customer: 'cust_abc123',
+  coupon: 'SPRING15',                 // or voucher: 'GIFT-7K2P-9QXM'
+});                                   // pay_...; emits coupon.redeemed
+```
+
+### Reconcile on refund
+
+If you refund the underlying payment, VINR reverses the redemption — a multi-use coupon regains a slot and a voucher's balance is restored — and emits `coupon.redemption.reversed`.
+
+</Steps>
+
+<Callout type="error">
+Treat validation results as advisory only. A code can become invalid between validation and redemption (another customer exhausts the last slot). The `coupons.validate` check prevents a bad UX; the atomic redeem on the payment is what actually guarantees correctness.
+</Callout>
+
+## Reporting
+
+Every redemption is an auditable record you can list, filter, and reconcile against payouts.
+
+```bash
+curl https://api.vinr.com/v1/coupons/SPRING15/redemptions \
+  -H "X-Api-Key: $VINR_SECRET_KEY"
+```
+
+```json
+{
+  "data": [
+    {
+      "id": "rdm_4f8a2c",
+      "coupon": "SPRING15",
+      "customer": "cust_abc123",
+      "payment": "pay_91kd0",
+      "discount_applied": 1200,
+      "redeemed_at": "2026-05-28T14:02:11Z"
+    }
+  ],
+  "has_more": false
+}
+```
+
+Use redemption counts and `discount_applied` totals to measure campaign cost, and reconcile reversals against refunds in [Operations](/docs/operations). For programmatic alerts, subscribe to `coupon.redeemed` and `coupon.redemption.reversed` on a [webhook endpoint](/docs/integration).
+
+## Next steps
+
+<Cards>
+  <Card title="Rewards catalog" href="/docs/engagement/rewards-catalog" description="Offer vouchers as redeemable rewards." />
+  <Card title="Campaigns" href="/docs/engagement/campaigns" description="Distribute codes as part of a timed promotion." />
+  <Card title="Redemption" href="/docs/engagement/redemption" description="How discounts apply at checkout." />
+</Cards>

@@ -1,0 +1,200 @@
+---
+title: Earn and redeem points
+description: Earn and redeem points — a runnable, end-to-end guide verified against the VINR sandbox.
+category: "engagement"
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+This guide takes a customer through the full loyalty loop: enrol them in a program, award points for an action, read their balance, and redeem points for a reward. It's runnable against the sandbox — swap your test keys in and follow along.
+
+## Overview
+
+A loyalty account (`loy_`) belongs to one program (`prog_`) and one customer (`cust_`). Points move through the account as immutable transactions (`ptx_`): you award them, they accrue to a balance, and redemptions debit them against a reward (`rwd_`), producing a redemption record (`rdm_`).
+
+```
+your server            VINR                  customer
+    │  create account     │                     │
+    │────────────────────►│                     │
+    │  award points       │                     │
+    │────────────────────►│  loyalty.points.earned (webhook)
+    │◄────────────────────│                     │
+    │  redeem reward      │  customer asks to redeem
+    │◄────────────────────────────────────────  │
+    │────────────────────►│  loyalty.reward.redeemed
+    │  fulfil reward      │                     │
+```
+
+You'll do all of this server-side with the secret key. The customer never touches the loyalty API directly.
+
+<Callout type="info">
+This guide assumes you already have a program. If you don't, create one first — see [Create a loyalty program](/docs/engagement/programs). The `programId` below is the `prog_` it returns.
+</Callout>
+
+## Enrol a member
+
+Create a loyalty account that links a customer to your program. Use an `idempotencyKey` so a retried enrolment doesn't create duplicate accounts.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const account = await vinr.loyalty.accounts.create(
+  {
+    programId: 'prog_summer',
+    customerId: 'cust_8sJ2k',
+    metadata: { signupSource: 'checkout' },
+  },
+  { idempotencyKey: 'enrol-cust_8sJ2k-prog_summer' },
+);
+
+// account.id === 'loy_...'
+```
+
+If the customer is already enrolled in this program, the call returns the existing account rather than erroring — enrolment is naturally idempotent on the `(programId, customerId)` pair.
+
+## Award points
+
+Award points for any action you choose — a purchase, a review, a referral. Points are integers; the `reason` is stored on the transaction for your audit trail and surfaced in the customer's history.
+
+```typescript
+const txn = await vinr.loyalty.points.award(
+  {
+    accountId: account.id,
+    points: 250,
+    reason: 'purchase',
+    metadata: { paymentId: 'pay_3xZ9q', orderId: '1234' },
+  },
+  { idempotencyKey: 'award-pay_3xZ9q' },   // one award per payment
+);
+
+// txn.id === 'ptx_...'
+// txn.balanceAfter === 250
+```
+
+<Callout type="warn">
+Always key awards to the underlying event (a payment, an order). Without an `idempotencyKey`, a webhook retry or a double-submit will award points twice.
+</Callout>
+
+To award points automatically on a sale instead of calling this by hand, wire it to the payment webhook — see [Earn loyalty at checkout](/docs/guides/earn-loyalty-at-checkout).
+
+## Check balances
+
+Read the current balance before showing a customer what they can redeem. The account carries both the spendable balance and lifetime totals.
+
+```typescript
+const fresh = await vinr.loyalty.accounts.retrieve(account.id);
+
+console.log(fresh.balance);          // 250  — spendable now
+console.log(fresh.lifetimePoints);   // 250  — total ever earned
+console.log(fresh.tier);             // e.g. 'silver', if your program uses tiers
+```
+
+For the full ledger, list the account's point transactions:
+
+```typescript
+const { data: history } = await vinr.loyalty.points.list({
+  accountId: account.id,
+  limit: 20,
+});
+```
+
+## Redeem a reward
+
+Redeeming debits points from the account against a reward you've defined in the program. VINR checks the balance and the reward's point cost atomically, so you can't overspend.
+
+<Steps>
+
+### Confirm the reward is affordable
+
+Fetch the reward to read its `pointsCost`, then compare against the balance you just read.
+
+```typescript
+const reward = await vinr.loyalty.rewards.retrieve('rwd_freeShip');
+
+if (fresh.balance < reward.pointsCost) {
+  throw new Error('Not enough points');
+}
+```
+
+### Create the redemption
+
+```typescript
+const redemption = await vinr.loyalty.redemptions.create(
+  {
+    accountId: account.id,
+    rewardId: reward.id,
+    metadata: { orderId: '1234' },
+  },
+  { idempotencyKey: 'redeem-order-1234' },
+);
+
+// redemption.id === 'rdm_...'
+// redemption.status === 'confirmed'
+// redemption.pointsSpent === reward.pointsCost
+```
+
+### Fulfil the reward
+
+Apply the benefit in your own system — a discount, free shipping, a voucher code. The redemption record is your proof; store `redemption.id` against the order.
+
+</Steps>
+
+If the balance is insufficient, the create call fails with `insufficient_points` and no points are deducted. See [Loyalty errors](/docs/troubleshooting/loyalty-errors) for the full list.
+
+## Handle reversals
+
+When an order is cancelled or refunded, reverse the points you awarded so balances stay honest. Reversals are themselves point transactions, linked to the original.
+
+```typescript
+// Claw back an award (e.g. the payment was refunded)
+await vinr.loyalty.points.reverse(
+  { transactionId: txn.id, reason: 'refund' },
+  { idempotencyKey: 'reverse-pay_3xZ9q' },
+);
+
+// Or void a redemption to return the spent points to the account
+await vinr.loyalty.redemptions.cancel(redemption.id);
+```
+
+Reverse on the refund webhook so it happens exactly once:
+
+```typescript
+export async function POST(req: Request) {
+  const event = vinr.webhooks.verify(
+    await req.text(),
+    req.headers.get('x-vinr-signature'),
+  );
+
+  if (event.type === 'payment.refunded') {
+    await vinr.loyalty.points.reverse(
+      { transactionId: lookupAward(event.data.id), reason: 'refund' },
+      { idempotencyKey: `reverse-${event.data.id}` },
+    );
+  }
+  return new Response('OK', { status: 200 });
+}
+```
+
+A reversal can drive a balance negative if the points were already redeemed — that's expected. The next award restores it, and the customer can't redeem again until they're back in the black.
+
+## Test it
+
+In the sandbox, awards and redemptions settle instantly — no waiting period. Drive the whole loop with the test program seeded in your account, then watch the events arrive:
+
+| Event | When it fires |
+|---|---|
+| `loyalty.account.created` | After enrolling a member |
+| `loyalty.points.earned` | After an award |
+| `loyalty.reward.redeemed` | After a confirmed redemption |
+| `loyalty.points.reversed` | After a reversal |
+
+## Next steps
+
+<Cards>
+  <Card title="Earn loyalty at checkout" href="/docs/guides/earn-loyalty-at-checkout" description="Award points automatically on every payment." />
+  <Card title="Loyalty programs" href="/docs/engagement/programs" description="Configure earn rules, tiers, and rewards." />
+  <Card title="Engagement overview" href="/docs/engagement" description="Accounts, points, and redemptions explained." />
+</Cards>

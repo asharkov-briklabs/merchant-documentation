@@ -1,0 +1,131 @@
+---
+title: Customer portal
+description: Let customers manage their own subscriptions and invoices.
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+The hosted customer portal is a VINR-hosted, prebuilt UI where your customers update payment methods, download invoices, and manage their own subscriptions — so you don't write or maintain that surface yourself. You create a short-lived session on the server, redirect the customer to it, and VINR sends them back when they're done.
+
+## What the portal offers
+
+The portal exposes a configurable set of self-service flows, all scoped to a single `customer`:
+
+| Feature | What the customer can do |
+|---|---|
+| Payment methods | Add, remove, and set the default card or SEPA mandate. |
+| Invoice history | View and download past [invoices](/docs/billing/invoices) as PDF. |
+| Subscription updates | Switch plans, change quantity, apply proration. |
+| Cancellation | Cancel immediately or at period end, with an optional retention flow. |
+| Billing details | Edit name, billing address, and tax ID (used for [tax](/docs/billing/tax)). |
+
+Every change the customer makes emits the same webhook events as the API — a plan switch fires `subscription.updated`, a cancellation fires `subscription.deleted` — so your fulfillment logic stays in one place regardless of who initiated the change.
+
+## Creating a portal session
+
+A portal session is created server-side with your secret key, then opened in the browser. Sessions are single-use and expire, so generate one per visit rather than caching the URL.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// In a route handler, after authenticating the signed-in user.
+const session = await vinr.billing.portalSessions.create({
+  customer: 'cust_8sJ2kLpQ',                 // your authenticated customer
+  returnUrl: 'https://app.example.com/account', // where to send them back
+});
+
+// 302 the browser to the hosted portal.
+res.redirect(303, session.url);
+```
+
+The response includes the live `url` and an `expiresAt` timestamp:
+
+```json
+{
+  "id": "bps_3nXyT0aD",
+  "customer": "cust_8sJ2kLpQ",
+  "url": "https://portal.vinr.com/session/bps_3nXyT0aD#...",
+  "returnUrl": "https://app.example.com/account",
+  "expiresAt": "2026-05-30T14:25:00Z"
+}
+```
+
+<Callout type="warn">
+Never expose your secret key in the browser. The session is minted on your server; only the resulting `url` is safe to hand to the client. Authenticate the user first — anyone holding a valid session URL can act as that customer.
+</Callout>
+
+## Configuring features
+
+What appears in the portal is controlled by a portal configuration, not by query parameters. Set a default once and the same rules apply to every session, which keeps client code trivial.
+
+```typescript
+await vinr.billing.portalConfigurations.update('default', {
+  features: {
+    paymentMethodUpdate: { enabled: true },
+    invoiceHistory: { enabled: true },
+    subscriptionCancel: {
+      enabled: true,
+      mode: 'at_period_end',        // or 'immediately'
+      retention: { offerCoupon: 'rwd_save20' },
+    },
+    subscriptionUpdate: {
+      enabled: true,
+      products: ['prod_basic', 'prod_pro'],   // allowed plan switches
+      prorationBehavior: 'create_prorations',
+    },
+  },
+});
+```
+
+<TypeTable
+  type={{
+    "subscriptionCancel.mode": { type: "'immediately' | 'at_period_end'", description: "When a self-service cancellation takes effect.", default: "at_period_end" },
+    "subscriptionUpdate.products": { type: "string[]", description: "Product IDs a customer may switch between. Omit to disable switching.", default: "[]" },
+    "subscriptionUpdate.prorationBehavior": { type: "'create_prorations' | 'none'", description: "Whether mid-cycle plan changes generate proration line items.", default: "create_prorations" },
+  }}
+/>
+
+You can pass a `configuration` ID when creating a session to use an alternate config — for example a restricted one for customers in dunning.
+
+## Branding
+
+The portal inherits the brand settings from your VINR dashboard: logo, accent color, and the support and legal links shown in the footer. Set these under **Settings → Branding** so the portal matches your product without per-session work.
+
+<Steps>
+
+### Upload your assets
+
+Add a logo and pick an accent color in the dashboard. These apply to the portal, hosted invoices, and email receipts at once.
+
+### Set support links
+
+Provide a support URL and privacy/terms links. They render in the portal footer and on PDF invoices.
+
+### Use a custom domain (optional)
+
+Map `billing.example.com` to the portal via CNAME so customers never leave your domain. See [Custom domains](/docs/integration/custom-domains).
+
+</Steps>
+
+## Security
+
+The portal is built so a session can never escalate beyond the one customer it was minted for.
+
+- **Server-only creation.** Sessions require the secret key; they cannot be created from the browser.
+- **Scoped and short-lived.** A session grants access to exactly one `customer` and expires (default 30 minutes). Expired or already-used links return the customer to a "session expired" screen.
+- **No card data in your stack.** Card and mandate entry happens inside VINR-hosted fields, keeping the portal out of your [PCI](/docs/compliance/pci-dss) scope.
+- **Audited.** Every customer-initiated change is recorded and emits a webhook, so your records reflect portal activity in real time. Verify those events with `vinr.webhooks.verify(payload, signature)`.
+
+<Callout type="info">
+Treat the portal as one of several entry points to the same data. A plan switch made in the portal is identical to one made via `vinr.subscriptions.update(...)` — react to the resulting `subscription.updated` event, not to the portal itself.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="The lifecycle the portal lets customers manage." />
+  <Card title="Invoices" href="/docs/billing/invoices" description="What customers view and download in the portal." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="React to changes customers make for themselves." />
+</Cards>

@@ -1,0 +1,170 @@
+---
+title: Subscription schedules
+description: Plan future phases and price changes in advance.
+persona: ["developer"]
+priority: "P2"
+lastUpdated: "2026-05-30"
+---
+
+A schedule is a timeline attached to a subscription. You define a sequence of **phases** — an intro price for three months, then a standard price thereafter — and VINR transitions between them automatically at the right moment, with no manual update at switchover. Use schedules whenever a future change is already known: promotional ramps, contracted price increases, plan migrations on renewal.
+
+## When to use a schedule
+
+A plain [subscription update](/docs/billing/subscriptions) changes billing _now_. A schedule changes billing _later_, deterministically, and can chain several changes in one object.
+
+| Need | Use |
+|---|---|
+| Change price effective immediately | `vinr.subscriptions.update` |
+| Discounted intro period, then full price | Schedule with two phases |
+| Annual contract that steps up each year | Schedule with one phase per year |
+| Migrate everyone to a new plan at next renewal | Schedule anchored to the cycle |
+
+## Phases
+
+Each phase declares the prices in effect, how long it lasts, and how to handle the boundary. Phases run back to back: the `end_date` of one is the `start_date` of the next, so there are no gaps.
+
+<TypeTable
+  type={{
+    items: { type: "array", description: "Prices and quantities active during the phase.", default: "—" },
+    iterations: { type: "number", description: "Number of billing cycles the phase lasts (alternative to a fixed end_date).", default: "—" },
+    end_date: { type: "timestamp", description: "Absolute moment the phase ends. Mutually exclusive with iterations.", default: "—" },
+    proration_behavior: { type: "string", description: "How to bill the boundary: create_prorations | none | always_invoice.", default: "create_prorations" },
+    coupon: { type: "string", description: "Optional discount applied for the duration of the phase.", default: "null" },
+  }}
+/>
+
+<Callout type="info">
+A phase ends when its `iterations` are exhausted **or** its `end_date` arrives — set exactly one. The final phase may omit both, meaning "continue indefinitely on these prices."
+</Callout>
+
+## How it works
+
+<Steps>
+
+### Create the schedule
+
+You can wrap an existing subscription or let VINR create one from the first phase. The first phase's start is the schedule's `start_date` (defaults to `now`).
+
+### VINR drives the timeline
+
+At each phase boundary VINR ends the current phase, applies the next phase's prices, and (per `proration_behavior`) writes proration line items onto the upcoming invoice. No webhook handler or cron on your side is required.
+
+### Phases bill on the normal cycle
+
+A schedule does not change the [billing cycle anchor](/docs/billing/how-billing-works). Invoices still finalize and collect on the subscription's existing dates — the schedule only controls _which_ prices apply.
+
+### The schedule completes or releases
+
+When the last bounded phase ends, behavior depends on `end_behavior`: `release` detaches the schedule and leaves the subscription running on the final prices; `cancel` cancels the subscription.
+
+</Steps>
+
+## Example: intro price, then standard
+
+A 3-cycle launch discount at €10/month, then €20/month indefinitely.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const schedule = await vinr.subscriptionSchedules.create({
+  customer: 'cust_8sJ2kLpQ',
+  start_date: 'now',
+  end_behavior: 'release',          // keep billing after the last phase
+  phases: [
+    {
+      items: [{ price: 'price_intro10', quantity: 1 }],  // €10.00
+      iterations: 3,                 // three monthly cycles
+    },
+    {
+      items: [{ price: 'price_std20', quantity: 1 }],    // €20.00
+      proration_behavior: 'create_prorations',
+      // no iterations / end_date -> runs indefinitely
+    },
+  ],
+});
+
+console.log(schedule.id);            // "sub_sched_..."  -> backing sub_...
+```
+
+The same call over raw REST:
+
+```bash
+curl https://sandbox.api.vinr.com/v1/subscription_schedules \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -d customer=cust_8sJ2kLpQ \
+  -d start_date=now \
+  -d end_behavior=release \
+  -d "phases[0][items][0][price]=price_intro10" \
+  -d "phases[0][iterations]=3" \
+  -d "phases[1][items][0][price]=price_std20"
+```
+
+## Amending a running schedule
+
+To change a future phase, fetch the schedule and resubmit the full `phases` array — VINR diffs it. Phases that have already elapsed are immutable; only the current and future phases can be edited.
+
+```typescript
+await vinr.subscriptionSchedules.update('sub_sched_3Vx9', {
+  phases: [
+    // current phase must be repeated as-is to preserve history
+    { items: [{ price: 'price_intro10', quantity: 1 }], iterations: 3 },
+    // raise the standard tier and add a discount for one year
+    {
+      items: [{ price: 'price_std25', quantity: 1 }],
+      coupon: 'rwd_loyalty10',
+      iterations: 12,
+    },
+  ],
+});
+```
+
+## Resulting events
+
+| Event | Emitted when |
+|---|---|
+| `subscription_schedule.created` | The schedule is created. |
+| `subscription_schedule.updated` | Phases are amended. |
+| `subscription_schedule.phase.started` | A phase boundary is crossed; payload carries the new `items`. |
+| `subscription.updated` | The backing subscription's prices change at the boundary. |
+| `invoice.created` / `invoice.paid` | The new phase bills on the normal cycle. |
+
+Fulfil entitlement changes on `subscription_schedule.phase.started` rather than guessing dates client-side. Always [verify the signature](/docs/integration/webhooks) first:
+
+```typescript
+const event = vinr.webhooks.verify(payload, req.headers['x-vinr-signature']);
+if (event.type === 'subscription_schedule.phase.started') {
+  const phase = event.data.object.current_phase;
+  await grantEntitlements(event.data.object.customer, phase.items);
+}
+```
+
+## Edge cases
+
+<Accordions>
+
+<Accordion title="Customer cancels mid-schedule">
+Cancelling the backing subscription cancels the schedule too. Future phases never apply, and `subscription_schedule.canceled` is emitted alongside `subscription.deleted`.
+</Accordion>
+
+<Accordion title="A phase's price is archived">
+Archived prices stay valid on existing schedules — a queued phase referencing an archived `price_` still applies. You only lose the ability to add _new_ phases on that price.
+</Accordion>
+
+<Accordion title="Proration on the boundary">
+With `create_prorations`, a mid-cycle phase change credits unused time on the old price and charges the new rate pro rata on the next invoice. Set `none` to switch cleanly at the next cycle with no proration line items.
+</Accordion>
+
+<Accordion title="Trials inside a schedule">
+The first phase can carry a `trial_end`. VINR bills €0 during the trial, then the phase's prices take effect — combine with [Trials & proration](/docs/billing/trials-and-proration).
+</Accordion>
+
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="The full subscription lifecycle." />
+  <Card title="Trials & proration" href="/docs/billing/trials-and-proration" description="How partial periods and boundaries are billed." />
+  <Card title="Products & prices" href="/docs/billing/products-and-prices" description="Define the prices your phases reference." />
+</Cards>

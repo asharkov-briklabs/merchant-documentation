@@ -1,0 +1,133 @@
+---
+title: Customers & payment methods
+description: How Billing reuses customers and stored methods from Payments.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Billing does not own a separate notion of "who pays" — it reuses the exact `customer` and stored payment method objects you already created in [Payments](/docs/payments/customers). This page covers the billing-specific fields layered on top of that shared model: which method a subscription charges, how addresses drive tax, and what happens when the method on file stops working.
+
+## One customer, two pillars
+
+A `customer` created for a one-off [payment](/docs/payments/how-payments-work) is the same record a subscription bills. There is no migration step and no "billing customer" — a `cust_` id is portable across both pillars. Billing simply reads extra fields from it.
+
+| Field | Owned by | What Billing uses it for |
+|---|---|---|
+| `email` | Shared | Sending invoices and dunning notices. |
+| `default_payment_method` | Shared | The method each invoice is collected against. |
+| `billing_address` | Billing-relevant | Computing [tax](/docs/billing/tax) and rendering invoices. |
+| `tax_ids` | Billing-relevant | Reverse-charge / VAT exemption logic. |
+| `balance` | Billing | Credit applied to future invoices (negative = credit owed to customer). |
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// Same object Payments uses — billing fields are just additional properties.
+const customer = await vinr.customers.create({
+  email: 'ops@northwind.example',
+  name: 'Northwind GmbH',
+  billingAddress: {
+    line1: 'Friedrichstrasse 12',
+    city: 'Berlin',
+    postalCode: '10117',
+    country: 'DE',
+  },
+  taxIds: [{ type: 'eu_vat', value: 'DE123456789' }],
+});                               // "cust_..."
+```
+
+## Default payment method
+
+Every recurring [invoice](/docs/billing/how-billing-works) is collected against a single method. VINR resolves it in priority order:
+
+<Steps>
+
+### Subscription-level method
+
+If the `subscription` has its own `default_payment_method`, it wins. Use this when one customer pays for several subscriptions with different cards.
+
+### Customer-level method
+
+Otherwise VINR falls back to the customer's `default_payment_method`.
+
+### No method on file
+
+If neither is set, the invoice finalizes but cannot be collected and emits `invoice.payment_failed`, which starts [dunning](/docs/billing/dunning-and-recovery).
+
+</Steps>
+
+```typescript
+// Pin a specific stored method to one subscription, overriding the customer default.
+await vinr.subscriptions.update('sub_4Qe1...', {
+  defaultPaymentMethod: 'pm_9Hh2...',
+});
+```
+
+<Callout type="info">
+Stored methods are created and tokenized entirely in Payments. Billing never sees raw card data — it only references the `pm_` token. See [Saving payment methods](/docs/payments/saved-methods).
+</Callout>
+
+## Billing details & addresses
+
+The `billing_address` is the input to tax calculation, so keep it current. Changing it on the customer affects **future** invoices only; already-finalized invoices keep the address that was in effect when they locked. The `tax_ids` array determines whether VINR applies a reverse charge (B2B cross-border) or treats the sale as taxable in the customer's country.
+
+```typescript
+await vinr.customers.update('cust_8Tg3...', {
+  billingAddress: { line1: 'Rue de la Loi 100', city: 'Brussels', postalCode: '1000', country: 'BE' },
+});
+```
+
+## Updating the method on file
+
+Customers update cards through a hosted update flow or by saving a new method in your own UI. The common pattern is: collect and tokenize the new method in Payments, then point the customer's default at it.
+
+```typescript
+// 1. New method tokenized client-side (returns "pm_...").
+// 2. Promote it to the customer default — the next invoice uses it automatically.
+await vinr.customers.update('cust_8Tg3...', {
+  defaultPaymentMethod: 'pm_NewK4...',
+});
+```
+
+<TypeTable
+  type={{
+    defaultPaymentMethod: { type: "string", description: "A pm_ token to bill by default.", default: "null" },
+    billingAddress: { type: "Address", description: "Drives tax and invoice rendering.", default: "null" },
+    taxIds: { type: "TaxId[]", description: "VAT / reverse-charge identifiers.", default: "[]" },
+  }}
+/>
+
+## Failed-method handling
+
+When collection fails, VINR distinguishes a *transient* failure (insufficient funds, soft decline) from a *permanent* one (expired or revoked card). Both emit `invoice.payment_failed`, but they route differently:
+
+- **Transient** — dunning retries the same method on its schedule. No action needed unless retries exhaust.
+- **Permanent** — VINR flags the method as `requires_action`; retrying it will never succeed, so dunning prompts the customer to add a new card.
+
+Subscribe to the event to drive your own recovery emails or in-app banners.
+
+```typescript
+// In your webhook handler. Signature header: x-vinr-signature.
+const event = vinr.webhooks.verify(payload, signature);
+
+if (event.type === 'invoice.payment_failed') {
+  const invoice = event.data.object;            // "inv_..."
+  if (invoice.lastPaymentError?.type === 'permanent') {
+    await sendUpdateCardEmail(invoice.customer);
+  }
+}
+```
+
+<Callout type="warn">
+In sandbox, use `4000 0000 0000 0002` to simulate a decline and exercise your failed-method path before going live. See the [sandbox test cards](/docs/payments/testing).
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="How billing works" href="/docs/billing/how-billing-works" description="The objects and flow behind recurring revenue." />
+  <Card title="Dunning & recovery" href="/docs/billing/dunning-and-recovery" description="What happens after a method fails." />
+  <Card title="Saving payment methods" href="/docs/payments/saved-methods" description="Tokenize and store cards in Payments." />
+</Cards>

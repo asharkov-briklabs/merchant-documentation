@@ -1,0 +1,155 @@
+---
+title: Creating invoices
+description: Build one-off invoices with line items.
+persona: ["developer", "finance-manager"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Not every charge is recurring. Use standalone invoices to bill a customer for one-off work, professional services, or any ad-hoc amount — adding line items, discounts, and tax, then finalizing and collecting payment, all independent of subscriptions.
+
+## Overview
+
+A standalone invoice is the same `invoice` object a [subscription](/docs/billing/subscriptions) generates, but you assemble it yourself instead of letting a billing cycle do it. The lifecycle is identical:
+
+| State | Meaning |
+|---|---|
+| `draft` | Editable. You can add, edit, and remove line items. Nothing is owed yet. |
+| `open` | Finalized. The amount is locked and VINR is attempting (or awaiting) collection. |
+| `paid` | A [payment](/docs/payments/how-payments-work) succeeded for the full amount. |
+| `uncollectible` | Written off — collection failed and dunning gave up. |
+| `void` | Cancelled before payment. Cannot be reopened. |
+
+The key idea: **draft invoices are mutable, finalized invoices are not.** Build everything you need while the invoice is a draft, then finalize once.
+
+## How it works
+
+You create an empty draft, attach one or more invoice items (each becomes a line on the statement), and finalize. On finalization VINR applies discounts and tax, computes the amount due, and — depending on `collection_method` — either charges the customer's default payment method automatically or emails them a hosted invoice to pay manually.
+
+<Steps>
+
+### Create the draft
+
+Create an `invoice` for a `cust_` customer. It starts empty and in `draft`.
+
+### Add invoice items
+
+Each `mbu_`-free line is an **invoice item** with an `amount` (minor units) and a `description`. Items added to a draft attach to it immediately.
+
+### Finalize
+
+VINR locks the totals, applies [coupons](/docs/billing/coupons-and-discounts) and [tax](/docs/billing/tax), assigns an invoice number, and moves the invoice to `open`.
+
+### Collect
+
+With `collection_method: 'charge_automatically'`, VINR immediately charges the default method. With `send_invoice`, the customer receives a payment link and a due date.
+
+</Steps>
+
+## Example request
+
+The snippet below bills a customer EUR 145.00 across two line items, applies a fixed discount, finalizes, and charges automatically.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// 1. Create a draft invoice.
+const invoice = await vinr.invoices.create({
+  customer: 'cust_8Fk2pQ',
+  currency: 'EUR',
+  collection_method: 'charge_automatically', // or 'send_invoice'
+  description: 'Onboarding & setup, May 2026',
+});                                            // "inv_..." in state "draft"
+
+// 2. Attach line items to the draft.
+await vinr.invoiceItems.create({
+  invoice: invoice.id,
+  amount: 12000,                               // €120.00
+  description: 'Implementation (8h)',
+});
+await vinr.invoiceItems.create({
+  invoice: invoice.id,
+  amount: 2500,                                // €25.00
+  description: 'Data migration',
+});
+
+// 3. (Optional) apply a discount and finalize.
+const finalized = await vinr.invoices.finalize(invoice.id, {
+  discounts: [{ coupon: 'WELCOME10' }],
+});
+
+console.log(finalized.status);                 // "open" -> "paid" once collected
+console.log(finalized.amount_due);             // 13050  (€130.50 after 10% off)
+```
+
+<Callout type="info">
+Add **every** line item before you call `finalize`. Once an invoice is `open` its totals are immutable — to change a finalized invoice you must `void` it and create a new one.
+</Callout>
+
+Prefer raw REST? The same finalize step over HTTP:
+
+```bash
+curl -X POST https://sandbox.api.vinr.com/v1/invoices/inv_3Rd9Lm/finalize \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "discounts": [{ "coupon": "WELCOME10" }] }'
+```
+
+## Key parameters
+
+<TypeTable
+  type={{
+    customer: { type: "string", description: "The cust_ id being billed. Required." },
+    currency: { type: "string", description: "ISO 4217 code.", default: "EUR" },
+    collection_method: { type: "'charge_automatically' | 'send_invoice'", description: "Auto-charge the default method, or email a payment link.", default: "charge_automatically" },
+    due_date: { type: "number", description: "Unix seconds. Only valid with send_invoice.", default: "null" },
+    auto_advance: { type: "boolean", description: "Let VINR finalize and collect the draft automatically after ~1h.", default: "false" },
+  }}
+/>
+
+## Resulting events
+
+Finalizing and collecting an invoice emits a predictable sequence you can subscribe to on a [webhook endpoint](/docs/integration/webhooks):
+
+- `invoice.finalized` — the draft became `open`; totals are locked.
+- `invoice.paid` — collection succeeded. Fulfil access or deliver goods here.
+- `invoice.payment_failed` — automatic collection failed; the invoice enters [dunning](/docs/billing/dunning-and-recovery).
+
+```typescript
+const event = vinr.webhooks.verify(payload, signature); // x-vinr-signature header
+if (event.type === 'invoice.paid') {
+  const inv = event.data.object;               // { id: "inv_...", amount_paid, ... }
+  await grantAccess(inv.customer);
+}
+```
+
+## Edge cases
+
+<Accordions>
+
+<Accordion title="Finalizing an empty invoice">
+An invoice with no line items and a zero `amount_due` finalizes straight to `paid` — there is nothing to collect. Guard against accidental zero-amount invoices in your own code if they shouldn't reach the customer.
+</Accordion>
+
+<Accordion title="Negative line items (credits)">
+A negative `amount` on an invoice item acts as a credit. If credits push `amount_due` below zero, the surplus is added to the customer's [credit balance](/docs/billing/credit-balance) and applied to their next invoice rather than refunded.
+</Accordion>
+
+<Accordion title="Correcting a finalized invoice">
+You cannot edit an `open` invoice. Either `void` it and issue a replacement, or — if it's already `paid` — issue a [refund](/docs/payments/refunds) against the underlying payment. Voiding a paid invoice is not allowed.
+</Accordion>
+
+<Accordion title="Manual collection & due dates">
+With `send_invoice`, set a `due_date`. The customer pays via the hosted invoice page; VINR emits `invoice.paid` when they do. No `due_date` defaults to due on receipt.
+</Accordion>
+
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="How billing works" href="/docs/billing/how-billing-works" description="The objects and flow behind every invoice." />
+  <Card title="Coupons & discounts" href="/docs/billing/coupons-and-discounts" description="Apply percentage and fixed discounts to invoices." />
+  <Card title="Dunning & recovery" href="/docs/billing/dunning-and-recovery" description="What happens when automatic collection fails." />
+</Cards>

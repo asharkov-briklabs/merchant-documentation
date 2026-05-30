@@ -1,0 +1,146 @@
+---
+title: Refunds
+description: Return funds fully or partially and track refund status.
+persona: ["developer", "finance-manager"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+A refund returns captured funds to the customer on the rail the original `payment` used. Refunds are their own object with a `re_` prefix, they settle asynchronously, and they emit dedicated lifecycle events so you never have to poll. This page covers creating refunds, partial and repeated refunds, status and timing, how fees behave, and what to do when a refund fails.
+
+## Creating a refund
+
+Refund a payment by its ID. With no `amount`, VINR refunds the full remaining refundable balance.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const refund = await vinr.refunds.create({
+  payment: 'pay_3Nf8x2a',
+  reason: 'requested_by_customer',
+  metadata: { ticketId: 'ZD-4821' },
+});
+
+// refund.id        → "re_7Qp2m1c..."
+// refund.status    → "pending"
+// refund.amount    → 1000   (full original amount)
+```
+
+To refund only part of a charge, pass an explicit `amount` in minor units:
+
+```typescript
+const partial = await vinr.refunds.create({
+  payment: 'pay_3Nf8x2a',
+  amount: 250,            // €2.50 of a €10.00 charge
+  reason: 'product_not_received',
+});
+```
+
+The same call over raw REST:
+
+```bash
+curl https://api.vinr.com/v1/refunds \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "payment": "pay_3Nf8x2a", "amount": 250, "reason": "product_not_received" }'
+```
+
+<TypeTable
+  type={{
+    payment: { type: "string", description: "ID of the payment to refund (pay_…). Required." },
+    amount: { type: "integer", description: "Minor units to refund. Omit for the full remaining balance.", default: "remaining balance" },
+    reason: { type: "enum", description: "One of requested_by_customer, duplicate, fraudulent, product_not_received." },
+    metadata: { type: "object", description: "Up to 40 key/value pairs echoed back on the refund and its events." },
+  }}
+/>
+
+## Full vs. partial refunds
+
+A payment can be refunded multiple times until its **refundable balance** reaches zero. Each call creates a separate `refund` object, and the payment's `amountRefunded` tracks the running total.
+
+```typescript
+// €10.00 charge → two partial refunds
+await vinr.refunds.create({ payment: 'pay_3Nf8x2a', amount: 400 }); // €4.00
+await vinr.refunds.create({ payment: 'pay_3Nf8x2a', amount: 600 }); // €6.00
+// payment.amountRefunded → 1000, payment.status → "refunded"
+```
+
+Once `amountRefunded` equals the captured amount the payment status becomes `refunded`; while a balance remains it is `partially_refunded`. Requesting more than the remaining balance returns a `422` with code `amount_too_large` — VINR never over-refunds.
+
+<Callout type="info">
+To reverse a card payment that has only been authorized (not yet captured), cancel the authorization instead of refunding it. See [authorize & capture](/docs/payments/authorize-and-capture).
+</Callout>
+
+## Refund status & timing
+
+Refunds are asynchronous. The object moves through these states:
+
+| Status | Meaning |
+|---|---|
+| `pending` | Accepted by VINR, queued to the rail. |
+| `succeeded` | Funds confirmed on their way to the customer. |
+| `failed` | The rail rejected the refund (see [Failed refunds](#failed-refunds)). |
+| `canceled` | Refund withdrawn before it reached the rail. |
+
+Settlement time depends on the rail, not on VINR:
+
+| Rail | Typical time to customer |
+|---|---|
+| Cards | 5–10 business days (issuer-controlled) |
+| SEPA / bank transfer | 1–3 business days |
+| Stablecoins (USDC, EURC) | Minutes after on-chain confirmation |
+| Local methods (iDEAL, Blik) | Varies by scheme |
+
+Subscribe to events rather than polling. Verify every webhook before trusting it:
+
+```typescript
+// In your webhook handler
+const event = vinr.webhooks.verify(rawBody, req.headers['x-vinr-signature']);
+
+if (event.type === 'refund.succeeded') {
+  const refund = event.data;
+  await markOrderRefunded(refund.metadata.ticketId, refund.amount);
+}
+```
+
+Relevant events: `refund.created`, `refund.succeeded`, and `refund.failed`. See [Webhooks](/docs/integration/webhooks) for setup and signature details.
+
+## Fees on refunds
+
+When you refund a payment, the original processing fee behaves as follows:
+
+- **Card processing fees are not returned.** The per-transaction fee on the original charge stays with VINR, mirroring scheme behavior.
+- **The refunded principal is debited from your VINR balance**, not charged separately. If your balance is insufficient, the amount is recovered from your next [settlement](/docs/operations/settlement).
+- **Refunds appear as negative entries** in [reconciliation](/docs/operations/reconciliation), netted against your payouts.
+
+<Callout type="warn">
+Because principal is pulled from your balance, refunding more than your available balance can push it negative and delay the next payout. Keep a buffer if you process high refund volume.
+</Callout>
+
+## Failed refunds
+
+A refund can fail after acceptance — most often because the customer's card account is closed or the destination is unreachable. When this happens VINR emits `refund.failed` and credits the principal back to your balance.
+
+```typescript
+if (event.type === 'refund.failed') {
+  const refund = event.data;
+  // refund.failureReason → "destination_account_closed" | "rail_rejected" | ...
+  await openManualRefundTask(refund.payment, refund.failureReason);
+}
+```
+
+Handle failures by reaching the customer for an alternative destination (e.g. a bank transfer) and issuing a new refund, or by routing to your finance team. A failed refund does **not** reduce the payment's refundable balance, so you can safely retry.
+
+<Callout type="info">
+Test refund failures in sandbox by refunding a charge made with the declined card `4000 0000 0000 0002`. The refund is accepted, then transitions to `failed` within a few seconds.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Payment lifecycle" href="/docs/payments/payment-lifecycle" description="Every payment status and the events that fire." />
+  <Card title="Disputes & chargebacks" href="/docs/payments/disputes" description="When a customer reverses a card payment instead." />
+  <Card title="Reconciliation" href="/docs/operations/reconciliation" description="How refunds net against your payouts and balance." />
+</Cards>

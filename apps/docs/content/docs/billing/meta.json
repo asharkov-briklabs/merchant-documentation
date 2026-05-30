@@ -1,0 +1,27 @@
+{
+  "root": true,
+  "title": "Billing",
+  "icon": "ReceiptText",
+  "pages": [
+    "index",
+    "---Core concepts---",
+    "how-billing-works",
+    "products-and-prices",
+    "pricing-models",
+    "customers-and-methods",
+    "---Subscriptions---",
+    "subscriptions",
+    "---Invoicing---",
+    "invoices",
+    "---Capabilities---",
+    "usage-based-billing",
+    "quotes",
+    "coupons-and-discounts",
+    "trials-and-proration",
+    "dunning-and-recovery",
+    "credit-notes",
+    "customer-portal",
+    "tax",
+    "revenue-recognition"
+  ]
+}

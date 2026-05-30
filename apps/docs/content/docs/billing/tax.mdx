@@ -1,0 +1,133 @@
+---
+title: Tax
+description: Calculate and collect tax on invoices automatically.
+persona: ["developer", "finance-manager", "compliance-officer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+VINR can determine the right tax rate per customer location and line item, collect it on each invoice, and produce the records you need for filing. This turns tax from a manual, error-prone reconciliation step into part of the normal billing flow.
+
+## Automatic tax calculation
+
+Enable automatic tax on a subscription (or a one-off invoice) and VINR computes the correct rate at finalization — after discounts, before payment. The rate depends on three inputs: where the customer is, what kind of product the line item is, and your active [registrations](#tax-registrations).
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const subscription = await vinr.subscriptions.create({
+  customer: 'cust_8Fk2',
+  items: [{ price: 'price_pro_monthly' }],
+  automaticTax: { enabled: true },   // VINR resolves the rate per cycle
+});
+```
+
+To resolve a rate, VINR needs a defensible customer location. It derives one from, in order of precedence: an explicit `taxLocation` on the customer, the billing address, the payment method country, and finally the IP country captured at checkout. If none is conclusive, the invoice is flagged rather than guessing.
+
+```typescript
+await vinr.customers.update('cust_8Fk2', {
+  address: { country: 'DE', postalCode: '10115', city: 'Berlin' },
+  taxLocation: { ipAddress: '203.0.113.7' }, // fallback signal
+});
+```
+
+<Callout type="warn">
+Tax is calculated at **finalization**, so the address and product tax codes must be correct before the invoice finalizes. Updating a customer's country after an invoice is paid does not retroactively change tax already collected — issue a [credit note](/docs/billing/invoices) instead.
+</Callout>
+
+## Product tax codes
+
+Tax rates vary by what you sell: standard-rated SaaS, an exempt financial service, and a reduced-rate digital book can all sit on the same invoice. Assign a **tax code** to each product so VINR maps it to the correct rate in every jurisdiction.
+
+```typescript
+await vinr.products.update('prod_ebook', {
+  taxCode: 'txcd_digital_books',  // reduced or zero rate in many regions
+});
+```
+
+If a product has no tax code, VINR applies your account's default code (standard-rated unless you change it). Setting a precise code per product is what lets a single calculation engine handle mixed carts correctly.
+
+## Tax registrations
+
+VINR only collects tax in jurisdictions where you have told it you are registered. A registration represents a real-world obligation — a VAT number, a sales-tax permit, an OSS scheme — and it both enables collection and shapes the rate used.
+
+```typescript
+await vinr.tax.registrations.create({
+  country: 'DE',
+  type: 'standard',          // standard domestic registration
+  activeFrom: '2026-01-01',
+});
+
+// EU One-Stop-Shop: one registration covering cross-border B2C across the EU
+await vinr.tax.registrations.create({
+  country: 'IE',
+  type: 'oss_union',
+});
+```
+
+In a country with no active registration, VINR returns a zero-tax line and marks it `not_collecting` so your reporting can distinguish "exempt" from "we are not registered here." Add the registration when you cross a threshold; VINR begins collecting from the `activeFrom` date forward.
+
+## Tax-inclusive vs. exclusive
+
+Whether a price already contains tax is a property of the **price**, not the invoice. Set it once and VINR computes the split consistently.
+
+| Behavior | `taxBehavior: 'exclusive'` | `taxBehavior: 'inclusive'` |
+|---|---|---|
+| Listed amount | Net (tax added on top) | Gross (tax carved out) |
+| €20.00 price at 19% | Customer pays €23.80 | Customer pays €20.00 |
+| Typical use | B2B, North America | B2C in VAT regions |
+
+```typescript
+const price = await vinr.prices.create({
+  product: 'prod_pro',
+  amount: 2000,                 // €20.00
+  currency: 'EUR',
+  recurring: { interval: 'month' },
+  taxBehavior: 'inclusive',     // €20.00 is the final price
+});
+```
+
+For inclusive prices, the invoice line still shows the net amount and the tax portion separately — the total just matches the headline price.
+
+## Exemptions & tax IDs
+
+Some customers should not be charged tax: a VAT-registered EU business buying cross-border (reverse charge), a US reseller with a certificate, or a tax-exempt nonprofit. Capture the evidence on the customer.
+
+```typescript
+await vinr.customers.update('cust_corp_4a', {
+  taxIds: [{ type: 'eu_vat', value: 'DE811569869' }],
+  taxExempt: 'reverse',   // 'none' | 'exempt' | 'reverse'
+});
+```
+
+VINR validates EU VAT numbers against VIES and US/other formats syntactically; the validation result is stored on the tax ID and surfaced on `invoice.finalized`. A `reverse` customer receives a zero-tax invoice annotated with the reverse-charge notice, while `exempt` suppresses tax entirely with the exemption recorded for audit.
+
+<Callout type="info">
+A failed tax-ID validation does not block the invoice — VINR still collects tax as if the customer were not exempt, and records the failure. Resolve it before relying on the exemption at filing time.
+</Callout>
+
+## Reporting & filing
+
+Every calculated amount is stored per line item and rolled up into period reports you can pull for each jurisdiction. VINR does not file returns for you, but it produces the figures and itemized records your filing process or provider needs.
+
+```bash
+curl https://api.vinr.com/v1/tax/reports \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -d period=2026-Q1 \
+  -d country=DE
+```
+
+The response breaks down collected tax by jurisdiction, rate, and taxability so you can reconcile against [settlements](/docs/operations/settlements-and-payouts). Subscribe to the `invoice.finalized` event to stream each calculation into your own ledger as it happens.
+
+<Callout type="info">
+This page is informational and not legal advice; consult your compliance counsel for binding decisions about where you are obligated to register and collect.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Invoices" href="/docs/billing/invoices" description="Finalization, credit notes, and line items." />
+  <Card title="Products & prices" href="/docs/billing/products-and-prices" description="Set tax codes and tax behavior on your catalog." />
+  <Card title="Compliance overview" href="/docs/compliance" description="How VINR supports your regulatory obligations." />
+</Cards>

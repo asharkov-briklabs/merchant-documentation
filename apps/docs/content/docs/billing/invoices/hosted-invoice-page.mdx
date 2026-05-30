@@ -1,0 +1,124 @@
+---
+title: Hosted invoice page
+description: A VINR-hosted page where customers pay invoices.
+persona: ["developer", "finance-manager"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Every finalized invoice gets a secure, VINR-hosted page where your customer can review line items, pay with any supported method, download a PDF receipt, and update their default payment method. You don't build or host anything — VINR renders it, handles SCA, and emits events as the customer acts.
+
+## What the page does
+
+The hosted invoice page is the customer-facing surface of an [invoice](/docs/billing/invoices). It is the default collection experience for both one-off invoices you send and the recurring invoices a [subscription](/docs/billing/subscriptions) generates.
+
+| Capability | Detail |
+|---|---|
+| Pay now | Charges the amount due using a card or stored method; handles [SCA / 3DS](/docs/payments/strong-customer-authentication) inline. |
+| Download PDF | A finalized, branded invoice document for the customer's records. |
+| Update payment method | Saves a new default method on the `customer`, reused for future cycles. |
+| Status awareness | Shows `paid`, `past_due`, or `void` and disables payment when no longer collectible. |
+
+The page is branded with the logo, colors, and support details from your [branding settings](/docs/operations/branding), so it looks like your product, not ours.
+
+## When the URL exists
+
+A page URL is only present once the invoice is **finalized** — drafts have no payable surface. The link lives on the invoice as `hosted_invoice_url` and the PDF as `invoice_pdf`.
+
+<Callout type="info">
+For subscription invoices, VINR finalizes automatically about an hour after the draft is created (or immediately on the first cycle). For invoices you create by hand, call `vinr.invoices.finalize(...)` to lock the invoice and mint the URL.
+</Callout>
+
+## Retrieve the hosted page URL
+
+Finalize an invoice and read its hosted URL, then deliver that link however you like — VINR's own email, your transactional mail, or an in-app banner.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// Draft -> finalized; only finalized invoices have a hosted page.
+const invoice = await vinr.invoices.finalize('inv_4Qp1Z8kR2');
+
+console.log(invoice.hosted_invoice_url);
+// https://pay.vinr.com/i/inv_4Qp1Z8kR2/9f3c...
+console.log(invoice.invoice_pdf);
+// https://pay.vinr.com/i/inv_4Qp1Z8kR2/9f3c.../pdf
+```
+
+If you'd rather have VINR email the page for you, set `collection_method: 'send_invoice'` when creating the invoice and call `vinr.invoices.send(invoice.id)` — VINR sends a branded email containing the same link.
+
+```bash
+curl https://api.vinr.com/v1/invoices/inv_4Qp1Z8kR2/send \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -X POST
+```
+
+## What the customer sees and does
+
+<Steps>
+
+### Open the link
+
+The customer lands on the hosted page over HTTPS. The URL embeds a signed token, so no login is required — but the token is scoped to that single invoice and expires once the invoice is paid or voided.
+
+### Review and pay
+
+They see line items, tax, discounts, and the amount due, then pay with a card or a previously stored method. VINR runs any required [SCA challenge](/docs/payments/strong-customer-authentication) in-page.
+
+### Land on confirmation
+
+On success the page shows a receipt and a PDF download. VINR marks the invoice `paid` and the underlying [payment](/docs/payments/how-payments-work) `completed`.
+
+</Steps>
+
+## Resulting events
+
+Listen for these on your [webhook endpoint](/docs/integration/webhooks) (verify with `vinr.webhooks.verify(payload, signature)`). Fulfil access on `invoice.paid`, never on a client-side redirect.
+
+| Event | Fires when |
+|---|---|
+| `invoice.finalized` | The page URL becomes available. |
+| `payment.completed` | The customer's payment succeeds on the page. |
+| `invoice.paid` | The invoice is fully settled — your fulfilment trigger. |
+| `invoice.payment_failed` | A payment attempt is declined; feeds [dunning](/docs/billing/dunning-and-recovery). |
+
+```typescript
+export async function POST(req: Request) {
+  const payload = await req.text();
+  const signature = req.headers.get('x-vinr-signature')!;
+  const event = vinr.webhooks.verify(payload, signature);
+
+  if (event.type === 'invoice.paid') {
+    const invoice = event.data; // amount_paid in minor units, e.g. 2000 = €20.00
+    await grantAccess(invoice.customer);
+  }
+  return new Response('ok', { status: 200 });
+}
+```
+
+## Edge cases
+
+<Accordions>
+
+<Accordion title="The link was opened after the invoice was paid">
+The token is still valid but payment is disabled; the page shows a paid receipt with the PDF. Voided invoices show a neutral "no longer payable" state.
+</Accordion>
+
+<Accordion title="The amount changed after sending">
+If you void and reissue, the old URL stops collecting. Always send the URL from the latest finalized invoice — never cache a stale `hosted_invoice_url`.
+</Accordion>
+
+<Accordion title="Testing in sandbox">
+Use the sandbox base `https://sandbox.api.vinr.com` and pay the hosted page with `4242 4242 4242 4242` (success), `4000 0000 0000 0002` (declined), or `4000 0000 0000 3220` (3DS challenge).
+</Accordion>
+
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Invoices" href="/docs/billing/invoices" description="The invoice lifecycle from draft to paid." />
+  <Card title="Dunning & recovery" href="/docs/billing/dunning-and-recovery" description="What happens when a hosted payment fails." />
+  <Card title="Strong customer authentication" href="/docs/payments/strong-customer-authentication" description="How SCA is handled inline on the page." />
+</Cards>

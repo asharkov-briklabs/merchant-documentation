@@ -1,0 +1,157 @@
+---
+title: Handle 3D Secure / SCA
+description: Handle 3D Secure / SCA — a runnable, end-to-end guide verified against the VINR sandbox.
+category: "payments"
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+3D Secure (3DS) is the bank-led authentication step behind the EU's Strong Customer Authentication (SCA) rules. This guide shows when VINR triggers it, how to drive the challenge to completion, and how to claim exemptions so you only prompt customers when you have to — all runnable against the sandbox.
+
+## When SCA applies
+
+SCA generally applies to customer-initiated card payments in the European Economic Area and the UK. When a payment needs authentication, the cardholder's bank asks them to prove identity — usually a one-time code or a banking-app approval. VINR decides per payment based on the card's issuing country, the amount, and whether you've requested an exemption.
+
+You don't compute this yourself. Create the payment as normal and inspect the response: if `status` comes back as `requires_action`, authentication is needed before the charge can settle.
+
+| Scenario | Typically needs SCA? |
+|---|---|
+| Customer checking out interactively (EEA/UK card) | Yes, unless an exemption applies |
+| Merchant-initiated charge on a [saved card](/docs/guides/save-and-reuse-cards) | No — covered by the original mandate |
+| Recurring [subscription](/docs/billing/subscriptions) renewal | No — off-session, mandate-backed |
+| Low-value payment under EUR 30 | Often exempt (see [Exemptions](#exemptions)) |
+
+<Callout type="info">
+If you use VINR-hosted [Checkout](/docs/integration/checkout), 3DS is handled for you — the hosted page renders the challenge and returns the customer to your `returnUrl`. The flow below is for when you build your own card-collection UI with VINR Elements.
+</Callout>
+
+## Triggering authentication
+
+Create the payment with a `returnUrl`. VINR evaluates SCA requirements and, when needed, returns `status: 'requires_action'` plus a `nextAction` object describing the challenge.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+export async function POST(req: Request) {
+  const { orderId, paymentMethodId } = await req.json();
+
+  const payment = await vinr.payments.create(
+    {
+      amount: 4999,            // €49.99
+      currency: 'EUR',
+      paymentMethod: paymentMethodId,
+      confirm: true,           // attempt the charge immediately
+      returnUrl: `https://yoursite.com/orders/${orderId}/complete`,
+      metadata: { orderId },
+    },
+    { idempotencyKey: `order-${orderId}` },
+  );
+
+  return Response.json({
+    paymentId: payment.id,
+    status: payment.status,                       // 'completed' or 'requires_action'
+    redirectUrl: payment.nextAction?.redirectUrl, // present only for 'requires_action'
+  });
+}
+```
+
+## Handling the challenge flow
+
+When `status` is `requires_action`, redirect the browser to `nextAction.redirectUrl`. The bank renders its challenge there; afterwards the customer lands back on your `returnUrl`.
+
+```typescript
+const res = await fetch('/api/pay', {
+  method: 'POST',
+  body: JSON.stringify({ orderId: '1234', paymentMethodId: 'pm_card' }),
+}).then((r) => r.json());
+
+if (res.status === 'requires_action') {
+  window.location.href = res.redirectUrl;   // hand off to the issuer's challenge
+} else if (res.status === 'completed') {
+  showSuccess();
+}
+```
+
+On return, **re-check the status server-side** — never trust the redirect alone. Authentication can still fail or be abandoned.
+
+```typescript
+const payment = await vinr.payments.retrieve(paymentId);
+
+switch (payment.status) {
+  case 'completed':
+    // authenticated and charged — but fulfil on the webhook
+    break;
+  case 'failed':
+    // issuer rejected authentication; ask for another method
+    break;
+  case 'requires_action':
+    // customer abandoned the challenge; let them retry
+    break;
+}
+```
+
+As always, treat the `payment.completed` webhook as the source of truth for fulfilment so it happens exactly once. See the full [payment lifecycle](/docs/payments/payment-lifecycle).
+
+```typescript
+export async function POST(req: Request) {
+  const event = vinr.webhooks.verify(
+    await req.text(),
+    req.headers.get('x-vinr-signature'),
+  );
+
+  if (event.type === 'payment.completed') {
+    await fulfillOrder(event.data.metadata.orderId);   // idempotent
+  }
+  return new Response('OK', { status: 200 });
+}
+```
+
+## Exemptions
+
+Some payments qualify to skip the challenge while staying compliant. Request one with `requestExemption` — the issuer makes the final call and may still demand authentication.
+
+<TypeTable
+  type={{
+    low_value: { type: "string", description: "Single payment under EUR 30 (caps apply across consecutive transactions).", default: "—" },
+    trusted_beneficiary: { type: "string", description: "Customer has added you to their bank's trusted-merchant list.", default: "—" },
+    transaction_risk_analysis: { type: "string", description: "Low fraud risk; available above certain acquirer thresholds.", default: "—" },
+  }}
+/>
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 1500,              // €15.00 — under the low-value cap
+  currency: 'EUR',
+  paymentMethod: paymentMethodId,
+  confirm: true,
+  requestExemption: 'low_value',
+  returnUrl: 'https://yoursite.com/return',
+});
+```
+
+<Callout type="warn">
+An exemption is a request, not a guarantee. If the issuer overrides it you'll still receive `requires_action` — always keep the challenge-handling path above wired up. With an exemption, liability for fraud chargebacks generally shifts back to you, so weigh friction against risk.
+</Callout>
+
+## Testing 3DS
+
+Use these sandbox cards with your own card UI to exercise each branch:
+
+| Card | Behaviour |
+|---|---|
+| `4242 4242 4242 4242` | Succeeds with no challenge |
+| `4000 0000 0000 3220` | Forces a 3DS challenge you must complete |
+| `4000 0000 0000 0002` | Declined after (or instead of) authentication |
+
+On the sandbox challenge page, click **Complete** to authenticate or **Fail** to simulate abandonment, then confirm your `returnUrl` handler reacts to each resulting status.
+
+## Next steps
+
+<Cards>
+  <Card title="Accept a one-time payment" href="/docs/guides/accept-a-payment" description="The full hosted-checkout flow that handles 3DS for you." />
+  <Card title="Save & reuse cards" href="/docs/guides/save-and-reuse-cards" description="Off-session charges with stored SCA mandates." />
+  <Card title="Payment lifecycle" href="/docs/payments/payment-lifecycle" description="Every status and event a payment can emit." />
+</Cards>

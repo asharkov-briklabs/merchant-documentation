@@ -1,0 +1,125 @@
+---
+title: Launch a loyalty program
+description: Create a program and currency, define earning rules, build rewards, and go live.
+category: "engagement"
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+This guide stands up a working loyalty program end-to-end: define your currency, enroll members, award points on purchases, and let members redeem rewards. Runnable against the sandbox.
+
+## Overview
+
+```
+purchase ──► earning rule ──► points awarded ──► member balance ──► redemption ──► reward
+```
+
+A [program](/docs/engagement) holds your currency and rules; members are [loyalty accounts](/docs/engagement/loyalty-accounts) linked to customers; [earning rules](/docs/engagement/earning-rules) turn events into points; [rewards](/docs/engagement/rewards-catalog) are what points buy.
+
+## Design your program
+
+Decide three things before writing code:
+
+| Decision | Example |
+|---|---|
+| Earn rate | 1 point per €1 spent |
+| Reward value | 100 points = €5 off |
+| Expiry | Points expire 12 months after earning |
+
+## Create the program & currency
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const program = await vinr.loyalty.programs.create({
+  name: 'VINR Rewards',
+  currency: { name: 'points', expiryMonths: 12 },
+});                                  // "prog_..."
+```
+
+Enroll a member by linking an existing [customer](/docs/payments/customers):
+
+```typescript
+const member = await vinr.loyalty.accounts.create({
+  program: program.id,
+  customer: 'cust_abc123',
+});                                  // "loy_..."
+```
+
+## Define earning rules
+
+Map the `payment.completed` event to points. VINR evaluates the rule whenever a linked payment completes.
+
+```typescript
+await vinr.loyalty.earningRules.create({
+  program: program.id,
+  trigger: 'payment.completed',
+  earn: { pointsPerCurrencyUnit: 1 },     // 1 point per €1
+  multipliers: [
+    { when: { tier: 'gold' }, factor: 2 }, // gold members earn double
+  ],
+});
+```
+
+<Callout type="info">
+For points to be awarded, the payment must be linked to the member. Pass the `customer` (or a member id in `metadata`) when you [create the payment](/docs/engagement/linking-payments-and-loyalty).
+</Callout>
+
+## Build a rewards catalog
+
+Define what points buy. This reward applies a €5 discount for 100 points.
+
+```typescript
+const reward = await vinr.loyalty.rewards.create({
+  program: program.id,
+  name: '€5 off',
+  cost: 100,                              // points
+  benefit: { type: 'discount', amount: 500, currency: 'EUR' },
+});                                       // "rwd_..."
+```
+
+Redeem on the member's behalf — typically at [checkout](/docs/engagement/redemption):
+
+```typescript
+const redemption = await vinr.loyalty.redemptions.create({
+  account: member.id,
+  reward: reward.id,
+});
+// redemption.discountId → apply to the payment/checkout session
+```
+
+## React to engagement events
+
+| Event | Use it to |
+|---|---|
+| `loyalty.points.earned` | Notify the member, update your UI. |
+| `loyalty.tier.changed` | Unlock perks, send a congrats email. |
+| `loyalty.points.expired` | Prompt re-engagement. |
+
+## Go live
+
+<Steps>
+
+### Connect earning to real checkouts
+
+Follow [Linking payments & loyalty](/docs/engagement/linking-payments-and-loyalty) so live purchases earn and redemptions discount.
+
+### Handle refunds
+
+Confirm that refunds claw back awarded points — VINR does this automatically when the payment is linked.
+
+### Add tiers and campaigns
+
+Layer on [tiers](/docs/engagement/tiers-and-status) and [campaigns](/docs/engagement/campaigns) to drive repeat behavior.
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="Earn & redeem at checkout" href="/docs/guides/earn-loyalty-at-checkout" description="Wire loyalty into a live payment." />
+  <Card title="Tiers & status" href="/docs/engagement/tiers-and-status" description="Reward your best customers." />
+  <Card title="Engagement API reference" href="/docs/api-reference/loyalty-accounts" description="Every endpoint and field." />
+</Cards>

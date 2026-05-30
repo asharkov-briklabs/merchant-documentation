@@ -1,0 +1,12 @@
+{
+  "root": true,
+  "title": "Troubleshooting",
+  "icon": "LifeBuoy",
+  "pages": [
+    "index",
+    "error-codes",
+    "declines-and-failures",
+    "debugging",
+    "support"
+  ]
+}

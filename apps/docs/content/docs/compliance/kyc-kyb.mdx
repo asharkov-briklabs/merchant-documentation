@@ -1,0 +1,124 @@
+---
+title: KYC / KYB onboarding
+description: Identity and business verification required to accept payments.
+persona: ["compliance-officer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Before VINR can move money on your behalf, regulation requires us to know who you are and who controls your business. This page explains what we collect, why, and how an account progresses from sign-up to fully verified. This page is informational and not legal advice; consult your compliance counsel for binding decisions.
+
+## Why verification is required
+
+VINR settles funds to your bank account, which makes us a regulated payment intermediary. As part of that role we are obligated to perform **Know Your Customer (KYC)** on the individuals who own or control an account, and **Know Your Business (KYB)** on the legal entity itself. These checks deter money laundering, sanctions evasion, and fraud, and they are a precondition for enabling live payouts.
+
+In practice, verification protects you too: a verified account settles faster, faces fewer payout holds, and is far less likely to be flagged by acquiring banks or card networks during routine reviews.
+
+<Callout type="info">
+You can create an account, build an integration, and run the full [sandbox](/docs/getting-started) flow with **no verification at all**. Verification only gates *live* charges and payouts.
+</Callout>
+
+## Information you'll provide
+
+What we ask for depends on your entity type and country. A typical company onboarding collects three groups of data.
+
+| Group | Examples | Used for |
+|---|---|---|
+| Business (KYB) | Legal name, registration number, registered address, tax ID, MCC | Confirm the entity exists and is permitted to operate |
+| Representatives (KYC) | Full name, date of birth, home address, government ID | Verify the person opening the account has authority |
+| Beneficial owners (UBOs) | Anyone owning 25% or more, ID + ownership % | Identify who ultimately controls the funds |
+
+You'll also provide a **payout bank account** and a short description of what you sell so we can map you to the correct [Merchant Category Code](/docs/operations/payouts) and flag [restricted activity](#restricted-businesses) early.
+
+<Callout type="warn">
+The legal entity name and registration number must match your government records **exactly**. Mismatches are the single most common cause of stalled verification.
+</Callout>
+
+## Verification states
+
+Every account carries a verification status you can read via the API and react to with webhooks. Build your onboarding UI against these states rather than guessing.
+
+<TypeTable
+  type={{
+    unverified: { type: "status", description: "No KYC/KYB submitted. Sandbox only." },
+    pending: { type: "status", description: "Submitted and under review by VINR or our verification partner." },
+    needs_input: { type: "status", description: "We need a correction or additional document before we can proceed." },
+    verified: { type: "status", description: "Cleared. Live charges and payouts are enabled." },
+    rejected: { type: "status", description: "Verification could not be completed. Funds are held pending appeal." },
+  }}
+/>
+
+Fetch the current status and the list of outstanding requirements at any time:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const account = await vinr.accounts.retrieve();
+
+console.log(account.verification.status);          // "needs_input"
+for (const req of account.verification.requirements) {
+  // e.g. { field: "representative.id_document", reason: "blurry_image" }
+  console.log(`${req.field}: ${req.reason}`);
+}
+```
+
+Drive your dashboard from the `account.updated` event instead of polling:
+
+```typescript
+export async function POST(req: Request) {
+  const payload = await req.text();
+  const signature = req.headers.get('x-vinr-signature')!;
+  const event = vinr.webhooks.verify(payload, signature);
+
+  if (event.type === 'account.updated') {
+    const status = event.data.verification.status;
+    if (status === 'needs_input') notifyMerchant(event.data.verification.requirements);
+    if (status === 'verified') enableLivePayments();
+  }
+  return new Response('ok', { status: 200 });
+}
+```
+
+## Ongoing due diligence
+
+Verification is not a one-time gate. We re-screen accounts on an ongoing basis and may request fresh information when circumstances change.
+
+<Steps>
+
+### Periodic re-checks
+
+We periodically re-run sanctions and watchlist screening against your representatives and owners. This is automatic and usually invisible.
+
+### Triggered reviews
+
+A change of ownership, a new high-risk product line, a spike in volume, or an elevated [dispute](/docs/payments/disputes) rate can trigger an enhanced review. The account moves back to `needs_input` and you'll be asked for supporting documents.
+
+### Keep your details current
+
+You are responsible for keeping ownership, contact, and bank details accurate. Update them as soon as they change — stale data is treated as a compliance gap and can pause payouts.
+
+</Steps>
+
+## Restricted businesses
+
+Some activities cannot be supported, or require extra review, regardless of how clean the verification is. Common categories include:
+
+- Unlicensed financial services, money transmission, or virtual currency exchange
+- Gambling, lotteries, and games of chance without the required licenses
+- Adult content, weapons, and regulated drugs or paraphernalia
+- Multi-level marketing, pseudo-pharmaceuticals, and other high-chargeback models
+
+<Callout type="error">
+Operating a prohibited business after verification will result in the account being suspended and funds held while we meet our obligations. If you are unsure where your model falls, ask before you launch.
+</Callout>
+
+This list is illustrative, not exhaustive, and varies by region and acquiring bank. Confirm your specific use case with VINR support and your own compliance counsel before going live.
+
+## Next steps
+
+<Cards>
+  <Card title="Compliance overview" href="/docs/compliance" description="How VINR handles regulation, data, and risk." />
+  <Card title="Payouts & settlement" href="/docs/operations/payouts" description="What happens once you're verified and live." />
+  <Card title="Disputes" href="/docs/payments/disputes" description="Keep dispute rates low to avoid triggered reviews." />
+</Cards>

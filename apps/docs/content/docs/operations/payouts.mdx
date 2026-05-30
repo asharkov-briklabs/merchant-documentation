@@ -1,0 +1,138 @@
+---
+title: Payouts
+description: Move settled balance to your bank account.
+persona: ["finance-manager"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+A payout (`po_...`) moves your settled VINR balance to your connected bank account. Charges, refunds, disputes, and fees all flow through your balance first; payouts are how that balance reaches you. This page explains the schedule, how status and timing work, what happens when a payout fails, and how to reconcile what landed.
+
+## Balance, then payout
+
+Money does not move directly from a charge to your bank. Each captured payment lands in your VINR balance only after it **settles** (typically the funding delay for the method and currency). Refunds, dispute reversals, and platform fees are deducted from the same balance. A payout sweeps the **available** portion of that balance — never the pending portion.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const balance = await vinr.balance.retrieve();
+// { available: [{ amount: 184250, currency: 'EUR' }],
+//   pending:   [{ amount:  39000, currency: 'EUR' }] }
+```
+
+<Callout type="info">
+Amounts are integers in minor units — `184250` is EUR 1,842.50. Each currency has its own balance and its own payouts; VINR never converts between currencies inside a balance.
+</Callout>
+
+## Payout schedule
+
+Most accounts use an **automatic** schedule: VINR sweeps the available balance for each currency on a fixed cadence and creates a payout for you. Configure it once in the Dashboard or via the API.
+
+<TypeTable type={{
+  interval: { type: "'daily' | 'weekly' | 'monthly' | 'manual'", description: "How often automatic payouts run.", default: "daily" },
+  delayDays: { type: "number", description: "Days a settled charge waits in the balance before it is eligible.", default: "4" },
+  weeklyAnchor: { type: "'monday' … 'sunday'", description: "Day of week to pay out when interval is weekly." },
+  monthlyAnchor: { type: "number (1–31)", description: "Day of month to pay out when interval is monthly. 31 falls back to the last day." }
+}} />
+
+```typescript
+await vinr.payouts.updateSchedule({
+  interval: 'weekly',
+  weeklyAnchor: 'friday',
+  delayDays: 4,
+});
+```
+
+## Manual vs. automatic payouts
+
+| | Automatic | Manual |
+|---|---|---|
+| Trigger | VINR, on the schedule above | You, via API or Dashboard |
+| Best for | Steady cash flow, low operational effort | Treasury control, batching, holding reserve |
+| What it sweeps | Full available balance per currency | An amount you specify (up to available) |
+
+Set `interval: 'manual'` to stop the automatic sweep, then create payouts on your own terms. A manual payout never exceeds the available balance, and you may pay out less to retain a working reserve.
+
+```typescript
+const payout = await vinr.payouts.create({
+  amount: 100000,        // EUR 1,000.00
+  currency: 'EUR',
+  description: 'Weekly treasury sweep',
+});
+// payout.id === "po_...", payout.status === "pending"
+```
+
+## Payout status & timing
+
+A payout moves through a small state machine. Subscribe to the [webhook](/docs/integration/webhooks) events to drive reconciliation rather than polling.
+
+| Status | Meaning | Typical event |
+|---|---|---|
+| `pending` | Created; queued for the next bank transfer window. | `payout.created` |
+| `in_transit` | Submitted to the banking network. | `payout.in_transit` |
+| `paid` | Funds confirmed at your bank. | `payout.paid` |
+| `failed` | The bank rejected the transfer; balance is restored. | `payout.failed` |
+| `canceled` | Withdrawn before it left VINR (manual payouts only). | `payout.canceled` |
+
+Bank settlement usually takes one to three business days after `in_transit`, depending on the destination country and rail. Weekends and bank holidays in the destination country do not count.
+
+```typescript
+const verified = vinr.webhooks.verify(payload, signature); // x-vinr-signature
+
+if (verified.type === 'payout.paid') {
+  const po = verified.data;          // "po_..."
+  await ledger.markSettled(po.id, po.amount, po.arrivalDate);
+}
+```
+
+## Failed payouts
+
+When a bank rejects a transfer (closed account, wrong IBAN, mandate issue), VINR marks the payout `failed`, returns the funds to your available balance, and emits `payout.failed` with a `failureCode` and `failureMessage`.
+
+<Steps>
+
+### Read the failure reason
+
+Inspect `failureCode` (e.g. `account_closed`, `invalid_account_number`, `bank_declined`) to decide whether it is a data fix or a contact-your-bank issue.
+
+### Fix the destination
+
+Update or re-verify the bank account under **Settings → Payout accounts**. VINR pauses automatic payouts for a currency after repeated failures until the account is re-verified.
+
+### Retry
+
+Funds are already back in your balance. Create a new manual payout, or wait for the next scheduled run once the account is healthy.
+
+</Steps>
+
+<Callout type="warn">
+Three consecutive failed payouts on the same account trigger an automatic hold and a `payout.failed` notification to account owners. Resolve the underlying bank issue before retrying to avoid extended holds.
+</Callout>
+
+## Payout reports & reconciliation
+
+Every payout links to the individual balance transactions it covers — charges, refunds, dispute adjustments, and fees — so you can reconcile a single bank deposit line against gross activity. List a payout's contents, or export a CSV from the Dashboard for your accounting system.
+
+```typescript
+const items = await vinr.balanceTransactions.list({
+  payout: 'po_3xK9...',   // everything that made up this deposit
+  limit: 100,
+});
+
+for (const txn of items.data) {
+  console.log(txn.type, txn.amount, txn.fee, txn.net, txn.source);
+  // e.g. "payment" 2000 59 1941 "pay_..."
+  //      "refund" -2000 0 -2000 "re_..."
+}
+```
+
+The sum of every transaction's `net` in a payout equals the payout `amount`. See [Reporting & reconciliation](/docs/operations/reporting) for monthly statements and the financial report API.
+
+## Next steps
+
+<Cards>
+  <Card title="Settlements" href="/docs/operations/settlements" description="How charges settle into your balance before payout." />
+  <Card title="Reporting & reconciliation" href="/docs/operations/reporting" description="Statements and exports to close your books." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="React to payout.paid and payout.failed events." />
+</Cards>

@@ -1,0 +1,161 @@
+---
+title: Subscription lifecycle
+description: Every subscription status and transition.
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+A subscription is a state machine. Knowing which status it is in — and what moves it to the next one — tells you whether to grant access, retry a payment, or wind down service. This page documents every status, the transitions between them, and the events that signal each move.
+
+## The status field
+
+Every `subscription` carries a `status` that reflects the outcome of its latest billing attempt. Read it from the object or from the webhook payload; never infer it from a payment alone.
+
+<TypeTable
+  type={{
+    trialing: { type: "status", description: "In a free trial; no payment collected yet." },
+    active: { type: "status", description: "Latest invoice paid; access should be granted." },
+    past_due: { type: "status", description: "An invoice failed and dunning retries are in progress." },
+    unpaid: { type: "status", description: "Dunning exhausted; left open instead of canceled." },
+    canceled: { type: "status", description: "Terminal. Will not bill again." },
+    paused: { type: "status", description: "Billing suspended; resumable without re-creating." },
+    incomplete: { type: "status", description: "First payment needs action (e.g. 3DS) within 23 hours." },
+    incomplete_expired: { type: "status", description: "Terminal. First payment was never completed in time." },
+  }}
+/>
+
+## How transitions happen
+
+Status changes are driven by billing outcomes, not by direct writes. The diagram below reads top to bottom — creation on the left, terminal states at the bottom.
+
+```text
+                 create
+                   │
+        ┌──────────┴──────────┐
+   has trial?              no trial
+        │                     │
+   trialing ──trial ends──► incomplete ──auth ok──► active
+                               │                      │
+                          auth fails              invoice fails
+                               │                      │
+                      incomplete_expired          past_due ──retries ok──► active
+                                                      │
+                                                 retries fail
+                                                      │
+                                            unpaid / canceled
+```
+
+<Steps>
+
+### Creation
+
+Creating a subscription with a recurring price either starts a trial (`trialing`) or immediately attempts the first invoice. If that first payment needs customer action — [3DS](/docs/payments/strong-customer-authentication), for example — the subscription parks in `incomplete` until the `payment` succeeds or the 23-hour window lapses into `incomplete_expired`.
+
+### Renewal
+
+At each [billing cycle anchor](/docs/billing/how-billing-works) the subscription finalizes an invoice and collects it. Success keeps it `active`; failure moves it to `past_due` and starts [dunning](/docs/billing/dunning-and-recovery).
+
+### Recovery or cancellation
+
+While `past_due`, VINR retries on your dunning schedule. A recovered payment returns the subscription to `active`. If retries are exhausted, it lands in `canceled` or `unpaid` depending on your `collection.exhausted_behavior` setting.
+
+</Steps>
+
+## Cancellation: now vs. period end
+
+Cancellation is the one transition you trigger directly. You choose whether it takes effect immediately or at the end of the paid period.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// Cancel at period end — keeps access until the customer's paid time runs out.
+const sub = await vinr.subscriptions.update('sub_8Qk2x', {
+  cancelAtPeriodEnd: true,
+});
+console.log(sub.status);            // still "active"
+console.log(sub.cancelAtPeriodEnd); // true
+
+// Cancel immediately — stops billing now, optionally prorating a credit.
+await vinr.subscriptions.cancel('sub_8Qk2x', {
+  prorate: true,                    // credit unused time as a refund
+});                                 // status -> "canceled"
+```
+
+<Callout type="info">
+`cancelAtPeriodEnd: true` does **not** change `status` — the subscription stays `active` until the period ends, then transitions to `canceled` on its own. To undo, set `cancelAtPeriodEnd: false` before the period closes.
+</Callout>
+
+## Pausing instead of canceling
+
+Pausing keeps the subscription and its history but stops generating invoices — useful for seasonal accounts or retention offers. Resume restores billing from the next cycle.
+
+```typescript
+await vinr.subscriptions.update('sub_8Qk2x', {
+  pauseCollection: { behavior: 'void' }, // skip invoices while paused
+});                                        // status -> "paused"
+
+await vinr.subscriptions.update('sub_8Qk2x', {
+  pauseCollection: null,                   // resume
+});                                        // status -> "active"
+```
+
+## Events to subscribe to
+
+Drive your access logic from events, not from polling. Each transition emits a typed event; verify every payload before acting.
+
+| Event | Fires when | Typical action |
+|---|---|---|
+| `subscription.created` | A subscription is first created | Provision the account |
+| `subscription.trial_will_end` | 3 days before a trial ends | Prompt for a payment method |
+| `subscription.updated` | Status, plan, or quantity changes | Reconcile entitlements |
+| `invoice.paid` | A renewal collects successfully | Extend access |
+| `invoice.payment_failed` | A renewal fails (now `past_due`) | Notify; let dunning run |
+| `subscription.deleted` | A subscription reaches `canceled` | Revoke access |
+
+```typescript
+// Express-style webhook handler.
+app.post('/webhooks/vinr', async (req, res) => {
+  const event = vinr.webhooks.verify(
+    req.rawBody,
+    req.headers['x-vinr-signature'],
+  );
+
+  switch (event.type) {
+    case 'subscription.deleted':
+      await revokeAccess(event.data.object.customer);
+      break;
+    case 'invoice.payment_failed':
+      await flagPastDue(event.data.object.subscription);
+      break;
+  }
+  res.sendStatus(200);
+});
+```
+
+## Edge cases
+
+<Accordions>
+
+<Accordion title="A past_due subscription is still active to the customer">
+`past_due` means the latest invoice failed but dunning is still retrying. Access policy is yours: many merchants keep service on during retries and only revoke on `subscription.deleted`. Decide based on `status`, not on the failed `payment`.
+</Accordion>
+
+<Accordion title="incomplete vs. incomplete_expired">
+`incomplete` is recoverable — complete the first payment (e.g. finish 3DS) within 23 hours and it becomes `active`. After the window, it moves to `incomplete_expired`, which is terminal; create a new subscription rather than reviving it.
+</Accordion>
+
+<Accordion title="Reactivating a canceled subscription">
+`canceled` is terminal — there is no un-cancel. If a customer returns, create a fresh subscription. The original keeps its invoices and `ptx_`/loyalty history for reporting. Only `cancelAtPeriodEnd` is reversible, because the subscription has not yet transitioned.
+</Accordion>
+
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="How billing works" href="/docs/billing/how-billing-works" description="The objects and money flow behind subscriptions." />
+  <Card title="Dunning & recovery" href="/docs/billing/dunning-and-recovery" description="What happens during past_due and how retries work." />
+  <Card title="Trials & proration" href="/docs/billing/trials-and-proration" description="Trial endings and mid-cycle changes." />
+</Cards>

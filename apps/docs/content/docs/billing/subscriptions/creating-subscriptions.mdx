@@ -1,0 +1,170 @@
+---
+title: Creating subscriptions
+description: Start a subscription with prices, trials, and a payment method.
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+Create a subscription by attaching a customer, one or more prices, and a payment method, with optional trial and proration behavior. Once created, the subscription becomes the engine that generates invoices each cycle — so getting the first call right means recurring revenue collects itself.
+
+## What you need first
+
+A subscription ties three things together. Have each ready before you call the API:
+
+| Ingredient | Prefix | Created where |
+|---|---|---|
+| A customer | `cust_` | [Customers](/docs/payments/customers) |
+| One or more recurring prices | `price_` | [Products & prices](/docs/billing/products-and-prices) |
+| A default payment method | `pm_` | Attached to the customer or passed at creation |
+
+<Callout type="info">
+Prices must be **recurring** (have a `recurring.interval`). A one-time price belongs on an [invoice item](/docs/api-reference/invoice-items), not a subscription.
+</Callout>
+
+## Create your first subscription
+
+The minimal call attaches a customer to a price. VINR uses the customer's default payment method and anchors the billing cycle to the creation time.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const subscription = await vinr.subscriptions.create({
+  customer: 'cust_8Hk2pQ',
+  items: [{ price: 'price_pro_monthly', quantity: 1 }],
+});
+
+console.log(subscription.id);     // "sub_..."
+console.log(subscription.status); // "active"
+```
+
+If the customer has no default payment method, pass one explicitly. The method is attached to the customer and set as default for future cycles:
+
+```typescript
+const subscription = await vinr.subscriptions.create({
+  customer: 'cust_8Hk2pQ',
+  items: [{ price: 'price_pro_monthly' }],
+  default_payment_method: 'pm_card_visa',
+});
+```
+
+## What happens on creation
+
+<Steps>
+
+### VINR validates and creates the subscription
+
+The customer, prices, and payment method are checked. The subscription is created with a `billing_cycle_anchor` (defaults to now).
+
+### The first invoice is generated and finalized
+
+Unless the subscription is in a trial, VINR immediately creates a draft `invoice`, applies any [discounts](/docs/billing/coupons-and-discounts) and [tax](/docs/billing/tax), and finalizes it.
+
+### The first invoice is collected
+
+The finalized invoice is paid against the default method. This may require [SCA](/docs/payments/strong-customer-authentication) — handle the `requires_action` outcome client-side.
+
+### Status settles
+
+On success the subscription becomes `active` and VINR emits `subscription.created` and `invoice.paid`. If collection fails, the subscription enters `past_due` and [dunning](/docs/billing/dunning-and-recovery) begins.
+
+</Steps>
+
+## Adding a trial
+
+A trial delays the first charge. The subscription is `trialing` until the trial ends, then VINR collects the first real invoice automatically. Use either a duration or an explicit end timestamp.
+
+<Tabs items={['Trial days', 'Trial end date']}>
+<Tab value="Trial days">
+```typescript
+const subscription = await vinr.subscriptions.create({
+  customer: 'cust_8Hk2pQ',
+  items: [{ price: 'price_pro_monthly' }],
+  trial_period_days: 14,
+});
+// status: "trialing" — no invoice collected yet
+```
+</Tab>
+<Tab value="Trial end date">
+```typescript
+const subscription = await vinr.subscriptions.create({
+  customer: 'cust_8Hk2pQ',
+  items: [{ price: 'price_pro_monthly' }],
+  trial_end: 1751328000, // Unix seconds; first charge lands here
+});
+```
+</Tab>
+</Tabs>
+
+<Callout type="warn">
+Collecting a payment method up front during a trial is strongly recommended. Without one, the subscription lapses into `past_due` the moment the trial ends and no card is on file. See [Trials & proration](/docs/billing/trials-and-proration).
+</Callout>
+
+## Key parameters
+
+<TypeTable
+  type={{
+    customer: { type: "string", description: "Customer ID (cust_...) being billed. Required." },
+    items: { type: "array", description: "One or more { price, quantity } line items. Required." },
+    default_payment_method: { type: "string", description: "Payment method (pm_...) used for collection.", default: "customer default" },
+    trial_period_days: { type: "integer", description: "Length of the free trial in days.", default: "0" },
+    billing_cycle_anchor: { type: "integer", description: "Unix timestamp fixing when each period begins.", default: "now" },
+    proration_behavior: { type: "string", description: "How to treat a partial first period: create_prorations | none.", default: "create_prorations" },
+  }}
+/>
+
+## Aligning the billing cycle
+
+By default each subscription bills on its own creation date. To align many customers to a single date (for example, everyone on the 1st), set an explicit `billing_cycle_anchor`. VINR [prorates](/docs/billing/trials-and-proration) the partial first period unless you pass `proration_behavior: 'none'`.
+
+```typescript
+const subscription = await vinr.subscriptions.create({
+  customer: 'cust_8Hk2pQ',
+  items: [{ price: 'price_pro_monthly' }],
+  billing_cycle_anchor: 1751328000, // first day of next month, 00:00 UTC
+  proration_behavior: 'create_prorations',
+});
+```
+
+## React with webhooks, not the response
+
+The create call returns the subscription, but collection can complete asynchronously (SCA, bank delays). Provision access on the event, not the API return value.
+
+```typescript
+const event = vinr.webhooks.verify(payload, request.headers['x-vinr-signature']);
+
+switch (event.type) {
+  case 'subscription.created':
+    // subscription exists — may still be collecting its first invoice
+    break;
+  case 'invoice.paid':
+    grantAccess(event.data.object.customer); // safe to fulfil here
+    break;
+  case 'invoice.payment_failed':
+    // dunning has begun; surface a recovery prompt
+    break;
+}
+```
+
+## Edge cases
+
+<Accordions>
+<Accordion title="Multiple prices on one subscription">
+Pass several entries in `items` to bill a base plan plus add-ons on the same invoice. Each item can carry its own `quantity` and is summed into the period's invoice.
+</Accordion>
+<Accordion title="Idempotent retries">
+Network failures mid-create can double-bill. Pass an idempotency key so a retried request returns the original subscription instead of creating a second one. See [Idempotency](/docs/integration/idempotency).
+</Accordion>
+<Accordion title="Declined first payment">
+If the initial invoice cannot be collected, the subscription is `incomplete` (or `past_due` after the grace window). Test the path with sandbox card `4000 0000 0000 0002`, and `4000 0000 0000 3220` to exercise the 3DS flow.
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Trials & proration" href="/docs/billing/trials-and-proration" description="Free trials, partial periods, and mid-cycle changes." />
+  <Card title="Managing subscriptions" href="/docs/billing/subscriptions" description="Upgrade, pause, cancel, and the full lifecycle." />
+  <Card title="Dunning & recovery" href="/docs/billing/dunning-and-recovery" description="What happens when a recurring charge fails." />
+</Cards>

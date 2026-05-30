@@ -1,0 +1,138 @@
+---
+title: Usage-based billing
+description: Meter consumption and bill for it automatically.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Report usage records against a metered price and VINR aggregates them and rolls the total onto each period's invoice automatically. This is how you bill for API calls, compute minutes, seats, gigabytes — anything where the quantity isn't known until the period ends.
+
+## Metered prices
+
+A usage-based subscription rides on a **metered price**: a price whose `recurring.usage_type` is `metered` rather than `licensed`. Unlike a licensed price (a fixed quantity you set up front), a metered price starts each period at zero and accrues whatever usage you report.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const product = await vinr.products.create({ name: 'API access' });
+
+const price = await vinr.prices.create({
+  product: product.id,                  // "prod_..."
+  amount: 2,                            // €0.02 per unit, minor units
+  currency: 'EUR',
+  recurring: {
+    interval: 'month',
+    usage_type: 'metered',
+    aggregate_usage: 'sum',             // see Aggregation modes below
+  },
+});                                     // "price_..."
+```
+
+Create the subscription as usual, but **omit `quantity`** on a metered item — the quantity is derived from reported usage at the end of the period.
+
+```typescript
+const subscription = await vinr.subscriptions.create({
+  customer: 'cust_8Qd2k...',
+  items: [{ price: price.id }],         // no quantity for metered prices
+});                                     // "sub_..."
+```
+
+## Reporting usage records
+
+You record consumption against a **subscription item** (not the subscription) by posting `usage_record` objects. Each record carries a `quantity`, a `timestamp` that determines which billing period it lands in, and an `action` of `increment` (add to the running total) or `set` (overwrite it).
+
+```typescript
+const item = subscription.items[0].id; // "si_..."
+
+const record = await vinr.usageRecords.create({
+  subscription_item: item,
+  quantity: 250,                        // 250 units consumed
+  timestamp: Math.floor(Date.now() / 1000),
+  action: 'increment',
+});                                     // "mbu_..."
+```
+
+<Callout type="warn">
+Send an **idempotency key** with every usage report. If a network retry double-posts an `increment`, you bill twice; an idempotency key makes the retry a no-op. Pass `{ idempotencyKey: 'mbu-2026-05-req-91823' }` as the second argument.
+</Callout>
+
+For high-volume meters, batch reports on a short interval (for example, flush a per-customer counter every 60 seconds) rather than calling the API on every single event. Use `action: 'set'` when your own system is the source of truth for a cumulative gauge — like current seat count — so out-of-order delivery can't corrupt the total.
+
+## Aggregation modes
+
+`aggregate_usage` on the metered price tells VINR how to collapse the period's records into one billable quantity:
+
+| Mode | Billable quantity is… | Use for |
+|---|---|---|
+| `sum` | The sum of all `increment` records in the period. | API calls, messages, events. |
+| `last_during_period` | The last value reported within the period. | A gauge sampled over time. |
+| `last_ever` | The most recent value reported, even before this period. | Sticky seat counts. |
+| `max` | The peak value reported in the period. | Peak concurrent connections. |
+
+```bash
+curl https://api.vinr.com/v1/usage_records \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subscription_item": "si_4Rb9...",
+    "quantity": 1,
+    "action": "increment"
+  }'
+```
+
+When `timestamp` is omitted, VINR stamps the record at receipt time and assigns it to the open period.
+
+## Billing windows & resets
+
+Each metered item maintains a counter scoped to the current billing period. When the [subscription cycle](/docs/billing/how-billing-works) closes, VINR aggregates the records, writes a usage line item onto the draft invoice, finalizes, and **resets the counter to zero** for the next period. Records whose `timestamp` falls before the current period start are rejected once that period has been invoiced — you cannot back-date usage into a closed, billed window.
+
+<Callout type="info">
+Inspect what will be billed before the period closes with the usage summary endpoint: `vinr.subscriptionItems.usageSummaries(item)`. It returns the aggregated quantity per period so you can surface live consumption in your dashboard.
+</Callout>
+
+## Tiered metered pricing
+
+Pair metering with **tiers** to charge less per unit as volume grows. Set `billing_scheme: 'tiered'` and define tier boundaries by `up_to`:
+
+```typescript
+const tiered = await vinr.prices.create({
+  product: product.id,
+  currency: 'EUR',
+  recurring: { interval: 'month', usage_type: 'metered', aggregate_usage: 'sum' },
+  billing_scheme: 'tiered',
+  tiers_mode: 'graduated',              // each tier priced on its own slice
+  tiers: [
+    { up_to: 10000, unit_amount: 2 },   // first 10k units @ €0.02
+    { up_to: 50000, unit_amount: 1 },   // next 40k units @ €0.01
+    { up_to: null,  unit_amount: 1, flat_amount: 0 }, // remainder
+  ],
+});
+```
+
+`graduated` prices each volume slice at its own rate; `volume` mode prices every unit at the rate of the tier the total lands in.
+
+## Combining with flat fees
+
+Most real plans are a platform fee plus metered overage. Put both prices on the same subscription — one `licensed`, one `metered` — and they share a single invoice and billing cycle.
+
+```typescript
+await vinr.subscriptions.create({
+  customer: 'cust_8Qd2k...',
+  items: [
+    { price: 'price_baseFee', quantity: 1 },  // €49/mo platform fee (licensed)
+    { price: price.id },                       // metered API usage
+  ],
+});
+```
+
+At period end the invoice carries a fixed line for the base fee and an aggregated line for usage. The whole total is then [collected as one payment](/docs/payments/how-payments-work), and `invoice.paid` fires once. To bundle a free allowance into the base fee, model the metered tier's first slice at `unit_amount: 0`.
+
+## Next steps
+
+<Cards>
+  <Card title="How billing works" href="/docs/billing/how-billing-works" description="The objects and cycle behind every invoice." />
+  <Card title="Products & prices" href="/docs/billing/products-and-prices" description="Model catalogs, tiers, and currencies." />
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="Manage the lifecycle that meters bill against." />
+</Cards>

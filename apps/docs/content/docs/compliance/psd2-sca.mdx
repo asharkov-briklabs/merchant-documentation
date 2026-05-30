@@ -1,0 +1,131 @@
+---
+title: PSD2 & SCA
+description: European authentication and open-banking obligations.
+persona: ["compliance-officer", "developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+The second Payment Services Directive (PSD2) reshaped how customer payments are authenticated in the European Economic Area and the UK. Its most visible requirement — Strong Customer Authentication (SCA) — affects almost every card and bank flow you run through VINR. This page explains what applies, when VINR handles it for you, and how exemptions change the outcome.
+
+This page is informational and not legal advice; consult your compliance counsel for binding decisions.
+
+## PSD2 overview
+
+PSD2 is the EU regulatory framework governing payment services in the EEA, mirrored in the UK after Brexit. For merchants on VINR, two parts matter most:
+
+- **Strong Customer Authentication (SCA)** — most electronic payments must be verified with two independent factors.
+- **Open banking access** — licensed third parties can initiate payments or read account data on a customer's behalf, the foundation of VINR's [pay-by-bank](/docs/payments) rails.
+
+VINR is a regulated payment institution and acts as the authentication layer. You do not implement 3D Secure or bank consent screens directly — you surface the challenge VINR returns. Your obligation is to integrate the flow correctly so genuine challenges are not dropped.
+
+## SCA requirements
+
+SCA requires at least two of three independent factors:
+
+| Factor | Category | Examples |
+|---|---|---|
+| Knowledge | Something the customer knows | Password, PIN, passphrase |
+| Possession | Something the customer has | Phone, hardware token, registered device |
+| Inherence | Something the customer is | Fingerprint, face, voice |
+
+For card payments, this is delivered through **3D Secure 2** (3DS2), where the issuing bank challenges the cardholder. SCA applies to most **customer-initiated** transactions in scope of PSD2. It does **not** apply where the merchant initiates the charge with prior consent — see exemptions below.
+
+<Callout type="info">
+SCA scope is determined by the location of *both* the issuing bank and the acquirer. A transaction is in scope only when both sit inside the EEA or UK. Cross-border payments to a non-European card are typically out of scope.
+</Callout>
+
+## Exemptions
+
+Not every in-scope payment needs an active challenge. The issuer makes the final decision, but you can *request* an exemption to reduce friction. VINR applies eligible exemptions automatically and lets you signal intent per payment.
+
+<TypeTable
+  type={{
+    low_value: { type: "exemption", description: "Transactions under EUR 30, capped by a running counter per card.", default: "auto" },
+    trusted_beneficiary: { type: "exemption", description: "Customer has whitelisted your business with their bank.", default: "auto" },
+    transaction_risk_analysis: { type: "exemption", description: "Low-risk transaction under the acquirer's TRA fraud thresholds.", default: "auto" },
+    recurring: { type: "exemption", description: "Fixed-amount recurring charges; SCA on the first payment only.", default: "auto" },
+    merchant_initiated: { type: "off_session", description: "Merchant-initiated transactions with a stored, pre-authenticated mandate.", default: "manual" },
+  }}
+/>
+
+Request an exemption by marking the payment as off-session or passing a hint. VINR routes the request to the issuer, who may still **soft-decline** and force a challenge:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// Off-session charge against a saved mandate — request the MIT exemption.
+const payment = await vinr.payments.create({
+  amount: 2500,                 // EUR 25.00, minor units
+  currency: 'eur',
+  customer: 'cust_abc123',
+  paymentMethod: 'pm_saved_card',
+  offSession: true,             // signals a merchant-initiated transaction
+  scaExemption: 'recurring',    // hint; issuer decides
+});
+
+if (payment.status === 'requires_action') {
+  // Issuer soft-declined the exemption: a challenge is required.
+  // Surface payment.nextAction.redirectUrl to the customer.
+}
+```
+
+<Callout type="warn">
+Requesting an exemption shifts **fraud liability** away from the issuer. If an exempted transaction is later disputed as fraudulent, the chargeback is generally yours. Use exemptions where conversion gains justify the risk.
+</Callout>
+
+## Impact on your flows
+
+How SCA surfaces depends on whether a customer is present.
+
+<Steps>
+
+### On-session card payments
+
+For an interactive checkout, always handle the `requires_action` state. VINR returns a redirect or embedded challenge; complete it before treating the payment as final.
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 4999,
+  currency: 'eur',
+  paymentMethod: 'pm_card',
+  confirm: true,
+});
+
+// payment.status is one of: 'completed' | 'requires_action' | 'failed'
+```
+
+### Saved cards for later
+
+When you save a card during a customer-present session, VINR captures SCA *at setup* so you can charge off-session later under the recurring or MIT exemption. Set up the mandate while the customer is there.
+
+### Subscriptions & invoices
+
+[Billing](/docs/billing/subscriptions) authenticates the first charge of a subscription and relies on the recurring exemption for fixed renewals. If a renewal amount changes materially, the issuer may demand a fresh challenge — handle `invoice.payment_action_required`.
+
+### Webhooks confirm the outcome
+
+Never finalize fulfillment on the API response alone for challenged payments. Listen for the authoritative event:
+
+```typescript
+const event = vinr.webhooks.verify(req.body, req.headers['x-vinr-signature']);
+
+if (event.type === 'payment.completed') {
+  // SCA cleared; safe to fulfill.
+}
+```
+
+</Steps>
+
+## Testing SCA
+
+Use sandbox cards to exercise each branch. Card `4000 0000 0000 3220` forces a 3DS challenge, `4242 4242 4242 4242` succeeds without one, and `4000 0000 0000 0002` is declined. Point your SDK at `https://sandbox.api.vinr.com` and confirm your code surfaces `requires_action` correctly before going live.
+
+## Next steps
+
+<Cards>
+  <Card title="Compliance overview" href="/docs/compliance" description="Your obligations across regions and rails." />
+  <Card title="Handling payment actions" href="/docs/payments" description="Implement the requires_action flow end to end." />
+  <Card title="Disputes & chargebacks" href="/docs/operations" description="What happens when an exempted payment is contested." />
+</Cards>

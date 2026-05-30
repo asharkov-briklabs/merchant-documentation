@@ -1,4 +1,6 @@
 {
+  "root": true,
   "title": "Integration",
-  "pages": ["checkout", "elements", "webhooks"]
+  "icon": "Blocks",
+  "pages": ["index", "checkout", "elements", "mobile-sdks", "webhooks", "testing"]
 }

@@ -1,0 +1,177 @@
+---
+title: Accept local payment methods
+description: Accept local payment methods — a runnable, end-to-end guide verified against the VINR sandbox.
+category: "payments"
+persona: ["developer"]
+priority: "P2"
+lastUpdated: "2026-05-30"
+---
+
+Cards are not how most of Europe pays. iDEAL dominates the Netherlands, Bancontact owns Belgium, and SEPA Direct Debit underpins recurring billing across the eurozone. This guide shows how to present these local methods, handle their bank-redirect flows, and reconcile settlement — runnable against the VINR sandbox.
+
+## Overview
+
+Local methods split into two families that behave differently after the customer pays:
+
+- **Redirect methods** (iDEAL, Bancontact, online banking) — the customer is sent to their bank, authorizes, and returns. Confirmation can be near-instant or take seconds.
+- **Pull / debit methods** (SEPA Direct Debit) — you collect a mandate up front, then debit the account. Settlement is asynchronous and can fail days later via a return.
+
+```
+your server          VINR                customer / bank
+    │  create payment  │                       │
+    │─────────────────►│                       │
+    │  checkoutUrl     │                       │
+    │◄─────────────────│   redirect to bank    │
+    │──────────────────────────────────────────►│ authorizes
+    │  payment.completed | payment.failed (webhook)
+    │◄─────────────────│◄──────────────────────│
+```
+
+You never hard-code a method list. Create the payment with the customer's `country`, and the hosted page renders whatever is eligible.
+
+## Method availability by region
+
+Eligibility depends on currency, the customer's country, and the amount. VINR filters automatically, but it helps to know the matrix:
+
+| Method | Type | Markets | Currency | Notes |
+|---|---|---|---|---|
+| `ideal` | Redirect | NL | EUR | Single-use, instant confirmation |
+| `bancontact` | Redirect | BE | EUR | Can generate a reusable mandate |
+| `sepa_debit` | Pull | EUR SEPA zone | EUR | Mandate required; asynchronous |
+| `sofort` | Redirect | DE, AT | EUR | Delayed confirmation (hours possible) |
+| `p24` | Redirect | PL | EUR, PLN | Bank selector on hosted page |
+
+<Callout type="info">
+Don't maintain this table in your code. Call `vinr.paymentMethods.list({ country, currency, amount })` to get the live, eligible set for a given context — the result already reflects your account configuration and any compliance gating.
+</Callout>
+
+## Presenting local methods
+
+Create the payment with the buyer context. Passing `paymentMethods: ['auto']` (the default) lets VINR pick the eligible set; pass an explicit array to constrain it.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+export async function POST(req: Request) {
+  const { orderId, country } = await req.json();
+
+  const payment = await vinr.payments.create(
+    {
+      amount: 2500,                 // €25.00
+      currency: 'EUR',
+      description: `Order ${orderId}`,
+      customer: { country },        // e.g. 'NL' surfaces iDEAL
+      paymentMethods: ['auto'],     // or ['ideal', 'bancontact', 'sepa_debit']
+      returnUrl: `https://yoursite.com/orders/${orderId}/return`,
+      metadata: { orderId },
+    },
+    { idempotencyKey: `order-${orderId}` },
+  );
+
+  return Response.json({ checkoutUrl: payment.checkoutUrl });
+}
+```
+
+Redirect the customer to `payment.checkoutUrl`. The hosted page shows the bank selector (iDEAL, P24) or single-bank redirect (Bancontact) and routes them to their bank.
+
+## Handling redirects
+
+Local methods route through the customer's bank, so two states matter that you rarely see with cards: **pending** (bank is still confirming) and **expired** (the customer abandoned the redirect).
+
+When the customer lands on your `returnUrl`, confirm server-side — never trust the redirect parameters alone.
+
+```typescript
+const payment = await vinr.payments.retrieve(paymentId);
+
+switch (payment.status) {
+  case 'completed':
+    // safe to show success; fulfil on the webhook
+    break;
+  case 'pending':
+    // bank hasn't confirmed yet — show a "processing" state
+    break;
+  case 'failed':
+  case 'expired':
+    // offer the customer another method
+    break;
+}
+```
+
+Because redirect methods can confirm after the browser returns, treat the webhook as the source of truth and fulfil there exactly once.
+
+```typescript
+export async function POST(req: Request) {
+  const event = vinr.webhooks.verify(
+    await req.text(),
+    req.headers.get('x-vinr-signature'),
+  );
+
+  switch (event.type) {
+    case 'payment.completed':
+      await fulfillOrder(event.data.metadata.orderId);   // idempotent
+      break;
+    case 'payment.failed':
+    case 'payment.expired':
+      await releaseReservation(event.data.metadata.orderId);
+      break;
+  }
+  return new Response('OK', { status: 200 });
+}
+```
+
+<Callout type="warn">
+SEPA Direct Debit can succeed and then **return** (insufficient funds, mandate revoked) days later. Listen for `payment.refunded` with `reason: 'debit_returned'` and reverse fulfilment, claw back loyalty points, or re-bill.
+</Callout>
+
+## Settlement currency
+
+Local methods always settle in their native currency — EUR for iDEAL, Bancontact, and SEPA. If your payout currency differs, VINR converts at settlement and records the rate on the [settlement](/docs/operations/settlements) object.
+
+```typescript
+const payment = await vinr.payments.retrieve(paymentId);
+
+console.log(payment.amount);              // 2500  (presented to buyer, EUR)
+console.log(payment.settlement.currency); // 'EUR'
+console.log(payment.settlement.amount);   // net after fees, minor units
+```
+
+Reconcile against `settlement.id` (prefix `setl_`), not the payment amount — fees and FX mean the deposited amount differs from what the customer paid.
+
+## Test it
+
+In the sandbox, the hosted page renders a simulator for each method instead of a real bank screen:
+
+| Method | Sandbox action | Result |
+|---|---|---|
+| `ideal` | Choose "Authorize" | `payment.completed` |
+| `ideal` | Choose "Cancel" | `payment.expired` |
+| `sepa_debit` | Submit any IBAN starting `NL` | `payment.completed`, then settles |
+| `sepa_debit` | IBAN starting `DE00` | `payment.refunded` (`debit_returned`) |
+
+## Go live
+
+<Steps>
+
+### Enable methods on your account
+
+Activate iDEAL, Bancontact, or SEPA in the Dashboard. Some methods require business verification before they leave test mode.
+
+### Swap to live keys
+
+Replace your sandbox `VINR_SECRET_KEY` with the live key from [Authentication](/docs/getting-started/authentication).
+
+### Walk the go-live checklist
+
+Confirm webhook handling for `pending`, `expired`, and `debit_returned` against the [go-live checklist](/docs/getting-started/go-live-checklist).
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="Accept a one-time payment" href="/docs/guides/accept-a-payment" description="The full create-checkout-confirm flow." />
+  <Card title="Local methods reference" href="/docs/payments/payment-methods/local-methods" description="Every method, its markets, and behavior." />
+  <Card title="Reconcile settlements" href="/docs/operations/settlements" description="Match payouts to payments and fees." />
+</Cards>

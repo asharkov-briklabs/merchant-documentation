@@ -1,0 +1,130 @@
+---
+title: Expanding responses
+description: Inline related objects to reduce round-trips.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+By default the VINR API returns related objects as ID strings to keep responses small and fast. The `expand` parameter lets you inline the full object in the same response, so you can fetch a payment and its customer, or an invoice and its line items, in a single round-trip instead of two or three.
+
+## The expand parameter
+
+Many objects reference others by ID. A `payment`, for example, carries a `customer` field holding a `cust_` string. To receive the full customer object inline, pass `expand` with the field path:
+
+<Tabs items={["SDK", "REST"]}>
+<Tab value="SDK">
+```ts
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.retrieve('pay_3Nx8a2Lk', {
+  expand: ['customer'],
+});
+
+// payment.customer is now the full object, not just "cust_8aZ2"
+console.log(payment.customer.email);
+```
+</Tab>
+<Tab value="REST">
+```bash
+curl https://api.vinr.com/v1/payments/pay_3Nx8a2Lk \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -d "expand[]=customer" \
+  -G
+```
+</Tab>
+</Tabs>
+
+`expand` is an array of strings, so request several fields at once: `expand: ['customer', 'refunds']`. It works on retrieve, create, update, and list endpoints — anywhere the API returns an expandable object.
+
+<Callout type="info">
+Expanding never changes which object you get back, only how much of it is materialized. An unexpanded field is always the ID string; an expanded one is the nested object. Write your code to handle both shapes if the same path is reused across calls.
+</Callout>
+
+## Expandable fields
+
+Each resource documents which of its fields can be expanded. The most commonly used paths:
+
+| Resource | Expandable field | Resolves to |
+|---|---|---|
+| `payment` | `customer` | The `customer` object |
+| `payment` | `refunds` | List of `refund` objects |
+| `payment` | `dispute` | The `dispute` object, if any |
+| `invoice` | `customer` | The `customer` object |
+| `invoice` | `subscription` | The `subscription` object |
+| `invoice` | `lines.price` | The `price` on each line item |
+| `subscription` | `customer` | The `customer` object |
+| `subscription` | `latest_invoice` | The most recent `invoice` |
+| `redemption` | `reward` | The `reward` object |
+| `loyalty_account` | `customer` | The `customer` object |
+
+Fields not listed as expandable return their ID string regardless of what you pass. Requesting an unknown or non-expandable path returns a `400` with `code: "invalid_expand"`.
+
+## Nested expansion
+
+Use dot notation to expand through one object into another. For example, a subscription's latest invoice has a customer of its own:
+
+```ts
+const sub = await vinr.subscriptions.retrieve('sub_9Kpw1Vd', {
+  expand: ['latest_invoice.customer'],
+});
+
+console.log(sub.latest_invoice.customer.email);
+```
+
+Expanding a nested path automatically expands its parents — you do not need to also list `latest_invoice` separately. To expand a field on every element of a list, name the list followed by the field: `lines.price` expands the `price` on each line of an invoice.
+
+```ts
+const invoice = await vinr.invoices.retrieve('inv_2Qm4eRt', {
+  expand: ['lines.price', 'subscription'],
+});
+
+for (const line of invoice.lines) {
+  console.log(line.price.unit_amount, line.price.currency);
+}
+```
+
+## Expanding inside list responses
+
+On list endpoints, prefix the path with `data` to expand the field on each returned object. The expansion applies uniformly to every item in the page:
+
+```ts
+const payments = await vinr.payments.list({
+  limit: 20,
+  expand: ['data.customer'],
+});
+
+for (const payment of payments.data) {
+  console.log(payment.id, payment.customer.email);
+}
+```
+
+This is the single most effective way to avoid N+1 fetch loops when rendering tables or running reconciliation jobs over a page of results.
+
+## Limits
+
+Expansion is powerful but bounded, so a single request cannot trigger unbounded fan-out:
+
+<TypeTable
+  type={{
+    maxPaths: { type: "number", description: "Maximum number of expand paths per request", default: "8" },
+    maxDepth: { type: "number", description: "Maximum dot-separated depth of any single path", default: "4" },
+    listExpansion: { type: "string", description: "List fields (e.g. refunds) expand up to the first 10 elements; fetch the rest via the dedicated list endpoint" },
+  }}
+/>
+
+<Callout type="warn">
+Each expanded path adds work to the request and counts toward your rate limit the same as a separate read. Deep or list-wide expansion increases latency — expand only what you render. For large or paginated child collections, prefer the dedicated list endpoint (for example `vinr.refunds.list({ payment })`) over inline expansion.
+</Callout>
+
+Expansion never affects webhook payloads. Events such as `payment.completed` always deliver the unexpanded object; resolve related records by calling the API from your handler if you need them.
+
+## Next steps
+
+<Cards>
+  <Card title="API Reference" href="/docs/api-reference" description="Endpoints, parameters, and response shapes for every resource." />
+  <Card title="Pagination" href="/docs/api-reference/pagination" description="Cursor-based paging for list endpoints you expand over." />
+  <Card title="Idempotency" href="/docs/api-reference/idempotency" description="Safely retry create requests without duplicating objects." />
+</Cards>

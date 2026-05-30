@@ -1,0 +1,220 @@
+---
+title: Mobile SDKs
+description: Accept payments natively on iOS, Android, and React Native.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+VINR mobile SDKs give you a prebuilt payment sheet and PCI-aware tokenization for native apps, so card details never touch your servers. The flow mirrors the web SDKs: your backend creates a payment intent, your app presents the sheet, and you confirm the result. This page covers installation, the prebuilt sheet, custom flows, and platform wallets.
+
+## When to use a mobile SDK
+
+- You want a native, in-app payment experience instead of redirecting to a browser.
+- You need Apple Pay and Google Pay with the system wallet UI.
+- You want the smallest PCI scope on mobile — card data is collected and tokenized inside the SDK on a VINR-controlled surface, keeping you at SAQ-A.
+
+<Callout type="info">
+The payment sheet always requires a **client secret** created server-side. Never embed your `VINR_SECRET_KEY` in a mobile app — ship only the publishable key (`pk_...`) and fetch the client secret from your own backend.
+</Callout>
+
+## Installation
+
+<Tabs items={["iOS", "Android", "React Native"]}>
+<Tab value="iOS">
+
+```bash
+# Swift Package Manager — add the package URL in Xcode, or:
+# https://github.com/vinr/vinr-ios
+
+# CocoaPods
+pod 'VinrPayments', '~> 3.0'
+```
+
+</Tab>
+<Tab value="Android">
+
+```bash
+# build.gradle (app module)
+dependencies {
+  implementation 'com.vinr:payments:3.0.0'
+}
+```
+
+</Tab>
+<Tab value="React Native">
+
+```bash
+npm install @vinr/react-native
+cd ios && pod install
+```
+
+</Tab>
+</Tabs>
+
+## Create the intent on your backend
+
+Every mobile payment starts with a payment intent created from a trusted server using your secret key. Return the `clientSecret` (and `id`) to the app.
+
+```ts
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// POST /api/payment-sheet
+const intent = await vinr.payments.create({
+  amount: 4200,            // EUR 42.00 in minor units
+  currency: 'EUR',
+  customer: 'cust_abc123',
+  captureMethod: 'automatic',
+});
+
+return { clientSecret: intent.clientSecret, paymentId: intent.id };
+```
+
+## Prebuilt payment sheet
+
+The payment sheet renders cards, saved payment methods, Apple Pay / Google Pay, and any 3DS challenge with no UI work on your side.
+
+<Tabs items={["iOS", "Android", "React Native"]}>
+<Tab value="iOS">
+
+```swift
+import VinrPayments
+
+Vinr.publishableKey = "pk_live_123"
+
+// 1. Fetch clientSecret from your backend, then configure the sheet.
+var config = PaymentSheet.Configuration()
+config.merchantDisplayName = "Acme Store"
+config.applePay = .init(merchantId: "merchant.com.acme", merchantCountryCode: "DE")
+
+let sheet = PaymentSheet(clientSecret: clientSecret, configuration: config)
+sheet.present(from: self) { result in
+  switch result {
+  case .completed: print("paid")
+  case .canceled:  print("canceled")
+  case .failed(let error): print(error.localizedDescription)
+  }
+}
+```
+
+</Tab>
+<Tab value="Android">
+
+```kotlin
+import com.vinr.payments.PaymentSheet
+
+val paymentSheet = PaymentSheet(this) { result ->
+  when (result) {
+    is PaymentSheetResult.Completed -> Log.d("vinr", "paid")
+    is PaymentSheetResult.Canceled  -> Log.d("vinr", "canceled")
+    is PaymentSheetResult.Failed    -> Log.e("vinr", result.error.message ?: "error")
+  }
+}
+
+// After fetching clientSecret from your backend:
+paymentSheet.present(
+  clientSecret = clientSecret,
+  configuration = PaymentSheet.Configuration(
+    merchantDisplayName = "Acme Store",
+    googlePay = PaymentSheet.GooglePayConfiguration(countryCode = "DE", currencyCode = "EUR"),
+  ),
+)
+```
+
+</Tab>
+<Tab value="React Native">
+
+```ts
+import { initPaymentSheet, presentPaymentSheet } from '@vinr/react-native';
+
+const { clientSecret } = await fetch('/api/payment-sheet', { method: 'POST' })
+  .then((r) => r.json());
+
+const init = await initPaymentSheet({
+  clientSecret,
+  merchantDisplayName: 'Acme Store',
+  applePay: { merchantCountryCode: 'DE' },
+  googlePay: { merchantCountryCode: 'DE', currencyCode: 'EUR' },
+});
+if (init.error) throw init.error;
+
+const { error } = await presentPaymentSheet();
+if (error && error.code !== 'Canceled') {
+  console.error(error.message);
+}
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="warn">
+A successful sheet result means the customer authorized the payment — it is **not** your source of truth. Always confirm the final state from your backend by checking the payment status or listening for the `payment.completed` webhook before fulfilling an order.
+</Callout>
+
+## Custom flows
+
+If the prebuilt sheet doesn't fit your design, collect the card with the SDK's secure card field, create a payment method token client-side, then confirm against the same `clientSecret`. The token (`pm_...`) is the only card-derived value that leaves the SDK, so you stay at SAQ-A.
+
+```ts
+// React Native — manual confirm with a tokenized card field
+import { createPaymentMethod, confirmPayment } from '@vinr/react-native';
+
+const pm = await createPaymentMethod({ type: 'card' }); // reads the secure card field
+const { paymentId, status } = await confirmPayment(clientSecret, {
+  paymentMethodId: pm.paymentMethodId,
+});
+
+if (status === 'requires_action') {
+  // The SDK auto-presents the 3DS challenge; re-check status after it resolves.
+}
+```
+
+## Apple Pay and Google Pay
+
+Wallet payments are part of the same sheet — enable them in configuration and the SDK shows the native wallet button when the device supports it.
+
+<TypeTable
+  type={{
+    merchantId: { type: "string", description: "Apple Pay merchant identifier (iOS only), e.g. merchant.com.acme" },
+    merchantCountryCode: { type: "string", description: "ISO 3166 country of the merchant account" },
+    currencyCode: { type: "string", description: "ISO 4217 currency for the wallet sheet", default: "EUR" },
+  }}
+/>
+
+For Apple Pay you must register a Merchant ID and Apple Pay certificate in your developer account and the VINR Dashboard. For Google Pay, the SDK runs in test mode against your sandbox key and switches to production automatically with a live `pk_live_` key.
+
+## Testing on device
+
+Use sandbox publishable keys and the standard VINR test cards. Wallet sheets in sandbox use test instruments, so no real card is charged.
+
+| Card number | Outcome |
+|---|---|
+| 4242 4242 4242 4242 | Success |
+| 4000 0000 0000 0002 | Declined |
+| 4000 0000 0000 3220 | Triggers a 3DS challenge |
+
+<Steps>
+
+### Point the app at sandbox
+
+Set the SDK publishable key to your `pk_test_` key and your backend to `VINR_SECRET_KEY` for sandbox (`sk_test_`). The base URL switches to `https://sandbox.api.vinr.com` automatically.
+
+### Run the sheet with a test card
+
+Enter `4242 4242 4242 4242`, any future expiry, and any CVC. The sheet returns `completed`.
+
+### Verify the backend state
+
+Confirm the payment moved to `completed` server-side, then test the decline and 3DS cards to exercise your error and challenge paths.
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Confirm payment state reliably from your backend instead of trusting the client result." />
+  <Card title="Elements" href="/docs/integration/elements" description="Embed card fields in a web app — the browser counterpart to the mobile SDKs." />
+  <Card title="Payments" href="/docs/payments" description="The payment intent model the mobile SDKs build on: capture, refunds, and disputes." />
+</Cards>

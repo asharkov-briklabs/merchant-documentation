@@ -1,0 +1,64 @@
+---
+title: Billing
+description: Subscriptions, invoicing, and usage-based billing on VINR.
+persona: ["developer", "finance-manager", "business-owner"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+VINR Billing turns the one-time payment primitives in [Payments](/docs/payments) into recurring revenue. Model your pricing once, then run subscriptions, send invoices, meter usage, apply tax, and recover failed payments — all reconciled with your [settlements](/docs/operations/settlement) and exposed through the same API and webhooks.
+
+## What Billing includes
+
+<Cards>
+  <Card title="Products & prices" href="/docs/billing/products-and-prices" description="Model what you sell and how much it costs." />
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="Recurring billing with trials, proration, and schedules." />
+  <Card title="Invoicing" href="/docs/billing/invoices" description="Itemized statements, finalization, and hosted payment pages." />
+  <Card title="Usage-based billing" href="/docs/billing/usage-based-billing" description="Meter consumption and bill for it automatically." />
+  <Card title="Dunning & recovery" href="/docs/billing/dunning-and-recovery" description="Retry failed payments and win back revenue." />
+  <Card title="Tax" href="/docs/billing/tax" description="Calculate and collect tax on every invoice." />
+</Cards>
+
+## How it relates to Payments
+
+Billing never moves money on its own — it _decides what to charge and when_, then hands the charge to Payments to collect on whatever rail the customer's stored method uses. A subscription renewal becomes an invoice; a finalized invoice becomes a [payment](/docs/payments/how-payments-work) against the customer's [stored method](/docs/payments/customers); the resulting funds land in your [balance](/docs/operations/balances) and pay out via [settlement](/docs/operations/settlement).
+
+<Callout type="info">
+Because Billing reuses the Payments customer and stored-method objects, a card saved during checkout is immediately usable for subscriptions — there's no second integration to build.
+</Callout>
+
+## Key objects
+
+| Object | Prefix | Purpose |
+|---|---|---|
+| Product | `prod_` | A thing you sell (e.g. "Pro plan"). |
+| Price | `price_` | An amount + billing behavior attached to a product. |
+| Subscription | `sub_` | A recurring relationship between a customer and one or more prices. |
+| Invoice | `inv_` | An itemized statement VINR collects payment against. |
+| Usage record | `mbu_` | Reported consumption against a metered price. |
+
+## Choose your billing model
+
+<Steps>
+
+### Fixed recurring (SaaS plans)
+
+A flat amount on a fixed cycle. Create a recurring `price`, attach it to a `subscription`, and VINR invoices automatically each period. Start with [Create a subscription](/docs/guides/create-a-subscription).
+
+### Usage-based / metered
+
+Bill for what customers consume. Define a metered price, report [usage records](/docs/billing/usage-based-billing), and VINR aggregates and invoices at period end. See [Bill for usage](/docs/guides/bill-for-usage).
+
+### One-off invoices
+
+Bill a customer directly without a subscription — useful for services or custom deals. See [Send an invoice](/docs/guides/send-an-invoice).
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="How billing works" href="/docs/billing/how-billing-works" description="The objects and money flow in detail." />
+  <Card title="Create a subscription" href="/docs/guides/create-a-subscription" description="A runnable end-to-end walkthrough." />
+  <Card title="Billing API reference" href="/docs/api-reference/subscriptions" description="Endpoints, parameters, and responses." />
+</Cards>

@@ -1,0 +1,153 @@
+---
+title: Reconciliation
+description: Match transactions, fees, and payouts to your ledger.
+persona: ["finance-manager"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Reconciliation is how you prove that the money VINR collected, the fees it charged, and the cash that landed in your bank all agree with your own ledger. This page explains the data VINR gives you to do that and how to automate the match so close-of-books is a report, not an investigation.
+
+## The reconciliation model
+
+Three layers have to line up, and each is one step removed from the next:
+
+1. **Gross activity** — individual `payment` and `refund` objects, each with the amount the customer paid or got back.
+2. **Fees** — what VINR deducts per transaction (processing, currency conversion, [dispute](/docs/payments/disputes) fees).
+3. **Net cash** — `payout` objects: the batched bank transfers VINR sends you, grouped under a `settlement` that lists exactly which transactions it contains.
+
+The golden rule: `sum(gross activity) - sum(fees) = sum(net payouts)` over any closed period. Reconciliation is finding and explaining every line where that equation does not hold yet (e.g. funds still in transit, held for [dispute](/docs/payments/disputes), or pending payout).
+
+```text
+payments + refunds  ──(minus)──>  fees  ──(equals)──>  payout (net)
+   pay_, re_                       per-transaction        po_ / setl_
+```
+
+## Transaction-level data
+
+Every balance-affecting event is a **balance transaction**. List them with the SDK, filtered to a window, and join on the source object's ID to your own records.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// All balance transactions that settled in May 2026.
+const txns = await vinr.balanceTransactions.list({
+  created: { gte: 1746057600, lt: 1748736000 }, // unix seconds
+  limit: 100,
+});
+
+for (const t of txns.data) {
+  console.log(t.id, t.type, t.source, t.gross, t.fee, t.net, t.payout);
+  // e.g. "btx_9f2 payment pay_8a1 1000 -34 966 po_2kd"
+}
+```
+
+Each row carries the `source` (`pay_`, `re_`, `dp_`, …), the `gross` amount, the `fee` deducted, the `net` that hit your VINR balance, and the `payout` it was paid out in (null while still in transit). Amounts are integers in minor units — `966` is EUR 9.66.
+
+<Callout type="info">
+Reconcile on `net` and `payout`, not on the original charge amount. A EUR 10.00 payment never arrives as EUR 10.00 in your bank — fees come out first, which is exactly what the fees breakdown below explains.
+</Callout>
+
+## Fees breakdown
+
+The `fee` on a balance transaction is a total. To audit it, expand the `fee_details` array, which itemises each component:
+
+```json
+{
+  "id": "btx_9f2",
+  "source": "pay_8a1",
+  "gross": 1000,
+  "fee": 34,
+  "net": 966,
+  "currency": "EUR",
+  "fee_details": [
+    { "type": "processing", "amount": 29, "description": "1.4% + 0.15" },
+    { "type": "fx",         "amount": 5,  "description": "USD→EUR conversion" }
+  ]
+}
+```
+
+| Fee type | When it applies |
+|---|---|
+| `processing` | Every successful `payment`. |
+| `fx` | Charge currency differs from your settlement currency. |
+| `dispute` | A `dp_` is opened; reversed if you win. |
+| `payout` | Some bank rails charge per transfer (often zero in EUR/SEPA). |
+
+Refunds return the `gross` but **not** the original `processing` fee, so a fully refunded payment leaves a small negative net — book it as a cost, not as a balancing error.
+
+## Reconciling to payouts
+
+A `payout` is the bank transfer; its parent `settlement` is the report that closes the loop. Fetch a settlement and you get every transaction that funded that exact deposit, so the amount on your bank statement maps to a single VINR object.
+
+```typescript
+const settlement = await vinr.settlements.retrieve('setl_2kd9');
+
+console.log(settlement.payout);        // "po_2kd" — matches the bank reference
+console.log(settlement.gross);         // 482000
+console.log(settlement.fees);          // -16388
+console.log(settlement.net);           // 465612  → equals the deposit
+console.log(settlement.status);        // "paid"
+
+// The exact transactions inside this payout:
+const lines = await vinr.settlements.listTransactions('setl_2kd9');
+```
+
+<Steps>
+
+### Match the deposit
+
+Find the bank credit, then look up the `payout` whose `net` equals it. The payout's `bank_reference` appears on most statements.
+
+### Open the settlement
+
+Pull the parent `settlement`. Its `net` must equal the deposit to the cent.
+
+### Drill into transactions
+
+List the settlement's transactions and tick each one off against your sales ledger. Anything in your ledger but not the settlement is **in transit** (will appear in a later payout) or **held**.
+
+### Explain the residue
+
+In-transit, held-for-dispute, and reserve amounts are timing differences, not errors. Record them so next period's opening balance is correct.
+
+</Steps>
+
+## Automation
+
+Manual matching does not scale. Two production patterns:
+
+**Event-driven (incremental).** Subscribe to `payout.paid` and pull that settlement's transactions as each deposit lands, writing them straight to your ledger.
+
+```typescript
+// In your webhook handler.
+const event = vinr.webhooks.verify(payload, req.headers['x-vinr-signature']);
+
+if (event.type === 'payout.paid') {
+  const lines = await vinr.settlements.listTransactions(event.data.settlement);
+  await ledger.recordSettlement(event.data.id, lines.data); // your code
+}
+```
+
+**Scheduled export (bulk).** For monthly close, request a reconciliation report covering the period — it returns one row per balance transaction with source, fee details, and payout, ready to load into your accounting system.
+
+```bash
+curl https://api.vinr.com/v1/reports/reconciliation \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -d "period_start=1746057600" \
+  -d "period_end=1748736000" \
+  -d "columns=source,gross,fee,net,payout,fee_type"
+```
+
+<Callout type="warn">
+Always reconcile on a **closed** period and key your records on the immutable `btx_` and `setl_` IDs, not on amounts or timestamps. Re-running an export over an open window will pick up newly settled transactions and appear to "change" prior totals.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Payouts" href="/docs/operations/payouts" description="How and when VINR transfers net funds to your bank." />
+  <Card title="Disputes" href="/docs/payments/disputes" description="Held funds and dispute fees that show up in reconciliation." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Drive incremental reconciliation from payout events." />
+</Cards>

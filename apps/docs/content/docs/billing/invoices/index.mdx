@@ -1,0 +1,125 @@
+---
+title: Invoices overview
+description: Itemized statements of what a customer owes.
+persona: ["developer", "finance-manager"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+An invoice is an itemized statement VINR generates from a subscription cycle or that you create directly, then collects payment against. It is the bridge between Billing (deciding _what_ a customer owes) and Payments (actually collecting it).
+
+## The invoice lifecycle
+
+Every invoice — whether subscription-generated or hand-built — moves through the same states. Knowing the current `status` tells you exactly what you can and cannot change.
+
+| Status | Meaning | Mutable? |
+|---|---|---|
+| `draft` | Being assembled. Line items can be added or removed. | Yes |
+| `open` | Finalized and awaiting payment. Amounts are locked. | No (totals) |
+| `paid` | Collected in full. | No |
+| `uncollectible` | Written off after dunning gave up. | No |
+| `void` | Cancelled before payment; reverses any accounting. | No |
+
+<Callout type="info">
+Finalizing is the one-way door. A `draft` becomes `open` once you finalize it (or VINR auto-finalizes a subscription invoice an hour after it is created). After that, the only ways out are payment, `void`, or `uncollectible`.
+</Callout>
+
+## How collection works
+
+When an invoice finalizes, VINR computes the amount due, then attempts a [payment](/docs/payments/how-payments-work) against the customer's default method based on the invoice's `collection_method`:
+
+- **`charge_automatically`** — VINR charges the saved method immediately and runs [dunning](/docs/billing/dunning-and-recovery) on failure. This is the default for subscriptions.
+- **`send_invoice`** — VINR issues a hosted invoice page and payment link; the customer pays on their own time, bounded by `days_until_due`.
+
+Discounts from [coupons](/docs/billing/coupons-and-discounts) and [tax](/docs/billing/tax) are applied during finalization, so the `total` you see on an `open` invoice already reflects them.
+
+## Create an invoice directly
+
+For one-off charges that do not belong to a subscription — a setup fee, professional services, a manual top-up — build the invoice yourself. Add invoice items first, then finalize.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// 1. Attach line items to the customer's pending (draft) invoice.
+await vinr.invoiceItems.create({
+  customer: 'cust_8aJ2k',
+  amount: 15000,                 // €150.00, integer minor units
+  currency: 'EUR',
+  description: 'Onboarding setup fee',
+});
+
+// 2. Create the invoice that sweeps up pending items.
+const invoice = await vinr.invoices.create({
+  customer: 'cust_8aJ2k',
+  collectionMethod: 'send_invoice',
+  daysUntilDue: 14,
+});                               // status: "draft", id: "inv_..."
+
+// 3. Finalize to lock totals and open it for payment.
+const open = await vinr.invoices.finalize(invoice.id);
+console.log(open.status, open.total, open.hostedInvoiceUrl);
+// "open" 15000 "https://pay.vinr.com/inv_..."
+```
+
+The same flow over raw REST hits `POST https://api.vinr.com/v1/invoices` with an `X-Api-Key: <key>` header; use the `sandbox.api.vinr.com` base and a [test card](/docs/payments/testing) such as `4242 4242 4242 4242` to walk it end to end.
+
+## Reading and reconciling
+
+Each finalized invoice carries the numbers finance teams reconcile against. The key fields:
+
+<TypeTable
+  type={{
+    subtotal: { type: "integer", description: "Sum of line items before discounts and tax.", default: "—" },
+    total: { type: "integer", description: "Final amount due after discounts and tax.", default: "—" },
+    amountPaid: { type: "integer", description: "Collected so far across attempts.", default: "0" },
+    amountDue: { type: "integer", description: "Remaining balance VINR still tries to collect.", default: "—" },
+    currency: { type: "string", description: "ISO currency of the invoice.", default: "EUR" },
+    number: { type: "string", description: "Human-facing sequential number, e.g. INV-2026-000142.", default: "auto" },
+  }}
+/>
+
+Every invoice exposes a stable `hostedInvoiceUrl` (a branded payment page) and an `invoicePdf` link, so you rarely need to render statements yourself.
+
+## Resulting events
+
+Drive your accounting and fulfilment off [webhooks](/docs/integration/webhooks) rather than polling. The lifecycle emits:
+
+- `invoice.finalized` — totals are locked; safe to record as a receivable.
+- `invoice.paid` — collected in full; grant access or ship the goods here.
+- `invoice.payment_failed` — collection failed; [dunning](/docs/billing/dunning-and-recovery) takes over.
+- `invoice.voided` — reversed before payment; back out any receivable.
+
+```typescript
+const event = vinr.webhooks.verify(payload, req.headers['x-vinr-signature']);
+
+if (event.type === 'invoice.paid') {
+  const invoice = event.data.object;        // "inv_..."
+  await fulfilAccess(invoice.customer, invoice.lines);
+}
+```
+
+## Edge cases
+
+<Accordions>
+  <Accordion title="Adding items to an already-open invoice">
+    You cannot edit totals after finalization. Issue a separate invoice for the extra charge, or `void` and rebuild while it is still `draft`.
+  </Accordion>
+  <Accordion title="Partial payments">
+    `amountPaid` can be greater than zero while `amountDue` remains positive (for example a customer pays part of a `send_invoice` total). The invoice stays `open` until the balance reaches zero.
+  </Accordion>
+  <Accordion title="Void vs. uncollectible">
+    `void` is for invoices that should never have been collected (duplicate, error) and reverses accounting. `uncollectible` keeps the receivable on the books as a bad debt after dunning is exhausted.
+  </Accordion>
+  <Accordion title="Credit from proration">
+    Mid-cycle plan changes add negative line items (credit for unused time). If credits exceed charges, the `total` can be negative and rolls into the customer's balance against the next invoice.
+  </Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="How billing works" href="/docs/billing/how-billing-works" description="Where invoices sit in the recurring-revenue flow." />
+  <Card title="Dunning & recovery" href="/docs/billing/dunning-and-recovery" description="What happens when collection fails." />
+  <Card title="Invoice items API" href="/docs/api-reference/invoice-items" description="Reference for line items and one-off charges." />
+</Cards>

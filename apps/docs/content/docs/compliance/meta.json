@@ -1,0 +1,14 @@
+{
+  "root": true,
+  "title": "Compliance",
+  "icon": "ShieldCheck",
+  "pages": [
+    "index",
+    "pci-dss",
+    "kyc-kyb",
+    "aml",
+    "psd2-sca",
+    "gdpr",
+    "data-residency"
+  ]
+}

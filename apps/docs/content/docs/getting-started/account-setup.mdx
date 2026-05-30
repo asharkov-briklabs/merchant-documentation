@@ -1,0 +1,142 @@
+---
+title: Account setup
+description: Create your VINR account, team, and environments.
+persona: ["developer", "business-owner"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+Before you can charge a customer or issue a single loyalty point, you need a VINR account, a team with the right roles, and a clear understanding of the wall between your sandbox and live environments. This page walks you through all of it.
+
+## Create an account
+
+Your account is the top-level container for everything in VINR: customers, payments, billing, loyalty programs, and payouts. One account can hold multiple environments and team members, but it maps to a single legal entity.
+
+<Steps>
+
+### Sign up
+
+Go to [dashboard.vinr.com/signup](https://dashboard.vinr.com/signup) and register with your work email. We send a verification link; click it within 24 hours to activate the account.
+
+### Name your account
+
+Pick an account name that matches your trading name — it appears on customer receipts and in payment descriptors. You can change the display name later under **Settings → Branding**.
+
+### Complete business verification
+
+Before you can switch to live mode and accept real money, VINR runs **KYC/KYB** (Know Your Customer / Business) checks required by EU payment regulation. Have these ready:
+
+- Legal entity name and registration number
+- Registered address and country of incorporation
+- A beneficial owner's identity document
+- The business IBAN you want payouts sent to
+
+Verification typically completes in 1-2 business days. You can build and test in sandbox immediately — verification only gates live mode.
+
+</Steps>
+
+<Callout type="info">
+You do **not** need a verified account to start integrating. Every new account ships with a fully functional sandbox so engineering can move in parallel with the compliance review.
+</Callout>
+
+## Sandbox vs. live
+
+VINR gives every account two isolated environments. They never share data, keys, or money.
+
+| | Sandbox | Live |
+|---|---|---|
+| Base URL | `https://sandbox.api.vinr.com` | `https://api.vinr.com` |
+| Money | Simulated, no real funds | Real funds, real payouts |
+| Test cards | Required (see below) | Rejected |
+| Key prefix | `sk_test_…` / `pk_test_…` | `sk_live_…` / `pk_live_…` |
+| Webhooks | Separate endpoints & secrets | Separate endpoints & secrets |
+| KYC required | No | Yes |
+
+Switch environments using the toggle in the top-left of the dashboard. Each environment has its **own** API keys and webhook secrets, so a sandbox secret can never accidentally move real money.
+
+<Callout type="warn">
+Object IDs are not portable across environments. A `cust_` created in sandbox does not exist in live, and vice versa. Re-create or re-sync reference data when you go to production.
+</Callout>
+
+Always exercise the failure paths in sandbox before launch. The reserved test cards drive deterministic outcomes:
+
+| Card number | Result |
+|---|---|
+| `4242 4242 4242 4242` | Successful payment |
+| `4000 0000 0000 0002` | Declined |
+| `4000 0000 0000 3220` | 3D Secure challenge |
+
+A minimal smoke test against sandbox:
+
+```ts
+import { Vinr } from '@vinr/sdk';
+
+// Note the sk_test_ key — this client can only ever touch sandbox.
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 1000, // €10.00 in minor units
+  currency: 'EUR',
+  description: 'Sandbox smoke test',
+});
+
+console.log(payment.id, payment.status); // pay_… requires_payment_method
+```
+
+## Team and roles
+
+Invite teammates under **Settings → Team**. Roles are scoped per environment, so you can give an engineer full sandbox access while keeping their live permissions read-only.
+
+<TypeTable
+  type={{
+    Owner: { type: "role", description: "Full control, including billing, bank account, and deleting the account. Cannot be removed by other members." },
+    Admin: { type: "role", description: "Manage team, API keys, webhooks, and settings. Cannot change the payout bank account." },
+    Developer: { type: "role", description: "Create and roll API keys, manage webhook endpoints, full API access in both environments." },
+    Analyst: { type: "role", description: "Read-only access to payments, payouts, and reports. No write access, no keys." },
+    Support: { type: "role", description: "View customers and payments, issue refunds, no settings or key access." },
+  }}
+/>
+
+<Callout type="info">
+Follow least privilege. Grant **Developer** in sandbox liberally, but reserve live **Admin** and **Owner** for the few people who manage production keys and money movement.
+</Callout>
+
+## Connecting your bank account
+
+Payouts are the funds VINR settles to you after fees. To receive them, add a verified business bank account under **Settings → Payouts**. This is only available once business verification has cleared.
+
+<Steps>
+
+### Add your IBAN
+
+Enter the business IBAN and account holder name. The holder name must match your verified legal entity, or the bank will reject the transfer.
+
+### Confirm a micro-deposit
+
+VINR sends a small verifying deposit (under €1.00) with a reference code. Enter the code in the dashboard to prove you control the account.
+
+### Set your payout schedule
+
+Choose **daily**, **weekly**, or **monthly** settlement. Payouts roll up cleared balances into a single `po_` transfer per cycle. You can track each one programmatically:
+
+```ts
+const payouts = await vinr.payouts.list({ limit: 5, status: 'paid' });
+
+for (const po of payouts.data) {
+  console.log(`${po.id}: ${po.amount} ${po.currency} → ${po.arrivalDate}`);
+}
+```
+
+</Steps>
+
+<Callout type="warn">
+The payout bank account can only be changed by an **Owner**, and changes trigger a fresh micro-deposit verification. This protects you against account-takeover fraud redirecting your settlements.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Authentication" href="/docs/getting-started/authentication" description="Generate, scope, and rotate your sandbox and live API keys." />
+  <Card title="Quick start" href="/docs/getting-started/quick-start" description="Make your first sandbox payment in about five minutes." />
+  <Card title="Go-live checklist" href="/docs/operations/go-live" description="Everything to verify before flipping the switch to live mode." />
+</Cards>

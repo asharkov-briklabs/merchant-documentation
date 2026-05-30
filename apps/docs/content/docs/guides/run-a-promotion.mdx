@@ -1,0 +1,176 @@
+---
+title: Run a promotion
+description: Run a promotion — a runnable, end-to-end guide verified against the VINR sandbox.
+category: "engagement"
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+A promotion is a time-boxed rule that changes how points are earned or what rewards cost on top of your standing [loyalty program](/docs/engagement). This guide builds a "double points weekend" end to end — define it, target the right members, fire it on real payments, and measure lift — all runnable against the VINR sandbox.
+
+## Overview
+
+A promotion sits between a payment and your loyalty accrual. VINR evaluates active promotions when a `payment.completed` event lands and applies any matching multiplier or bonus before writing the points transaction.
+
+```
+payment.completed ──► evaluate active promotions ──► best matching rule
+                                                          │
+                          base accrual × multiplier  ◄────┘
+                                  │
+                          points transaction (ptx_) ──► loyalty account (loy_)
+```
+
+You define the campaign once, attach targeting, and let VINR apply it automatically — no per-payment branching in your code.
+
+## Define a campaign
+
+Create the promotion against a program. The `window` bounds it in time, and `rules` describes the mechanic — here, a 2x earn multiplier.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const promotion = await vinr.loyalty.promotions.create(
+  {
+    programId: 'prog_summer',
+    name: 'Double Points Weekend',
+    window: {
+      startsAt: '2026-06-06T00:00:00Z',
+      endsAt: '2026-06-08T23:59:59Z',
+    },
+    rules: {
+      type: 'earn_multiplier',
+      multiplier: 2,
+      minSpend: 2000,            // only on baskets ≥ €20.00
+    },
+    metadata: { campaign: 'q2-reactivation' },
+  },
+  { idempotencyKey: 'promo-double-points-weekend' },
+);
+```
+
+<Callout type="info">
+A promotion is created in `scheduled` state and flips to `active` automatically when `startsAt` passes. Until then it has no effect on accrual. You never have to flip a switch at midnight.
+</Callout>
+
+The two mechanics you'll reach for most:
+
+<TypeTable
+  type={{
+    earn_multiplier: { type: "rule", description: "Multiply base points on qualifying payments (e.g. 2x, 3x).", default: "—" },
+    bonus_points: { type: "rule", description: "Award a flat number of points on top of base accrual.", default: "—" },
+  }}
+/>
+
+## Targeting & eligibility
+
+An untargeted promotion applies to every member. To run a reactivation push, scope it to a [segment](/docs/engagement) instead. Targeting is evaluated per member at payment time, so a member who re-engages mid-campaign is included automatically.
+
+```typescript
+await vinr.loyalty.promotions.update(promotion.id, {
+  targeting: {
+    segmentId: 'seg_lapsed_90d',     // no purchase in 90 days
+    firstPurchaseOnly: false,
+    maxRedemptionsPerMember: 1,      // bonus applies once per member
+  },
+});
+```
+
+<Callout type="warn">
+Overlapping promotions don't stack by default — VINR applies the single **best** rule for each payment. To allow stacking, set `stackable: true` on each promotion; combined multipliers are capped at the program's `maxMultiplier`.
+</Callout>
+
+## Offer mechanics
+
+You don't call the promotion on the payment path — accrual is automatic. Process the payment exactly as you already do, then read the resulting points transaction to see what was applied.
+
+```typescript
+// Customer pays; you award base loyalty as usual.
+const ptx = await vinr.loyalty.points.earn({
+  accountId: 'loy_8KQ2',
+  paymentId: 'pay_3RtY9',           // links accrual to the payment
+  amount: 4999,                     // €49.99 basket
+});
+
+console.log(ptx.points);            // 100 base → 200 after 2x promotion
+console.log(ptx.appliedPromotions); // [{ id: 'prom_...', multiplier: 2 }]
+```
+
+If you accrue points from a webhook (the recommended pattern), the multiplier is applied there too — no change to your handler beyond reading `appliedPromotions` for receipts or analytics.
+
+```typescript
+export async function POST(req: Request) {
+  const event = vinr.webhooks.verify(
+    await req.text(),
+    req.headers.get('x-vinr-signature'),
+  );
+
+  if (event.type === 'loyalty.points.earned') {
+    const { points, appliedPromotions } = event.data;
+    await recordReceipt(event.data.accountId, points, appliedPromotions);
+  }
+  return new Response('OK', { status: 200 });
+}
+```
+
+## Test it in the sandbox
+
+Promotions evaluate against server time, so the fastest way to test is a window that's already open. Create one with `startsAt` in the past, then run a sandbox payment with card `4242 4242 4242 4242` and confirm the points doubled.
+
+<Steps>
+
+### Open a live window
+
+Create the promotion with `startsAt` a minute ago and `endsAt` tomorrow so it's immediately `active`.
+
+### Drive a qualifying payment
+
+Pay ≥ €20.00 with the success card so the basket clears `minSpend`.
+
+### Inspect the transaction
+
+Retrieve the `ptx_` and check that `points` reflect the multiplier and `appliedPromotions` lists your promotion.
+
+</Steps>
+
+## Measuring results
+
+Pull aggregated metrics for the campaign window to compare against a baseline period. VINR reports redemptions, incremental points, and attributed payment volume.
+
+```typescript
+const report = await vinr.loyalty.promotions.metrics(promotion.id);
+
+console.log(report.attributedVolume);   // minor units across qualifying payments
+console.log(report.bonusPointsIssued);  // points beyond base accrual
+console.log(report.uniqueMembers);
+```
+
+For a controlled read on lift, hold out part of `seg_lapsed_90d` from `targeting` and compare reactivation rates between the exposed and held-out groups.
+
+## Go live
+
+<Steps>
+
+### Swap to live keys
+
+Replace your sandbox `VINR_SECRET_KEY` with the live key from the [Dashboard](/docs/getting-started/authentication).
+
+### Schedule the real window
+
+Set `startsAt`/`endsAt` to the campaign's actual times in UTC and confirm the state is `scheduled`.
+
+### Subscribe to promotion events
+
+Listen for `loyalty.points.earned` and `loyalty.promotion.ended` on your production [webhook endpoint](/docs/api-reference/webhook-endpoints) for receipts and reporting.
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="Earn loyalty at checkout" href="/docs/guides/earn-loyalty-at-checkout" description="Wire base accrual onto every payment." />
+  <Card title="Create a reward" href="/docs/guides/create-a-reward" description="Give members something to redeem points for." />
+  <Card title="Engagement overview" href="/docs/engagement" description="Programs, segments, and points concepts." />
+</Cards>

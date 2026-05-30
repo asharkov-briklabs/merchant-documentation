@@ -1,0 +1,145 @@
+---
+title: Subscriptions overview
+description: Recurring billing relationships between a customer and your prices.
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+A subscription bills a customer on a repeating cycle against one or more prices, generating invoices automatically and emitting events you can react to. It is the long-lived object that turns a catalog [price](/docs/billing/products-and-prices) into recurring revenue without you scheduling a single charge.
+
+## What a subscription is
+
+A `subscription` (`sub_...`) ties one customer to one or more prices and owns the schedule on which they are billed. It tracks which billing period you are in, what is owed, and whether the relationship is healthy, in trial, past due, or cancelled. Each period it produces exactly one `invoice` and hands collection to [Payments](/docs/payments/how-payments-work).
+
+<TypeTable
+  type={{
+    customer: { type: "string", description: "Customer being billed, e.g. cust_...." },
+    items: { type: "SubscriptionItem[]", description: "One entry per price, each with a quantity." },
+    status: { type: "enum", description: "trialing, active, past_due, canceled, or incomplete." },
+    current_period_end: { type: "timestamp", description: "When the active period closes and the next invoice generates." },
+    cancel_at_period_end: { type: "boolean", description: "If true, the subscription ends at period close instead of renewing.", default: "false" },
+  }}
+/>
+
+## The lifecycle
+
+A subscription moves through a small set of statuses. Understanding the transitions is the whole job — every feature (trials, dunning, upgrades) is a path between them.
+
+<Steps>
+
+### Created
+
+You create the subscription against a customer and a price. If the price has a trial, it enters `trialing`; otherwise VINR finalizes the first invoice immediately and the status becomes `active` on payment (or `incomplete` if the first payment needs action such as [3DS](/docs/payments/strong-customer-authentication)).
+
+### Renews
+
+At `current_period_end`, VINR generates a draft invoice, applies [discounts](/docs/billing/coupons-and-discounts) and [tax](/docs/billing/tax), finalizes, and collects. A successful collection advances the period and keeps the status `active`.
+
+### Recovers or lapses
+
+If collection fails, the subscription goes `past_due` and enters [dunning](/docs/billing/dunning-and-recovery). A recovered payment returns it to `active`; an exhausted retry schedule cancels it.
+
+### Ends
+
+A cancellation sets `canceled`. With `cancel_at_period_end: true` the customer keeps access until the period closes; an immediate cancel stops access at once and optionally prorates a credit.
+
+</Steps>
+
+## Create a subscription
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const subscription = await vinr.subscriptions.create({
+  customer: 'cust_8Q2v',
+  items: [
+    { price: 'price_pro_monthly', quantity: 1 },
+  ],
+  trial_period_days: 14,            // optional; starts in `trialing`
+  payment_behavior: 'default_incomplete', // surface SCA before activating
+});
+
+console.log(subscription.id);        // "sub_..."
+console.log(subscription.status);    // "trialing"
+```
+
+`payment_behavior: 'default_incomplete'` returns the subscription with a pending payment so you can confirm any required [authentication](/docs/payments/strong-customer-authentication) on the client before access is granted. Omit it to let VINR collect synchronously.
+
+## Changing a subscription
+
+Quantity and price changes are updates to `items`. By default VINR [prorates](/docs/billing/trials-and-proration): it credits the unused portion of the current price and charges the new rate for the remainder of the period, applied to the next invoice.
+
+```typescript
+// Upgrade Pro -> Business, charge the difference immediately.
+const updated = await vinr.subscriptions.update('sub_Lm4Z', {
+  items: [{ id: 'si_3xY', price: 'price_business_monthly' }],
+  proration_behavior: 'always_invoice',
+});
+```
+
+<Callout type="info">
+Set `proration_behavior: 'none'` to switch prices at the next renewal with no mid-cycle charge — useful for downgrades you want to take effect only when the customer's paid time runs out.
+</Callout>
+
+## Cancelling
+
+```typescript
+// Let the customer keep access until the period ends.
+await vinr.subscriptions.update('sub_Lm4Z', { cancel_at_period_end: true });
+
+// Or end it now and refund unused time as a credit.
+await vinr.subscriptions.cancel('sub_Lm4Z', { prorate: true });
+```
+
+## Events to react to
+
+Drive fulfilment from webhooks, not from the API response — the response is a snapshot, while events reflect what actually happened during collection and dunning.
+
+| Event | When it fires | Typical action |
+|---|---|---|
+| `subscription.created` | A new subscription is set up. | Provision the account. |
+| `invoice.paid` | A period was collected successfully. | Extend or confirm access. |
+| `invoice.payment_failed` | Collection failed; dunning begins. | Notify the customer. |
+| `subscription.updated` | Status, items, or schedule changed. | Re-sync entitlements. |
+| `subscription.deleted` | The subscription ended. | Revoke access. |
+
+```typescript
+export async function POST(req: Request) {
+  const payload = await req.text();
+  const signature = req.headers.get('x-vinr-signature')!;
+  const event = vinr.webhooks.verify(payload, signature);
+
+  if (event.type === 'subscription.deleted') {
+    await revokeAccess(event.data.customer);
+  }
+  return new Response(null, { status: 200 });
+}
+```
+
+## Edge cases
+
+<Accordions>
+
+<Accordion title="The first payment requires authentication">
+With `default_incomplete` the subscription stays `incomplete` until the customer confirms the payment. If they never confirm, VINR expires it after 23 hours and emits `subscription.deleted`. Always handle the pending state on the client.
+</Accordion>
+
+<Accordion title="A renewal fails">
+The subscription becomes `past_due` and follows your [dunning](/docs/billing/dunning-and-recovery) schedule. Access decisions should key off status: treat `past_due` as a grace period, not an immediate cutoff, unless your policy says otherwise.
+</Accordion>
+
+<Accordion title="Multiple prices on one subscription">
+A subscription can carry several items (e.g. a base plan plus a metered add-on). They share one billing cycle and produce a single invoice with one line per item. See [usage-based billing](/docs/billing/usage-based-billing) for metered items.
+</Accordion>
+
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Create a subscription" href="/docs/guides/create-a-subscription" description="A runnable end-to-end guide." />
+  <Card title="Trials & proration" href="/docs/billing/trials-and-proration" description="How partial periods and plan changes are priced." />
+  <Card title="Dunning & recovery" href="/docs/billing/dunning-and-recovery" description="Retry failed renewals and recover revenue." />
+</Cards>

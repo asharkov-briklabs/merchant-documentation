@@ -1,0 +1,131 @@
+---
+title: Getting support
+description: How to get help and what to include in a support request.
+persona: ["developer", "operations"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+When something breaks in production, the fastest resolution comes from a well-formed request. This page shows how to self-diagnose first, where to reach us, and exactly what to attach so an engineer can reproduce your issue without a round-trip.
+
+## Self-service first
+
+Most issues resolve faster than a support ticket can be triaged. Before contacting us, check:
+
+- **[Status page](https://status.vinr.com)** — confirm there is no active incident affecting Payments, Billing, or Engagement.
+- **[Troubleshooting](/docs/troubleshooting)** — common errors, declined cards, and webhook delivery failures with fixes.
+- **[API reference](/docs/api-reference)** — every error has a stable `code`; search it to find the cause and remediation.
+- **Dashboard logs** — the **Developers → Logs** view shows the full request and response for any API call by request ID.
+
+<Callout type="info">
+Every API response includes a `vinr-request-id` header (for example `req_8sKd2...`). Quoting it in a ticket lets us pull the exact request, response, and internal trace in seconds.
+</Callout>
+
+## Contacting support
+
+| Channel | Best for | Where |
+|---|---|---|
+| In-dashboard support | Account-specific issues, billing, live data | **Help → Contact support** |
+| Email | Async questions, follow-ups | support@vinr.com |
+| Developer community | How-to questions, integration patterns | community.vinr.com |
+| Security disclosures | Vulnerabilities, suspected breaches | security@vinr.com |
+
+Open tickets from the dashboard whenever possible — they arrive pre-populated with your account, environment (sandbox vs. live), and recent API activity, which removes a whole verification step.
+
+<Callout type="warn">
+Never include a full secret key (`VINR_SECRET_KEY`), card numbers, or raw webhook signing secrets in a ticket, chat, or email. Share the last 4 characters of a key if you must identify which one is in use, and rotate any credential that has been exposed.
+</Callout>
+
+## What to include
+
+A good report is reproducible. Gather these before you write:
+
+<Steps>
+
+### Identify the resource
+
+Copy the relevant object ID — `pay_`, `sub_`, `inv_`, `loy_`, `we_`, etc. One ID is worth a paragraph of description.
+
+### Capture the request ID
+
+Grab the `vinr-request-id` from the failing response. If you do not log it yet, add it now.
+
+### State environment and timestamp
+
+Tell us **sandbox** or **live**, and the UTC time of the failure so we can match logs.
+
+### Describe expected vs. actual
+
+One sentence each: what you expected to happen, and what actually happened.
+
+</Steps>
+
+If you are filing programmatically or want to pull the diagnostic bundle yourself, fetch the event and any failed webhook deliveries:
+
+```ts
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// Pull the event behind a failed webhook so you can attach it to a ticket
+const event = await vinr.events.retrieve('evt_3aF9...');
+
+const attempts = await vinr.webhooks.deliveries.list({
+  endpoint: 'we_2bQ7...',
+  status: 'failed',
+  limit: 10,
+});
+
+console.log({
+  requestId: event.requestId,
+  type: event.type,
+  livemode: event.livemode,
+  failedDeliveries: attempts.data.map((a) => ({
+    id: a.id,
+    responseStatus: a.responseStatus,
+    attemptedAt: a.attemptedAt,
+  })),
+});
+```
+
+For raw API users, the same lookup carries the request ID back in the response header:
+
+```bash
+curl -i https://api.vinr.com/v1/events/evt_3aF9... \
+  -H "X-Api-Key: $VINR_SECRET_KEY"
+# -> look for the `vinr-request-id` header in the output
+```
+
+## Severity and response times
+
+Set severity honestly so our triage matches your actual impact. Targets below are for accounts on a standard support plan; enterprise agreements may define tighter SLAs.
+
+<TypeTable
+  type={{
+    P0: { type: "critical", description: "Live payments or payouts fully down; data loss. 24/7.", default: "1 hour" },
+    P1: { type: "high", description: "Major feature degraded with no workaround in live mode.", default: "4 business hours" },
+    P2: { type: "normal", description: "Partial degradation or a clear workaround exists.", default: "1 business day" },
+    P3: { type: "low", description: "Questions, sandbox issues, feature requests.", default: "2 business days" },
+  }}
+/>
+
+A "first response" target means an engineer engages with your ticket — not that the issue is resolved. Keep the ticket thread open and reply with new findings rather than opening duplicates, which reset the queue position.
+
+## Status and incidents
+
+Subscribe to [status.vinr.com](https://status.vinr.com) for email or webhook alerts on platform incidents and scheduled maintenance. During a declared incident:
+
+- We post the affected systems (Payments, Billing, Engagement, Dashboard, API) and update at least every 30 minutes.
+- You do **not** need to file a P0 for a confirmed incident already on the status page — subscribe instead and we will post the all-clear.
+- After resolution, a post-incident review is published for any incident lasting longer than 30 minutes.
+
+<Callout type="info">
+Build for resilience regardless of status: make webhook handlers [idempotent](/docs/integration/idempotency), retry idempotently with an [idempotency key](/docs/integration/idempotency), and reconcile against the API rather than trusting a single synchronous response.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Troubleshooting" href="/docs/troubleshooting" description="Common errors and their fixes before you file a ticket." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Inspect, replay, and verify webhook deliveries." />
+  <Card title="Operations" href="/docs/operations" description="Monitoring, reconciliation, and running VINR in production." />
+</Cards>

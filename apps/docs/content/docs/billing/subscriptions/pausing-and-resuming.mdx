@@ -1,0 +1,139 @@
+---
+title: Pausing & resuming
+description: Temporarily suspend billing without cancelling.
+persona: ["developer"]
+priority: "P2"
+lastUpdated: "2026-05-30"
+---
+
+Pause collection on a subscription to retain the relationship while stopping invoices, then resume when the customer returns. Pausing is the right tool for seasonal customers, payment-recovery holds, and "skip a month" flows — it keeps the `sub_` and its history intact instead of forcing a cancel-and-recreate.
+
+## Pause vs. cancel
+
+A pause is reversible and preserves the subscription's identity, billing cycle anchor, and metadata. A [cancel](/docs/billing/subscriptions) ends the relationship: the subscription transitions to `canceled` and cannot be reactivated.
+
+| | Pause | Cancel |
+|---|---|---|
+| Subscription status | `active`, with `pause_collection` set | `canceled` |
+| Invoices during the period | Suspended (per behavior below) | None |
+| Reversible | Yes — clear `pause_collection` to resume | No — create a new subscription |
+| Keeps billing anchor | Yes | N/A |
+
+## Pause behaviors
+
+When you pause, you choose what happens to invoices that would otherwise be generated. This is the `behavior` field on `pause_collection`.
+
+<TypeTable
+  type={{
+    keep_as_draft: { type: "behavior", description: "Invoices are created at each cycle but left in draft and not collected. You can finalize them later." },
+    mark_uncollectible: { type: "behavior", description: "Invoices are created and immediately marked uncollectible — useful when you never intend to bill for the paused period." },
+    void: { type: "behavior", description: "Invoices are created and voided. Choose this for a clean skip with no outstanding balance." },
+  }}
+/>
+
+<Callout type="info">
+Pausing only affects invoices generated **during** the pause. Any invoice already finalized and open before you paused is unaffected — collect or void it explicitly.
+</Callout>
+
+## Pause a subscription
+
+Set `pause_collection` on the subscription. Optionally schedule an automatic resume with `resumes_at` (a Unix timestamp in seconds).
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const subscription = await vinr.subscriptions.update('sub_8Qd2Rk1', {
+  pauseCollection: {
+    behavior: 'void',
+    // Resume automatically on 2026-09-01; omit to pause indefinitely.
+    resumesAt: 1756684800,
+  },
+});
+
+console.log(subscription.status);          // "active"
+console.log(subscription.pauseCollection); // { behavior: "void", resumesAt: 1756684800 }
+```
+
+The subscription stays `active` — pausing is a collection setting, not a status. Inspect `pause_collection` to know whether a subscription is currently paused.
+
+<Tabs items={["SDK", "REST"]}>
+<Tab value="SDK">
+```typescript
+// Indefinite pause: omit resumesAt and resume manually later.
+await vinr.subscriptions.update('sub_8Qd2Rk1', {
+  pauseCollection: { behavior: 'keep_as_draft' },
+});
+```
+</Tab>
+<Tab value="REST">
+```bash
+curl -X POST https://api.vinr.com/v1/subscriptions/sub_8Qd2Rk1 \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -d "pause_collection[behavior]=keep_as_draft"
+```
+</Tab>
+</Tabs>
+
+## Resume a subscription
+
+To resume, clear `pause_collection` by setting it to `null`. VINR realigns billing to the original cycle anchor and prorates the first invoice for the time elapsed during the pause.
+
+```typescript
+const resumed = await vinr.subscriptions.update('sub_8Qd2Rk1', {
+  pauseCollection: null,
+  // Optional: reset the anchor to now instead of the original cycle.
+  billingCycleAnchor: 'now',
+});
+
+console.log(resumed.pauseCollection); // null
+```
+
+<Callout type="warn">
+By default, resuming keeps the original [billing cycle anchor](/docs/billing/how-billing-works), so a long pause can produce a large prorated catch-up charge. Pass `billingCycleAnchor: 'now'` to start a fresh full period from the resume date and avoid surprise proration.
+</Callout>
+
+## Resulting events
+
+| Event | When it fires |
+|---|---|
+| `subscription.paused` | `pause_collection` is set on a previously unpaused subscription. |
+| `subscription.resumed` | `pause_collection` is cleared, manually or by `resumes_at`. |
+| `subscription.updated` | Any change to `pause_collection`, including behavior swaps. |
+| `invoice.created` | Each cycle during a pause, when behavior is `keep_as_draft`. |
+
+```typescript
+// Gate access in your webhook handler.
+const event = vinr.webhooks.verify(payload, req.headers['x-vinr-signature']);
+
+if (event.type === 'subscription.paused') {
+  await revokeAccess(event.data.object.customer);
+} else if (event.type === 'subscription.resumed') {
+  await grantAccess(event.data.object.customer);
+}
+```
+
+## Edge cases
+
+<Accordions>
+<Accordion title="Pausing during a trial">
+A subscription still in its trial has no invoices to suspend, so the `behavior` is moot until the trial ends. If `resumes_at` falls after the trial, the trial completes normally on resume.
+</Accordion>
+<Accordion title="Changing price or quantity while paused">
+Updates apply immediately to the subscription, but proration line items are deferred until you resume. The next collected invoice reflects both the pause period and any mid-pause changes.
+</Accordion>
+<Accordion title="Open invoices from before the pause">
+Pausing does not touch invoices already finalized. A subscription can be paused while a prior invoice is still in [dunning](/docs/billing/dunning-and-recovery) — handle that balance separately.
+</Accordion>
+<Accordion title="Payment recovery holds">
+Use `mark_uncollectible` to hold a subscription with a failing payment method without losing the relationship, then resume once the customer updates their card.
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="The full subscription lifecycle." />
+  <Card title="Trials & proration" href="/docs/billing/trials-and-proration" description="How VINR computes partial-period charges." />
+  <Card title="Dunning & recovery" href="/docs/billing/dunning-and-recovery" description="Recover failed payments before cancelling." />
+</Cards>

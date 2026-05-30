@@ -1,0 +1,163 @@
+---
+title: Errors
+description: The structured error object and every error type VINR returns.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Every failed VINR API call returns a consistent, machine-readable error object alongside a meaningful HTTP status code. This page documents that object, the full set of error types and codes, and patterns for handling them reliably in production.
+
+## HTTP status codes
+
+VINR follows conventional HTTP semantics. The status code tells you the *class* of failure; the JSON body tells you the specifics.
+
+| Status | Meaning | Retry? |
+|---|---|---|
+| `200` / `201` | Success | — |
+| `400` | Invalid request — malformed JSON or failed validation | No (fix the request) |
+| `401` | Authentication failed — missing or invalid API key | No |
+| `402` | Payment required — the underlying charge was declined | Maybe (depends on decline reason) |
+| `403` | Forbidden — key lacks permission for this resource | No |
+| `404` | Resource not found | No |
+| `409` | Conflict — idempotency key reused with a different payload | No |
+| `422` | Unprocessable — request is valid but cannot be fulfilled in the current state | No |
+| `429` | Rate limited — too many requests | Yes (with backoff) |
+| `500` / `502` / `503` | Server error on VINR's side | Yes (with backoff) |
+
+<Callout type="info">
+A `2xx` status always means the request succeeded. VINR never returns `200` with an error body, so you can branch on the status code before parsing.
+</Callout>
+
+## Error object
+
+Failed responses return a single top-level `error` object. The fields are stable and safe to switch on programmatically.
+
+```json
+{
+  "error": {
+    "type": "card_error",
+    "code": "card_declined",
+    "decline_code": "insufficient_funds",
+    "message": "The card was declined due to insufficient funds.",
+    "param": "payment_method",
+    "doc_url": "https://docs.vinr.com/docs/api-reference/errors#card_declined",
+    "request_id": "req_8Fq2zX1m4Kd",
+    "resource": "pay_3Nf0kLp9aQ"
+  }
+}
+```
+
+<TypeTable
+  type={{
+    type: { type: "string", description: "High-level category: api_error, card_error, validation_error, authentication_error, rate_limit_error, idempotency_error, or invalid_request_error" },
+    code: { type: "string", description: "Stable, granular machine code. Always present. Switch on this, never on message." },
+    decline_code: { type: "string", description: "Issuer decline reason. Present only when code is card_declined.", default: "undefined" },
+    message: { type: "string", description: "Human-readable explanation. Safe to log; do not show raw to end users." },
+    param: { type: "string", description: "The request field that caused a validation_error.", default: "undefined" },
+    doc_url: { type: "string", description: "Deep link to documentation for this code.", default: "undefined" },
+    request_id: { type: "string", description: "Unique ID for the request. Include this when contacting support." },
+    resource: { type: "string", description: "ID of the affected resource, when applicable (e.g. pay_…).", default: "undefined" },
+  }}
+/>
+
+## Error types and codes
+
+The `type` field groups errors into categories. The `code` field is the value you should branch on.
+
+| `type` | Common `code` values | Status |
+|---|---|---|
+| `authentication_error` | `invalid_api_key`, `expired_api_key` | `401` |
+| `invalid_request_error` | `resource_missing`, `unknown_parameter`, `livemode_mismatch` | `400` / `404` |
+| `validation_error` | `parameter_missing`, `parameter_invalid`, `amount_too_small` | `400` |
+| `card_error` | `card_declined`, `expired_card`, `incorrect_cvc`, `processing_error` | `402` |
+| `idempotency_error` | `idempotency_key_in_use`, `idempotency_payload_mismatch` | `409` |
+| `rate_limit_error` | `too_many_requests` | `429` |
+| `api_error` | `internal_error`, `service_unavailable` | `5xx` |
+
+### Card decline codes
+
+When `code` is `card_declined`, inspect `decline_code` to decide whether a retry could ever succeed.
+
+| `decline_code` | Meaning | Customer action |
+|---|---|---|
+| `insufficient_funds` | Not enough balance | Try another card |
+| `do_not_honor` | Issuer rejected without detail | Contact issuing bank |
+| `lost_card` / `stolen_card` | Card reported compromised | Use a different card |
+| `authentication_required` | 3DS challenge needed | Complete authentication, then retry |
+| `expired_card` | Card past expiry | Update card details |
+
+<Callout type="warn">
+Never surface `decline_code` or the raw `message` directly to a cardholder. Issuer reason codes are intentionally vague to prevent fraud probing. Show a generic "Your card was declined" message and prompt for an alternative method.
+</Callout>
+
+## Handling errors
+
+The SDK throws a typed `VinrError` you can narrow on `type` and `code`. The example below distinguishes permanent failures from retryable ones.
+
+```ts
+import { Vinr, VinrError } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+async function charge() {
+  try {
+    return await vinr.payments.create({
+      amount: 1000,
+      currency: 'EUR',
+      returnUrl: 'https://shop.example.com/return',
+    });
+  } catch (err) {
+    if (err instanceof VinrError) {
+      switch (err.type) {
+        case 'card_error':
+          // Surface a generic message; log the precise reason.
+          console.warn(`Declined (${err.decline_code}) req=${err.request_id}`);
+          throw new Error('Your card was declined. Please try another method.');
+        case 'rate_limit_error':
+        case 'api_error':
+          // Transient — caller should retry with backoff.
+          throw err;
+        default:
+          // Programming or auth error — do not retry.
+          console.error(`Unrecoverable: ${err.code} (${err.message})`);
+          throw err;
+      }
+    }
+    throw err;
+  }
+}
+```
+
+### Retrying safely
+
+Only retry `429` and `5xx` responses, and always retry with the *same* idempotency key so VINR can deduplicate. Use exponential backoff with jitter.
+
+```ts
+async function withRetry<T>(fn: () => Promise<T>, max = 4): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const retryable =
+        err instanceof VinrError &&
+        (err.type === 'rate_limit_error' || err.type === 'api_error');
+      if (!retryable || attempt >= max) throw err;
+      const delay = Math.min(2 ** attempt * 200, 4000) + Math.random() * 200;
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+}
+```
+
+<Callout type="info">
+The `request_id` is your fastest path to a resolution. When you open a support ticket, include it verbatim — it lets us trace the exact call through our logs without you sharing payloads.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="API Reference" href="/docs/api-reference" description="Endpoints, parameters, and the response envelope." />
+  <Card title="Idempotency" href="/docs/api-reference/idempotency" description="Make retries safe by deduplicating requests." />
+  <Card title="Troubleshooting" href="/docs/troubleshooting" description="Diagnose declines, webhook failures, and common integration issues." />
+</Cards>

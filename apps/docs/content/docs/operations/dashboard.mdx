@@ -1,0 +1,114 @@
+---
+title: Dashboard guide
+description: Navigate the VINR dashboard for day-to-day operations.
+persona: ["operations"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+The VINR dashboard is where your team runs the business day to day — searching payments, refunding a customer, inviting a colleague, and switching between live and sandbox data. This page maps the layout so you can find the right screen fast and know which action belongs to which role.
+
+## Live vs. sandbox
+
+A mode switch sits in the top-left of every screen. **Sandbox** is a fully isolated copy of your account: separate objects, separate API keys, no real money. Use it to rehearse a refund flow or test a webhook before touching production.
+
+<Callout type="info">
+Sandbox and live data never mix. An object created in sandbox (e.g. `pay_3Nf...`) does not exist in live mode, and the keys are prefixed differently. Test cards like `4242 4242 4242 4242` only clear in sandbox.
+</Callout>
+
+## Home and reporting
+
+The home screen summarizes the metrics most teams check first:
+
+| Tile | What it shows |
+|---|---|
+| Gross volume | Total captured payment value for the selected range. |
+| Net volume | Gross minus refunds, disputes, and VINR fees — what reaches a [payout](/docs/operations/payouts-and-settlement). |
+| Successful payments | Count and success rate, with declines broken out by reason. |
+| MRR & active subscriptions | Recurring revenue pulled from [Billing](/docs/billing). |
+
+Every tile honors the date-range and currency filters at the top. Export any view to CSV for finance reconciliation.
+
+## Payments and search
+
+The **Payments** list is the operational workhorse. Search accepts an object ID (`pay_`, `re_`, `dp_`), a customer email, or the last four digits of a card, and you can stack filters by status, amount, currency, and date.
+
+Open a payment to see its full timeline — authorization, capture, [3DS](/docs/payments/strong-customer-authentication) result, and any refunds or disputes — plus the raw event payload. From here an agent can:
+
+<Steps>
+
+### Refund a payment
+
+Use **Refund** for a full or partial amount. VINR creates a `re_` object and emits `payment.refunded`. Partial refunds can be repeated until the original amount is exhausted.
+
+### Respond to a dispute
+
+When a cardholder opens a chargeback, the linked `dp_` shows the deadline and an evidence form. Submit before the due date directly from the timeline.
+
+### Inspect the event log
+
+Every state change is a dotted event (`payment.completed`, `payment.failed`). Copy the payload to reproduce an issue or confirm what your [webhook endpoint](/docs/integration/webhooks) received.
+
+</Steps>
+
+<Callout type="warn">
+Refunds and dispute evidence are irreversible once submitted. Confirm the amount and customer before you click — there is no undo, only a new offsetting action.
+</Callout>
+
+## Customers and methods
+
+The **Customers** screen lists every `cust_` with lifetime volume, default payment method, and linked [loyalty account](/docs/engagement/loyalty-accounts). Open a customer to manage their stored cards, view their invoices and subscriptions, and start a refund without leaving the record.
+
+Most dashboard actions have an API equivalent, so what you do by hand is reproducible in code:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// The same lookup the Customers search performs.
+const customer = await vinr.customers.retrieve('cust_8Qa2');
+
+// And the refund the timeline's "Refund" button issues.
+const refund = await vinr.refunds.create({
+  payment: 'pay_3Nf91',
+  amount: 1000,            // €10.00, partial refund in minor units
+});                        // -> "re_..."
+```
+
+## Team and roles
+
+Invite teammates from **Settings → Team**. Each member gets a role that scopes what they can see and do:
+
+| Role | Can do |
+|---|---|
+| Owner | Everything, including billing for the VINR account and deleting the org. |
+| Administrator | Manage team, API keys, webhooks, and all data. |
+| Developer | Read/write API keys, view logs and events; no team management. |
+| Analyst | Read-only access to reporting and lists. |
+| Support | View customers and payments, issue refunds; no settings access. |
+
+<Callout type="info">
+Roles apply per mode. Granting Support access to live mode does not expose sandbox keys, and vice versa. Scope agents to the minimum role they need.
+</Callout>
+
+## Settings
+
+Settings is grouped so you rarely hunt for a control:
+
+- **Account** — business name, branding for hosted pages and receipts, default currency.
+- **API keys** — create, roll, and revoke secret and publishable keys per mode.
+- **Webhooks** — register `we_` endpoints, pick events, and replay deliveries. See [Webhooks](/docs/integration/webhooks).
+- **Payouts** — bank account and [settlement schedule](/docs/operations/payouts-and-settlement).
+- **Tax and compliance** — tax registrations and [data-export](/docs/compliance) controls.
+
+<Callout type="warn">
+Rolling a secret key invalidates the old one immediately. Update your server's `VINR_SECRET_KEY` before revoking, or live traffic will start returning `401`.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Payouts & settlement" href="/docs/operations/payouts-and-settlement" description="How net volume becomes money in your bank." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Automate what the dashboard does by hand." />
+  <Card title="Operations overview" href="/docs/operations" description="The rest of the day-to-day tooling." />
+</Cards>

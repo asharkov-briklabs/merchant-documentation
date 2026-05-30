@@ -1,0 +1,139 @@
+---
+title: Points & loyalty currency
+description: Define and manage the value members earn.
+persona: ["developer", "finance-manager"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+A program issues a loyalty currency — points, miles, or stars — with rules for its monetary value, rounding, and expiry. The currency is the unit every earning rule awards and every reward consumes, so its definition quietly governs both member experience and balance-sheet liability. This page covers defining a currency, moving points programmatically, expiring stale balances, and reporting on what you owe.
+
+## Defining a currency
+
+A currency lives on the `program`. You set its display name, the redemption value of a single point in minor units, and the rounding mode applied when rules produce fractional points.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const program = await vinr.loyalty.programs.update('prog_default', {
+  currency: {
+    name: 'Stars',
+    pointValue: 1,        // 1 point redeems for EUR 0.01 (1 minor unit)
+    rounding: 'down',     // 'down' | 'nearest' | 'up'
+    decimals: 0,          // whole points only
+  },
+});
+```
+
+<TypeTable
+  type={{
+    name: { type: "string", description: "Display name shown to members (e.g. \"Stars\", \"Miles\")." },
+    pointValue: { type: "integer", description: "Redemption value of one point, in minor units of the program currency.", default: "1" },
+    rounding: { type: "'down' | 'nearest' | 'up'", description: "How fractional point awards are rounded to the configured decimals.", default: "down" },
+    decimals: { type: "integer", description: "Decimal places a balance may hold. 0 means whole points only.", default: "0" },
+  }}
+/>
+
+<Callout type="info">
+`pointValue` is the **redemption** value, not the earn rate. Earn rates live on [earning rules](/docs/engagement/earning-rules) (e.g. "1 point per EUR 1 spent"). Keep the two concepts separate so you can change how fast members earn without re-pricing every outstanding balance.
+</Callout>
+
+## Issuing & deducting points
+
+Most point movement is automatic — an [earning rule](/docs/engagement/earning-rules) fires on `payment.completed` and a [redemption](/docs/engagement/redemption) spends them. Both create a `points_transaction` (`ptx_...`) that is the single source of truth for a balance. You can also move points directly:
+
+```typescript
+// Award points outside a rule — e.g. a customer-service goodwill gesture.
+const award = await vinr.loyalty.transactions.create({
+  account: 'loy_abc123',
+  amount: 500,                       // positive = credit
+  reason: 'goodwill_credit',
+  metadata: { ticket: 'ZD-4821' },
+});                                  // "ptx_..."
+
+// Deduct points — amount is negative for a debit.
+await vinr.loyalty.transactions.create({
+  account: 'loy_abc123',
+  amount: -200,
+  reason: 'manual_correction',
+});
+```
+
+Every transaction emits an event. Awards emit `loyalty.points.earned`; deductions emit `loyalty.points.spent`. Subscribe with `vinr.webhooks.verify(payload, signature)` against the `x-vinr-signature` header to keep your ledger in sync.
+
+<Callout type="warn">
+Point transactions are **append-only**. You cannot edit or delete a `ptx_`; reverse it with an offsetting transaction instead. This preserves an auditable history for finance and dispute handling.
+</Callout>
+
+## Expiry policies
+
+Expiry caps your liability and nudges members to return. Configure it on the program; VINR sweeps balances and writes negative `points_transaction` records of reason `expiry`, emitting `loyalty.points.expired`.
+
+```typescript
+await vinr.loyalty.programs.update('prog_default', {
+  expiry: {
+    mode: 'rolling',     // 'rolling' | 'fixed' | 'never'
+    months: 12,          // expire points 12 months after they are earned
+    resetOnActivity: true, // any earn or redeem extends all points
+    warnDaysBefore: 30,  // emit loyalty.points.expiring this many days out
+  },
+});
+```
+
+| Mode | Behaviour |
+|---|---|
+| `rolling` | Each point expires `months` after it was earned (FIFO). |
+| `fixed` | All points expire on a fixed calendar date each year. |
+| `never` | Points never expire. Maximises liability — model it. |
+
+<Callout type="info">
+With `resetOnActivity: true`, a single qualifying action extends the whole balance, which is the friendliest common policy. Listen for `loyalty.points.expiring` and send a reminder to recover lapsing members.
+</Callout>
+
+## Manual adjustments
+
+Use adjustments for corrections, migrations, and goodwill — anything not driven by a rule. Always attach a `reason` and `metadata` so the movement is explainable in an audit. For bulk imports (e.g. migrating from a legacy provider), batch transactions and tag them with a shared `metadata.batch` so they can be located and reversed together.
+
+```bash
+curl https://api.vinr.com/v1/loyalty/transactions \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "account": "loy_abc123",
+    "amount": 1500,
+    "reason": "migration_opening_balance",
+    "metadata": { "batch": "legacy_import_2026q2" }
+  }'
+```
+
+Adjustments respect the program's `decimals` and `rounding`, so a balance can never hold an invalid fraction.
+
+## Liability & reporting
+
+Outstanding points are a real obligation: every unredeemed point is value you may have to deliver. Liability equals total balance times `pointValue`. Pull a point-in-time snapshot for finance, or reconcile against the transaction ledger.
+
+```typescript
+const report = await vinr.loyalty.programs.liability('prog_default');
+// {
+//   outstandingPoints: 4_812_300,
+//   pointValue: 1,
+//   liabilityMinor: 4_812_300,   // EUR 48,123.00 at risk
+//   currency: 'EUR',
+//   asOf: '2026-05-30T00:00:00Z'
+// }
+```
+
+Reconcile by summing every `points_transaction`: earned minus spent minus expired must equal `outstandingPoints`. For the full settlement and accounting view, see [Operations](/docs/operations). Refunds claw back the points they originally awarded, so liability falls automatically when a purchase is reversed — see [Linking payments & loyalty](/docs/engagement/linking-payments-and-loyalty).
+
+<Callout type="info">
+Tightening `pointValue`, shortening expiry, or capping earn rates all reduce liability — but changes apply going forward, not retroactively, to keep member trust. Model the impact before shipping a change.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Earning rules" href="/docs/engagement/earning-rules" description="Set how fast members accumulate points." />
+  <Card title="Rewards catalog" href="/docs/engagement/rewards-catalog" description="Define what points buy." />
+  <Card title="Linking payments & loyalty" href="/docs/engagement/linking-payments-and-loyalty" description="Earn and claw back on real payments." />
+</Cards>

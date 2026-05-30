@@ -1,0 +1,125 @@
+---
+title: Webhooks & events
+description: React to subscription and invoice events reliably.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Subscriptions and invoices move through their lifecycle asynchronously — trials end, renewals collect, payments fail and retry — so the source of truth for "what just happened" is the webhook stream, not your API call. This page covers the events VINR emits across that lifecycle and how to handle them idempotently so your system stays in sync.
+
+## Why events, not polling
+
+A subscription is a long-lived object that changes on VINR's clock: the renewal at midnight, the dunning retry three days later, the SCA challenge the customer completes on their phone. None of these originate from a request you made, so polling can only ever tell you the current state — never reliably _when_ it changed. Webhooks push each transition to you the moment it occurs, which is what lets you grant or revoke access in real time.
+
+<Callout type="info">
+Events are also queryable after the fact via the [Events API](/docs/api-reference/events) (`evt_...`). Webhooks are the live delivery channel; the API is your audit log and backfill tool.
+</Callout>
+
+## The lifecycle events
+
+The events below cover the common subscription and invoice transitions. Most integrations only need to handle a handful — the renewal, the failure, and the cancellation.
+
+| Event | When it fires | Typical action |
+|---|---|---|
+| `subscription.created` | A subscription starts (incl. trialing). | Provision access. |
+| `subscription.trial_will_end` | 3 days before a trial converts. | Remind the customer; confirm a payment method exists. |
+| `subscription.updated` | Plan, quantity, or status changes. | Re-evaluate entitlements. |
+| `subscription.deleted` | Subscription is canceled and ends. | Revoke access. |
+| `invoice.finalized` | A draft invoice locks and amount due is set. | Record the statement. |
+| `invoice.paid` | Collection succeeds. | Grant/extend access for the period. |
+| `invoice.payment_failed` | A collection attempt fails. | Surface a banner; let [dunning](/docs/billing/dunning-and-recovery) retry. |
+| `invoice.payment_action_required` | Payment needs [SCA](/docs/payments/strong-customer-authentication). | Send the customer the hosted confirmation link. |
+
+<Callout type="warn">
+Grant entitlements on `invoice.paid`, not on `subscription.created`. A subscription can exist in `past_due` while its first invoice is still failing — keying access off payment events keeps you from handing out unpaid service.
+</Callout>
+
+## Verifying and routing the webhook
+
+Every delivery carries an `x-vinr-signature` header. Verify it against the raw request body before trusting anything — `vinr.webhooks.verify` throws if the signature is invalid or the timestamp is stale.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+import express from 'express';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+const app = express();
+
+// IMPORTANT: verify against the *raw* body, not parsed JSON.
+app.post('/webhooks/vinr', express.raw({ type: 'application/json' }), (req, res) => {
+  let event;
+  try {
+    event = vinr.webhooks.verify(
+      req.body,                          // raw Buffer
+      req.headers['x-vinr-signature'],
+      process.env.VINR_WEBHOOK_SECRET,   // from the endpoint (we_...)
+    );
+  } catch {
+    return res.status(400).send('invalid signature');
+  }
+
+  // Acknowledge fast; do real work async (see idempotency below).
+  enqueue(event);
+  res.status(200).send('ok');
+});
+```
+
+## Handling events idempotently
+
+VINR guarantees _at-least-once_ delivery, so the same event can arrive more than once (a slow ACK, a retry, a network blip). Deduplicate on `event.id` and make every handler safe to run twice. Persist the event ID inside the same transaction as the side effect — that closes the gap where a crash between "did the work" and "marked it seen" would otherwise double-apply.
+
+```typescript
+async function handleEvent(event) {
+  // INSERT ... ON CONFLICT DO NOTHING — returns false if already processed.
+  const isNew = await db.markProcessed(event.id);
+  if (!isNew) return;
+
+  switch (event.type) {
+    case 'invoice.paid': {
+      const invoice = event.data.object;          // inv_...
+      await grantAccess(invoice.subscription, invoice.period_end);
+      break;
+    }
+    case 'invoice.payment_failed':
+      await notifyPaymentFailed(event.data.object.customer);
+      break;
+    case 'subscription.deleted':
+      await revokeAccess(event.data.object.id);    // sub_...
+      break;
+    default:
+      // Unhandled types are fine — return 200 so VINR stops retrying.
+      break;
+  }
+}
+```
+
+<Callout type="info">
+Always return `2xx` once you've durably received the event, even for types you ignore. A non-2xx (or a timeout past 10s) marks the delivery failed and VINR retries with exponential backoff for up to 72 hours.
+</Callout>
+
+## Ordering and edge cases
+
+<Accordions>
+
+<Accordion title="Events can arrive out of order">
+Retries and parallel delivery mean `subscription.updated` may land before the `invoice.paid` that caused it. Don't assume sequence — re-fetch the object (`vinr.subscriptions.retrieve`) when a handler needs the authoritative current state rather than trusting the event payload's age.
+</Accordion>
+
+<Accordion title="The payload is a snapshot">
+`event.data.object` reflects the resource _at the time of the event_. By the time you process it, the live object may have moved on. Use the payload to know _what changed_; use a retrieve call when you need _what is true now_.
+</Accordion>
+
+<Accordion title="Test before you depend on it">
+Send test deliveries and inspect signing from [Testing webhooks](/docs/integration/testing-webhooks). In sandbox, drive failures with card `4000 0000 0000 0002` (declined) and SCA flows with `4000 0000 0000 3220` to exercise `invoice.payment_failed` and `invoice.payment_action_required`.
+</Accordion>
+
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Webhooks overview" href="/docs/integration/webhooks" description="Endpoints, signing secrets, and retries." />
+  <Card title="Dunning & recovery" href="/docs/billing/dunning-and-recovery" description="What happens after a failed collection." />
+  <Card title="Events API" href="/docs/api-reference/events" description="Query and replay past events." />
+</Cards>

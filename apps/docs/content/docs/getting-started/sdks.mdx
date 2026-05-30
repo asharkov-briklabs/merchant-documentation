@@ -1,0 +1,223 @@
+---
+title: SDKs & libraries
+description: Official VINR server, client, and mobile SDKs.
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+VINR maintains official SDKs across server, browser, and mobile runtimes. Every SDK is generated from the same VINR OpenAPI spec and versioned against the API, so a method that exists in the Node SDK behaves identically in Python, Go, or Swift. This page covers what each SDK is for, how to install it, and the support guarantees behind them.
+
+## Server SDKs
+
+Server SDKs hold your **secret key** and call the full API surface — Payments, Billing, and Engagement. They are the only place you should ever use a `VINR_SECRET_KEY`. Each handles retries with idempotency keys, request signing, pagination, and webhook verification for you.
+
+| Language | Package | Min runtime | Repository |
+|---|---|---|---|
+| Node / TypeScript | `@vinr/sdk` | Node 18+ | `github.com/vinr/vinr-node` |
+| Python | `vinr` | Python 3.9+ | `github.com/vinr/vinr-python` |
+| Go | `github.com/vinr/vinr-go` | Go 1.21+ | `github.com/vinr/vinr-go` |
+| Ruby | `vinr` | Ruby 3.1+ | `github.com/vinr/vinr-ruby` |
+| PHP | `vinr/vinr-php` | PHP 8.1+ | `github.com/vinr/vinr-php` |
+| Java | `com.vinr:vinr-java` | Java 11+ | `github.com/vinr/vinr-java` |
+
+<Tabs items={["Node", "Python", "Go", "PHP"]}>
+<Tab value="Node">
+```ts
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 1000, // EUR 10.00 in minor units
+  currency: 'EUR',
+  description: 'Order #1234',
+});
+```
+</Tab>
+<Tab value="Python">
+```python
+from vinr import Vinr
+
+vinr = Vinr(secret_key=os.environ["VINR_SECRET_KEY"])
+
+payment = vinr.payments.create(
+    amount=1000,  # EUR 10.00 in minor units
+    currency="EUR",
+    description="Order #1234",
+)
+```
+</Tab>
+<Tab value="Go">
+```go
+client := vinr.New(os.Getenv("VINR_SECRET_KEY"))
+
+payment, err := client.Payments.Create(ctx, &vinr.PaymentParams{
+    Amount:      1000, // EUR 10.00 in minor units
+    Currency:    "EUR",
+    Description: vinr.String("Order #1234"),
+})
+```
+</Tab>
+<Tab value="PHP">
+```php
+$vinr = new Vinr\Client(getenv('VINR_SECRET_KEY'));
+
+$payment = $vinr->payments->create([
+    'amount'      => 1000, // EUR 10.00 in minor units
+    'currency'    => 'EUR',
+    'description' => 'Order #1234',
+]);
+```
+</Tab>
+</Tabs>
+
+<Callout type="error">
+Never ship a secret key to a browser, mobile binary, or any client device. Secret keys grant full account access. If one is exposed, roll it immediately in **Settings → API Keys**.
+</Callout>
+
+## Client SDK (JavaScript)
+
+`@vinr/js` runs in the browser and uses your **public key** only. It mounts the hosted checkout, collects card and bank details inside an isolated iframe (so raw PAN data never touches your DOM and stays out of PCI scope), and confirms 3D Secure challenges.
+
+```ts
+import { VinrCheckout } from '@vinr/js';
+
+const checkout = VinrCheckout(process.env.NEXT_PUBLIC_VINR_PUBLIC_KEY!);
+
+// clientSecret comes from a server-side vinr.payments.create() call
+const element = checkout.mount('#payment-element', {
+  clientSecret: payment.clientSecret,
+});
+
+element.on('completed', ({ paymentId }) => {
+  window.location.href = `/order/complete?payment=${paymentId}`;
+});
+```
+
+The public key is safe to embed in client bundles — it can tokenize and confirm payments but cannot read customers, issue refunds, or move money.
+
+## Mobile SDKs
+
+Native mobile SDKs wrap the same public-key checkout flow with platform-native UI and Apple Pay / Google Pay support.
+
+| Platform | Package | Distribution |
+|---|---|---|
+| iOS | `VinriOS` | Swift Package Manager, CocoaPods |
+| Android | `com.vinr:vinr-android` | Maven Central |
+| React Native | `@vinr/react-native` | npm |
+
+<Tabs items={["iOS (Swift)", "Android (Kotlin)", "React Native"]}>
+<Tab value="iOS (Swift)">
+```swift
+import VinriOS
+
+let vinr = Vinr(publishableKey: "pk_live_...")
+
+vinr.presentPaymentSheet(clientSecret: clientSecret) { result in
+    switch result {
+    case .completed(let paymentId): handleSuccess(paymentId)
+    case .canceled:                 dismiss()
+    case .failed(let error):        show(error)
+    }
+}
+```
+</Tab>
+<Tab value="Android (Kotlin)">
+```kotlin
+val vinr = Vinr(context, publishableKey = "pk_live_...")
+
+vinr.presentPaymentSheet(clientSecret) { result ->
+    when (result) {
+        is PaymentResult.Completed -> handleSuccess(result.paymentId)
+        is PaymentResult.Canceled  -> dismiss()
+        is PaymentResult.Failed    -> show(result.error)
+    }
+}
+```
+</Tab>
+<Tab value="React Native">
+```ts
+import { useVinr } from '@vinr/react-native';
+
+const { presentPaymentSheet } = useVinr();
+
+const { paymentId, error } = await presentPaymentSheet({ clientSecret });
+if (error) return showError(error);
+handleSuccess(paymentId);
+```
+</Tab>
+</Tabs>
+
+## Installation
+
+<Steps>
+
+### Install the package
+
+```bash
+# Node / TypeScript
+npm install @vinr/sdk
+
+# Python
+pip install vinr
+
+# Go
+go get github.com/vinr/vinr-go
+
+# PHP
+composer require vinr/vinr-php
+```
+
+### Set your environment variables
+
+Keep keys out of source control. Sandbox keys are prefixed `sk_test_` / `pk_test_`; live keys use `sk_live_` / `pk_live_`.
+
+```bash
+VINR_SECRET_KEY=sk_test_...
+NEXT_PUBLIC_VINR_PUBLIC_KEY=pk_test_...
+```
+
+### Initialize and verify
+
+```ts
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// A read against the sandbox confirms keys and connectivity
+const { data } = await vinr.payments.list({ limit: 1 });
+console.log('Connected to VINR, payments visible:', data.length);
+```
+
+Test against sandbox cards before going live: `4242 4242 4242 4242` succeeds, `4000 0000 0000 0002` is declined, and `4000 0000 0000 3220` triggers a 3D Secure challenge.
+
+</Steps>
+
+## Versioning & support policy
+
+SDK releases follow [semantic versioning](https://semver.org). The SDK major version tracks the pinned VINR API version it ships against; minor and patch releases are always backward compatible within a major.
+
+<TypeTable
+  type={{
+    apiVersion: { type: "string", description: "Override the pinned API version per request, e.g. '2026-04-01'.", default: "SDK default" },
+    maxRetries: { type: "number", description: "Automatic retries for idempotent and 5xx responses.", default: "2" },
+    timeout: { type: "number", description: "Per-request timeout in milliseconds.", default: "30000" },
+  }}
+/>
+
+- **Active support** — the current and previous major versions receive features, fixes, and security patches.
+- **Maintenance** — older majors receive security patches for 12 months after a new major ships.
+- **Deprecation** — removals are announced at least 90 days ahead in the changelog and surfaced as runtime warnings before they take effect.
+
+<Callout type="info">
+Pin an exact SDK version in production (`@vinr/sdk@4.2.1`, not `^4`) and upgrade deliberately. The SDK sends its version to the API, which lets VINR support reproduce issues against the exact code you run.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Quick Start" href="/docs/getting-started/quick-start" description="Make your first payment in five minutes." />
+  <Card title="Authentication" href="/docs/getting-started/authentication" description="Manage API keys, scopes, and key rotation." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Verify signatures and handle events reliably." />
+</Cards>

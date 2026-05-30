@@ -1,0 +1,175 @@
+---
+title: Error code reference
+description: Every VINR error code, its meaning, and how to resolve it.
+persona: ["developer", "operations"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Every VINR API error returns a stable machine-readable `code`, a human-readable `message`, and the HTTP status that classifies it. This page is the canonical reference: what each code means, why it fires, and how to resolve it.
+
+## Anatomy of an error
+
+Errors come back as a JSON object under an `error` key. The `code` is stable across versions and safe to branch on; the `message` is for humans and may change.
+
+```json
+{
+  "error": {
+    "code": "card_declined",
+    "message": "The card was declined by the issuer.",
+    "type": "payment_error",
+    "param": "payment_method",
+    "doc_url": "https://docs.vinr.com/docs/troubleshooting/error-codes#card_declined",
+    "request_id": "req_8aQ2xL0fK"
+  }
+}
+```
+
+<TypeTable
+  type={{
+    code: { type: "string", description: "Stable identifier to branch on in code." },
+    message: { type: "string", description: "Human-readable explanation. May change between versions." },
+    type: { type: "string", description: "Category: authentication_error, validation_error, payment_error, billing_error, rate_limit_error, api_error." },
+    param: { type: "string", description: "The request field that caused the error, when applicable." },
+    request_id: { type: "string", description: "Quote this when contacting support." },
+  }}
+/>
+
+## HTTP status mapping
+
+| Status | Type | Meaning |
+|---|---|---|
+| `400` | `validation_error` | The request was malformed or missing required fields. |
+| `401` | `authentication_error` | The API key is missing, invalid, or revoked. |
+| `402` | `payment_error` | The payment could not be processed (declines, etc.). |
+| `404` | `validation_error` | The referenced resource does not exist. |
+| `409` | `billing_error` | The request conflicts with current resource state. |
+| `422` | `billing_error` | The request was well-formed but semantically rejected. |
+| `429` | `rate_limit_error` | Too many requests; back off and retry. |
+| `5xx` | `api_error` | A problem on VINR's side. Safe to retry with the same idempotency key. |
+
+The SDK throws a typed `VinrError` with these fields, so you rarely parse JSON yourself.
+
+```typescript
+import { Vinr, VinrError } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+try {
+  await vinr.payments.create({ amount: 1000, currency: 'EUR', customer: 'cust_123' });
+} catch (err) {
+  if (err instanceof VinrError) {
+    switch (err.code) {
+      case 'card_declined':
+        return showRetryWithDifferentCard();
+      case 'rate_limited':
+        return scheduleRetry(err.retryAfter);
+      default:
+        console.error(`[${err.requestId}] ${err.code}: ${err.message}`);
+    }
+  }
+  throw err;
+}
+```
+
+## Authentication errors
+
+| Code | HTTP | Resolution |
+|---|---|---|
+| `missing_api_key` | 401 | Send the secret key in the `X-Api-Key` header. |
+| `invalid_api_key` | 401 | The key is malformed or was rotated. Reissue from the dashboard. |
+| `key_revoked` | 401 | The key was revoked. Generate a new one and redeploy. |
+| `mode_mismatch` | 401 | A sandbox key was used against `api.vinr.com` (or vice versa). Match key mode to the base URL. |
+| `insufficient_permissions` | 403 | The key's role lacks scope for this endpoint. Use a key with broader permissions. |
+
+<Callout type="error">
+Never embed a secret key in client-side code. If a key leaks, revoke it immediately — `key_revoked` will then protect you.
+</Callout>
+
+## Validation errors
+
+These mean the request itself is wrong. They are deterministic: retrying without changing the request will fail identically.
+
+| Code | HTTP | Resolution |
+|---|---|---|
+| `missing_required_field` | 400 | Add the field named in `param`. |
+| `invalid_amount` | 400 | Amounts are positive integers in minor units (`1000` = EUR 10.00). |
+| `invalid_currency` | 400 | Use a supported ISO 4217 code; defaults to `EUR`. |
+| `resource_not_found` | 404 | The ID in `param` does not exist or belongs to another mode. |
+| `invalid_id_prefix` | 400 | An ID was passed to the wrong field (e.g. a `sub_` where a `pay_` was expected). |
+
+## Payment errors
+
+Payment errors map issuer and rail outcomes. Branch on `code`, not on the message. The `decline_code` field carries the issuer's reason when present.
+
+| Code | HTTP | Retryable | Resolution |
+|---|---|---|---|
+| `card_declined` | 402 | No | Generic issuer decline. Prompt for a different method. |
+| `insufficient_funds` | 402 | Maybe | Customer lacks funds. Retry later or use another method. |
+| `expired_card` | 402 | No | Collect new card details. |
+| `incorrect_cvc` | 402 | No | Re-prompt for the security code. |
+| `authentication_required` | 402 | Yes | Complete 3D Secure; see the [payment lifecycle](/docs/payments/payment-lifecycle). |
+| `processing_error` | 402 | Yes | Transient rail error. Retry with the same idempotency key. |
+| `payment_already_captured` | 409 | No | The payment is already `completed`; do not re-capture. |
+
+Reproduce each path in sandbox with the test cards: `4242 4242 4242 4242` succeeds, `4000 0000 0000 0002` returns `card_declined`, and `4000 0000 0000 3220` triggers `authentication_required`.
+
+## Billing errors
+
+These arise from subscription and invoice state machines.
+
+| Code | HTTP | Resolution |
+|---|---|---|
+| `subscription_not_active` | 409 | The `sub_` is paused or cancelled. Reactivate before modifying. |
+| `invoice_already_paid` | 409 | The `inv_` is settled. Issue a refund instead of recharging. |
+| `price_currency_mismatch` | 422 | All line items on an invoice must share one currency. |
+| `usage_record_out_of_window` | 422 | The `mbu_` timestamp falls outside the open billing period. |
+| `proration_not_allowed` | 422 | The plan forbids mid-cycle proration. Schedule the change for period end. |
+
+## Rate-limit & server errors
+
+| Code | HTTP | Resolution |
+|---|---|---|
+| `rate_limited` | 429 | Back off using the `Retry-After` header (seconds). |
+| `concurrent_request_limit` | 429 | Reduce parallelism for the same resource. |
+| `internal_error` | 500 | Transient. Retry with the same idempotency key. |
+| `service_unavailable` | 503 | VINR is degraded. Retry with exponential backoff. |
+
+<Callout type="info">
+For `429` and `5xx`, retry with exponential backoff and jitter, capped at around 5 attempts. Always reuse your original [idempotency key](/docs/integration/idempotency) so a retry never double-charges.
+</Callout>
+
+```typescript
+async function withRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const retryable =
+        err instanceof VinrError &&
+        ['rate_limited', 'internal_error', 'service_unavailable', 'processing_error'].includes(err.code);
+      if (!retryable || i === attempts - 1) throw err;
+      const wait = err.retryAfter ?? Math.min(2 ** i * 200, 5000) + Math.random() * 200;
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+  throw new Error('unreachable');
+}
+```
+
+<Accordions>
+  <Accordion title="Why am I getting resource_not_found for an ID I just created?">
+    The most common cause is a mode mismatch: a resource created in sandbox cannot be read with a live key. Confirm the key mode matches the base URL and that the ID prefix matches the endpoint.
+  </Accordion>
+  <Accordion title="Where do I find the request_id?">
+    It is on every error body and in the `X-Request-Id` response header on success. Quote it when contacting support to speed up triage.
+  </Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Receive and verify events, including failure events." />
+  <Card title="Idempotency" href="/docs/integration/idempotency" description="Make retries safe so errors never double-charge." />
+  <Card title="Payment lifecycle" href="/docs/payments/payment-lifecycle" description="Understand the states payment errors move through." />
+</Cards>

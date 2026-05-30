@@ -1,0 +1,146 @@
+---
+title: Managing subscriptions
+description: Add items, change quantities, and update metadata.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Update a running subscription — change quantities, add or remove items, swap prices, and edit metadata — with predictable proration. This page covers the `subscriptions.update` API and how each change lands on the next invoice.
+
+## What you can change
+
+A subscription is a container of **subscription items**, each pairing a `price` with a `quantity`. Most edits are a mutation of that item list plus subscription-level settings.
+
+| Change | How | Billing impact |
+|---|---|---|
+| Quantity (seats, units) | Update an item's `quantity` | Prorated |
+| Swap plan (price) | Update an item's `price` | Prorated |
+| Add a line (add-on) | Append a new item | Prorated |
+| Remove a line | Delete an item | Prorated credit |
+| Metadata, fields | Update the subscription | None |
+
+<Callout type="info">
+Quantity, price, and item changes generate **proration** line items — a credit for unused time on the old rate and a charge for the new one. See [Trials & proration](/docs/billing/trials-and-proration) for the math.
+</Callout>
+
+## Identifying items
+
+Every subscription item has its own `si_`-prefixed id. Fetch the subscription first so you know which item to mutate.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const sub = await vinr.subscriptions.retrieve('sub_8Q2k...');
+sub.items.forEach((item) => {
+  console.log(item.id, item.price, item.quantity); // "si_..." "price_..." 3
+});
+```
+
+## Changing quantity
+
+The most common edit: a customer adds seats. Update the item by id.
+
+```typescript
+const updated = await vinr.subscriptions.update('sub_8Q2k...', {
+  items: [{ id: 'si_47xR...', quantity: 5 }],
+  prorationBehavior: 'create_prorations', // default
+});
+```
+
+`prorationBehavior` controls how mid-cycle changes are billed:
+
+<TypeTable
+  type={{
+    create_prorations: { type: "string", description: "Default. Add credit + charge proration items to the next invoice.", default: "true" },
+    always_invoice: { type: "string", description: "Create prorations and immediately invoice for them now.", default: "false" },
+    none: { type: "string", description: "Apply the change but skip proration entirely.", default: "false" },
+  }}
+/>
+
+## Swapping a price (upgrade or downgrade)
+
+To move a customer between plans, replace the item's `price`. Keep the same item `id` so VINR treats it as a swap rather than an add + remove.
+
+```typescript
+await vinr.subscriptions.update('sub_8Q2k...', {
+  items: [{ id: 'si_47xR...', price: 'price_proYearly' }],
+});
+```
+
+<Callout type="warn">
+Changing `recurring.interval` (e.g. monthly to yearly) resets the **billing cycle anchor** to now and invoices the remaining balance immediately. To preserve the original anchor, set `billingCycleAnchor: 'unchanged'`.
+</Callout>
+
+## Adding and removing items
+
+Append an add-on by passing an item with no `id`; remove one by passing `deleted: true`.
+
+```typescript
+await vinr.subscriptions.update('sub_8Q2k...', {
+  items: [
+    { price: 'price_supportAddon', quantity: 1 }, // add
+    { id: 'si_oldAddon', deleted: true },         // remove
+  ],
+});
+```
+
+A subscription with no remaining active items is invalid — to end billing entirely, [cancel the subscription](/docs/billing/subscriptions/canceling-subscriptions) instead of deleting its last item.
+
+## Updating metadata
+
+Metadata changes never affect billing and never prorate. Use them to track internal references.
+
+```typescript
+await vinr.subscriptions.update('sub_8Q2k...', {
+  metadata: { account_owner: 'team-emea', crm_id: 'AC-4192' },
+});
+```
+
+## Resulting events
+
+Each update emits events you can react to from a [webhook endpoint](/docs/integration/webhooks):
+
+| Event | When |
+|---|---|
+| `subscription.updated` | Any item, quantity, price, or metadata change. |
+| `invoice.created` | A proration draft invoice is generated (with `always_invoice`). |
+| `invoice.paid` | The proration invoice is collected. |
+
+```typescript
+const event = vinr.webhooks.verify(payload, signatureHeader); // x-vinr-signature
+if (event.type === 'subscription.updated') {
+  const sub = event.data.object;
+  syncEntitlements(sub.customer, sub.items); // grant/revoke seats
+}
+```
+
+<Callout type="info">
+Always reconcile entitlements from `subscription.updated`, not from your API response — the webhook is the source of truth and fires even when changes originate from the dashboard or [dunning](/docs/billing/dunning-and-recovery).
+</Callout>
+
+## Edge cases
+
+<Accordions>
+<Accordion title="The subscription is in a trial">
+Updates during a trial do not prorate — there is nothing billed yet. The new configuration takes effect when the trial ends and the first real invoice is generated.
+</Accordion>
+<Accordion title="A downgrade produces a credit larger than the next invoice">
+The surplus becomes **customer credit balance** and is automatically applied to future invoices. VINR never issues a cash refund for a downgrade unless you explicitly create one.
+</Accordion>
+<Accordion title="An update lands while an invoice is past_due">
+The change is accepted, but new proration items wait for the open invoice to settle. Resolve collection through dunning first; see [Troubleshooting failed payments](/docs/troubleshooting/failed-payments).
+</Accordion>
+<Accordion title="You need to preview the cost before committing">
+Call the invoice preview endpoint with the proposed `items` to see exact proration amounts without mutating the subscription. See [Invoice items](/docs/api-reference/invoice-items).
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Trials & proration" href="/docs/billing/trials-and-proration" description="How mid-cycle changes are calculated." />
+  <Card title="Canceling subscriptions" href="/docs/billing/subscriptions/canceling-subscriptions" description="End billing and handle final invoices." />
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="The full subscription lifecycle." />
+</Cards>

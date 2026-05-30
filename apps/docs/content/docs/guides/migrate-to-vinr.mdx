@@ -1,0 +1,180 @@
+---
+title: Migrate to VINR
+description: Migrate to VINR — a runnable, end-to-end guide verified against the VINR sandbox.
+category: "integration"
+persona: ["developer"]
+priority: "P2"
+lastUpdated: "2026-05-30"
+---
+
+This guide moves customers, saved payment methods, active subscriptions, and loyalty balances from a previous provider onto VINR with zero double-charges and a clean rollback path. Every step is runnable against the sandbox before you touch production data.
+
+## Plan the migration
+
+Migrations fail on the details, not the API. Decide three things up front: what moves, in what order, and how you cut over.
+
+- **Customers and payment methods first.** Subscriptions and loyalty accounts reference customers, so import those before anything that points at them.
+- **Run dual-write, not big-bang.** Keep your old provider live while VINR shadows it. Only flip traffic once balances reconcile.
+- **Preserve external IDs.** Store every old-provider ID in `metadata` so you can reconcile and roll back by lookup.
+
+<Callout type="info">
+Payment-method (card) data is PCI-scoped. You cannot export raw PANs. VINR imports cards through a provider-to-provider **network token transfer** — see below — so cardholders are never re-prompted.
+</Callout>
+
+```
+old provider          your importer          VINR (sandbox)
+    │  export CSV / API    │                      │
+    │─────────────────────►│  create customer     │
+    │                      │─────────────────────►│ cust_…
+    │                      │  request card import  │
+    │                      │─────────────────────►│ pm_… (tokenized)
+    │  reconcile by metadata│◄────────────────────│
+```
+
+## Import customers
+
+Create each customer with the old-provider ID in `metadata`. The `idempotencyKey` makes the whole import safe to re-run after a partial failure.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+async function importCustomer(row: LegacyCustomer) {
+  return vinr.customers.create(
+    {
+      email: row.email,
+      name: row.name,
+      metadata: { legacyId: row.id, source: 'acme-billing' },
+    },
+    { idempotencyKey: `migrate-cust-${row.id}` },
+  );
+}
+```
+
+Keep a mapping table (`legacyId -> cust_…`) — every later step joins on it.
+
+## Import payment methods
+
+Saved cards move as network tokens, never raw card numbers. You request the import; VINR coordinates the secure transfer with your previous processor.
+
+```typescript
+const pm = await vinr.paymentMethods.import(
+  {
+    customer: customerId,                 // cust_…
+    transfer: {
+      provider: 'acme',                   // your prior processor
+      reference: row.legacyPaymentMethodId,
+    },
+    metadata: { legacyId: row.legacyPaymentMethodId },
+  },
+  { idempotencyKey: `migrate-pm-${row.legacyPaymentMethodId}` },
+);
+```
+
+<Callout type="warn">
+A token transfer can take several days to clear the card networks. Start payment-method imports early and treat any method still in `pending` at cutover as "charge on next cycle, not now."
+</Callout>
+
+## Migrate subscriptions
+
+Recreate each subscription against an existing [price](/docs/billing/prices), then anchor the billing cycle so the customer is not charged twice for a period the old provider already billed.
+
+```typescript
+const sub = await vinr.subscriptions.create(
+  {
+    customer: customerId,                 // cust_…
+    price: priceId,                       // price_…
+    defaultPaymentMethod: pmId,           // pm_…
+    billingCycleAnchor: row.nextRenewalAt, // ISO date of next charge
+    prorationBehavior: 'none',            // no charge at migration
+    metadata: { legacyId: row.legacySubscriptionId },
+  },
+  { idempotencyKey: `migrate-sub-${row.legacySubscriptionId}` },
+);
+```
+
+The `billingCycleAnchor` set to the **next** renewal date is what prevents a duplicate charge: VINR issues the first [invoice](/docs/billing/invoices) on the date the old provider would have, not at creation.
+
+<Callout type="error">
+Cancel the subscription on the old provider only **after** confirming the VINR subscription is `active`. Cancel old subscriptions without auto-refunding so the final paid period is honored.
+</Callout>
+
+## Import loyalty balances
+
+Move point balances as a single adjusting transaction per account so the ledger stays auditable. Create the [loyalty account](/docs/engagement/loyalty-accounts), then post the opening balance.
+
+```typescript
+const account = await vinr.loyalty.accounts.create({
+  program: programId,                     // prog_…
+  customer: customerId,                   // cust_…
+});
+
+await vinr.loyalty.points.create(
+  {
+    account: account.id,                  // loy_…
+    amount: row.pointsBalance,            // integer points
+    reason: 'migration_opening_balance',
+    metadata: { legacyId: row.legacyLoyaltyId },
+  },
+  { idempotencyKey: `migrate-loy-${row.legacyLoyaltyId}` },
+);
+```
+
+Reconcile by summing imported `ptx_` transactions per program against your old totals before going live.
+
+## Test the importer
+
+Run the full pipeline against `https://sandbox.api.vinr.com` first. Use sandbox cards to exercise the first post-migration charge once anchors elapse:
+
+| Card | Result |
+|---|---|
+| `4242 4242 4242 4242` | First renewal succeeds |
+| `4000 0000 0000 0002` | First renewal declines — test dunning |
+| `4000 0000 0000 3220` | 3D Secure on first renewal |
+
+Verify the first live-cycle invoice fires by listening for `invoice.paid` and `loyalty.points.earned`:
+
+```typescript
+export async function POST(req: Request) {
+  const event = vinr.webhooks.verify(
+    await req.text(),
+    req.headers.get('x-vinr-signature'),
+  );
+
+  if (event.type === 'invoice.paid') {
+    await reconcile(event.data.metadata.legacyId);
+  }
+  return new Response('OK', { status: 200 });
+}
+```
+
+## Cut over and roll back
+
+<Steps>
+
+### Freeze writes on the old provider
+
+Pause new charges and subscription edits on the source system to stop divergence during the final sync.
+
+### Run a final delta import
+
+Re-run the importer; the idempotency keys skip everything already migrated and only the delta is created.
+
+### Reconcile, then flip traffic
+
+Confirm customer, subscription, and loyalty counts match. Point your application at VINR live keys from the [Dashboard](/docs/getting-started/authentication).
+
+### Keep rollback ready
+
+For 30 days, leave old subscriptions canceled-but-restorable. To roll back, reactivate on the source by `legacyId` and pause VINR subscriptions — no data is lost because every record carries its `metadata.legacyId`.
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="Go-live checklist" href="/docs/getting-started/go-live-checklist" description="Final checks before flipping live keys." />
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="Cycles, anchors, and proration in depth." />
+  <Card title="Loyalty accounts" href="/docs/engagement/loyalty-accounts" description="How point ledgers and transactions work." />
+</Cards>

@@ -1,0 +1,183 @@
+---
+title: Reconcile a settlement
+description: Reconcile a settlement — a runnable, end-to-end guide verified against the VINR sandbox.
+category: "operations"
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+This guide shows how to tie a bank payout back to the individual payments, refunds, and fees that produced it — so your ledger and your bank statement agree to the cent. It's runnable against the sandbox; swap your test keys in and follow along.
+
+## Overview
+
+A **settlement** (`setl_`) is the accounting record behind one **payout** (`po_`) to your bank. VINR groups captured payments and refunds into a settlement, subtracts processing fees, and pays the net. Reconciliation means proving that the payout amount equals the sum of its line items, then matching each line back to an order in your system.
+
+```
+payments + refunds   ──►  settlement (setl_)  ──►  payout (po_)  ──►  your bank
+   (gross)                  − fees                   net amount
+```
+
+The golden equation for any settlement:
+
+```
+gross_amount − refunded_amount − fee_amount = net_amount = payout.amount
+```
+
+## Anatomy of a settlement
+
+Retrieve a settlement and inspect its totals. All amounts are integers in minor units (`1000` = EUR 10.00).
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const settlement = await vinr.settlements.retrieve('setl_3kQ9xZ');
+
+console.log(settlement);
+// {
+//   id: 'setl_3kQ9xZ',
+//   status: 'paid',
+//   currency: 'EUR',
+//   grossAmount: 184500,      // €1,845.00 captured
+//   refundedAmount: 4999,     // €49.99 refunded
+//   feeAmount: 5238,          // €52.38 fees
+//   netAmount: 174263,        // €1,742.63 paid out
+//   payoutId: 'po_8Vm2Lp',
+//   periodStart: '2026-05-26T00:00:00Z',
+//   periodEnd: '2026-05-27T00:00:00Z',
+// }
+```
+
+<TypeTable
+  type={{
+    grossAmount: { type: "integer", description: "Sum of captured payments in the period.", default: "—" },
+    refundedAmount: { type: "integer", description: "Refunds deducted from this settlement.", default: "0" },
+    feeAmount: { type: "integer", description: "Processing and scheme fees withheld.", default: "—" },
+    netAmount: { type: "integer", description: "Amount transferred to your bank. Equals payout.amount.", default: "—" },
+    payoutId: { type: "string", description: "The po_ that delivered netAmount to your bank.", default: "null until paid" },
+  }}
+/>
+
+## Downloading reports
+
+For row-level matching, page through the settlement's line items rather than loading them all into memory. Each line is a single payment, refund, or fee adjustment.
+
+```typescript
+async function* settlementLines(settlementId: string) {
+  let cursor: string | undefined;
+  do {
+    const page = await vinr.settlements.listLines(settlementId, {
+      limit: 100,
+      cursor,
+    });
+    yield* page.data;
+    cursor = page.nextCursor;
+  } while (cursor);
+}
+
+for await (const line of settlementLines('setl_3kQ9xZ')) {
+  // line.type: 'payment' | 'refund' | 'fee'
+  // line.sourceId: 'pay_...' | 're_...'
+  // line.amount, line.fee, line.net, line.metadata
+}
+```
+
+<Callout type="info">
+Prefer machine reconciliation over the CSV export in the Dashboard. The API lines carry your `metadata` (e.g. `orderId`), which is what lets you match back to your own records without fuzzy logic.
+</Callout>
+
+## Matching transactions
+
+Walk every line, fold it into a running total, and key each entry by your own order ID. If the folded total matches `netAmount`, the settlement balances.
+
+```typescript
+let computedNet = 0;
+const byOrder = new Map<string, { amount: number; fee: number }>();
+
+for await (const line of settlementLines('setl_3kQ9xZ')) {
+  computedNet += line.net;                       // net is signed: refunds/fees negative
+  const orderId = line.metadata?.orderId ?? '(unmapped)';
+  const prev = byOrder.get(orderId) ?? { amount: 0, fee: 0 };
+  byOrder.set(orderId, {
+    amount: prev.amount + line.amount,
+    fee: prev.fee + line.fee,
+  });
+}
+
+const settlement = await vinr.settlements.retrieve('setl_3kQ9xZ');
+if (computedNet !== settlement.netAmount) {
+  throw new Error(
+    `Mismatch: computed ${computedNet} vs settled ${settlement.netAmount}`,
+  );
+}
+// byOrder now maps each of your orders to its settled amount and fee.
+```
+
+Reconcile automatically by listening for the settlement webhook instead of polling. Always verify the signature first.
+
+```typescript
+export async function POST(req: Request) {
+  const event = vinr.webhooks.verify(
+    await req.text(),
+    req.headers.get('x-vinr-signature'),
+  );
+
+  if (event.type === 'settlement.paid') {
+    await reconcileSettlement(event.data.id);   // idempotent — keyed by setl_ id
+  }
+  return new Response('OK', { status: 200 });
+}
+```
+
+## Handling discrepancies
+
+If `computedNet` differs from `netAmount`, work down this list before opening a support ticket.
+
+<Accordions>
+<Accordion title="A payment is missing from the settlement">
+Captures near the `periodEnd` cutoff roll into the next settlement. Check the payment's `settlementId` directly — if it's null or points to a later `setl_`, it simply hasn't settled yet.
+</Accordion>
+<Accordion title="The net is short by a small, round amount">
+A refund (`re_`) or chargeback fee landed in this period. Refund and fee lines carry negative `net`; confirm they're included in your fold rather than filtered out by a `type === 'payment'` check.
+</Accordion>
+<Accordion title="A line has no orderId in metadata">
+The original payment was created without `metadata.orderId`. These appear under `(unmapped)`. Backfill by joining on `line.sourceId` (the `pay_`) against your payments table.
+</Accordion>
+<Accordion title="Currency totals don't line up">
+Settlements never mix currencies. If you process in several currencies you'll receive one settlement and one payout per currency — reconcile each independently.
+</Accordion>
+</Accordions>
+
+<Callout type="warn">
+Never treat the bank-statement amount as the source of truth on its own. A single bank credit can bundle multiple payouts, and timing differences across the period cutoff are expected. Reconcile against `payout.amount`, then confirm the payout against your bank.
+</Callout>
+
+## Test it
+
+In the sandbox, settlements are generated on an accelerated schedule so you can exercise the full loop in minutes.
+
+<Steps>
+
+### Create test payments
+
+Run a few payments with the [success card](/docs/guides/accept-a-payment) `4242 4242 4242 4242`, tagging each with a `metadata.orderId`.
+
+### Trigger a settlement
+
+Sandbox settlements close hourly. Call `vinr.settlements.list({ limit: 1 })` until a new `setl_` appears, or use the Dashboard's **Force settlement** action.
+
+### Run your reconciler
+
+Point the matching script above at the new `setl_` and confirm `computedNet === netAmount`.
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="Payouts" href="/docs/operations/payouts" description="Schedules, bank accounts, and payout statuses." />
+  <Card title="Fees & pricing" href="/docs/operations/fees" description="How fee_amount is calculated per transaction." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Subscribe to settlement.paid and verify signatures." />
+</Cards>

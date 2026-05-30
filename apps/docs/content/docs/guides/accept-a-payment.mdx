@@ -1,0 +1,140 @@
+---
+title: Accept a one-time payment
+description: Create a payment, present checkout, and confirm the result end-to-end.
+category: "payments"
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+This guide takes you from zero to a confirmed payment using VINR-hosted [Checkout](/docs/integration/checkout). It's runnable against the sandbox — swap your test keys in and follow along.
+
+## Overview
+
+```
+your server          VINR              customer
+    │  create payment  │                   │
+    │─────────────────►│                   │
+    │  checkoutUrl     │                   │
+    │◄─────────────────│   redirect        │
+    │──────────────────────────────────────►│ pays on hosted page
+    │  payment.completed (webhook)          │
+    │◄─────────────────│◄──────────────────│
+    │  fulfil order    │                   │
+```
+
+You'll create the payment on your server, send the customer to the hosted page, and fulfil on the `payment.completed` webhook.
+
+## Create a payment
+
+On your backend, create a payment and read the `checkoutUrl` from the response.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+export async function POST(req: Request) {
+  const { orderId } = await req.json();
+
+  const payment = await vinr.payments.create(
+    {
+      amount: 4999,                 // €49.99
+      currency: 'EUR',
+      description: `Order ${orderId}`,
+      returnUrl: `https://yoursite.com/orders/${orderId}/complete`,
+      metadata: { orderId },
+    },
+    { idempotencyKey: `order-${orderId}` },   // safe to retry
+  );
+
+  return Response.json({ checkoutUrl: payment.checkoutUrl });
+}
+```
+
+<Callout type="info">
+The `idempotencyKey` guarantees that a retried request (timeout, refresh) reuses the same payment instead of charging twice. See [Idempotency](/docs/integration/idempotency).
+</Callout>
+
+## Collect payment details
+
+Redirect the customer to the hosted page. VINR handles card entry, wallets, 3D Secure, and any [local methods](/docs/payments/payment-methods/local-methods) you've enabled.
+
+```typescript
+const { checkoutUrl } = await fetch('/api/checkout', {
+  method: 'POST',
+  body: JSON.stringify({ orderId: '1234' }),
+}).then((r) => r.json());
+
+window.location.href = checkoutUrl;
+```
+
+## Confirm & handle the result
+
+When the customer returns to your `returnUrl`, **don't trust the redirect alone** — confirm the status server-side before showing success.
+
+```typescript
+const payment = await vinr.payments.retrieve(paymentId);
+if (payment.status === 'completed') {
+  // show success — but fulfilment happens on the webhook (below)
+}
+```
+
+## Verify with a webhook
+
+Fulfil the order from the webhook so it happens exactly once, even if the customer closes the tab. See the [payment lifecycle](/docs/payments/payment-lifecycle) for every event.
+
+```typescript
+export async function POST(req: Request) {
+  const event = vinr.webhooks.verify(
+    await req.text(),
+    req.headers.get('x-vinr-signature'),
+  );
+
+  switch (event.type) {
+    case 'payment.completed':
+      await fulfillOrder(event.data.metadata.orderId);   // idempotent!
+      break;
+    case 'payment.failed':
+      await notifyCustomer(event.data.metadata.orderId);
+      break;
+  }
+  return new Response('OK', { status: 200 });
+}
+```
+
+## Test it
+
+Use these sandbox cards on the hosted page:
+
+| Card | Result |
+|---|---|
+| `4242 4242 4242 4242` | Success |
+| `4000 0000 0000 0002` | Declined |
+| `4000 0000 0000 3220` | 3D Secure challenge |
+
+## Go live
+
+<Steps>
+
+### Swap to live keys
+
+Replace your sandbox `VINR_SECRET_KEY` with the live key from the [Dashboard](/docs/getting-started/authentication).
+
+### Register your production webhook
+
+Point a [webhook endpoint](/docs/api-reference/webhook-endpoints) at your live URL and store the signing secret.
+
+### Walk the go-live checklist
+
+Confirm error handling, idempotency, and monitoring with the [go-live checklist](/docs/getting-started/go-live-checklist).
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="Save & reuse cards" href="/docs/guides/save-and-reuse-cards" description="Charge returning customers in one click." />
+  <Card title="Handle 3D Secure" href="/docs/guides/handle-3d-secure" description="Complete SCA where required." />
+  <Card title="Earn loyalty at checkout" href="/docs/guides/earn-loyalty-at-checkout" description="Award points on this payment." />
+</Cards>

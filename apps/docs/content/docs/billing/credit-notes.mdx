@@ -1,0 +1,147 @@
+---
+title: Credit notes
+description: Issue credits and corrections against invoices.
+persona: ["developer", "finance-manager"]
+priority: "P2"
+lastUpdated: "2026-05-30"
+---
+
+A credit note records a reduction against a *finalized* invoice — for a refund, a billing correction, or goodwill — without rewriting history. The original invoice stays immutable; the credit note is a separate, auditable document that adjusts what the customer owes (or gets back). This matters because finalized invoices are legal records: you correct them by crediting, never by editing.
+
+## When to issue a credit note
+
+Reach for a credit note whenever a finalized invoice over-charged the customer or the relationship needs an adjustment after the fact.
+
+| Situation | Credit note? | Alternative |
+|---|---|---|
+| Invoice still in `draft` | No | Edit the invoice line items directly. |
+| Customer overpaid / wrong amount billed | Yes | — |
+| Returned seats or downgraded mid-term | Yes | Or let [proration](/docs/billing/trials-and-proration) handle the next cycle. |
+| Goodwill / service outage credit | Yes | — |
+| Duplicate charge already captured | Yes (refund type) | A raw [refund](/docs/payments/refunds) if no invoice exists. |
+
+<Callout type="warn">
+You cannot credit more than the invoice's outstanding plus paid amount. A credit note is always scoped to one invoice; to credit across several, issue one per invoice.
+</Callout>
+
+## Creating a credit note
+
+You can credit specific line items or a flat amount. The SDK validates the total against the invoice before VINR finalizes the note.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// Credit one line item from a finalized invoice.
+const note = await vinr.creditNotes.create({
+  invoice: 'inv_8Q2pK',
+  lines: [
+    {
+      type: 'invoice_line_item',
+      invoiceLineItem: 'il_4Tm9c',
+      quantity: 2,                 // credit 2 of the billed seats
+    },
+  ],
+  memo: 'Returned 2 seats on 2026-05-30',
+  reason: 'product_unsatisfactory',
+});
+
+console.log(note.id);              // "cn_..." 
+console.log(note.total);           // e.g. 4000 → EUR 40.00 credited
+```
+
+To credit a flat amount instead of line items — useful for goodwill — pass `amount` and a `creditAmount` split:
+
+```typescript
+const goodwill = await vinr.creditNotes.create({
+  invoice: 'inv_8Q2pK',
+  amount: 1000,                    // EUR 10.00
+  reason: 'goodwill',
+  creditAmount: 1000,              // apply entirely to the customer balance
+});
+```
+
+## Refund vs. credit balance
+
+Every credit note splits its total into two buckets, and you decide the split at creation time:
+
+<TypeTable
+  type={{
+    refundAmount: {
+      type: "integer",
+      description: "Money sent back to the original payment method (creates a re_...).",
+      default: "0",
+    },
+    creditAmount: {
+      type: "integer",
+      description: "Applied to the customer's credit balance, used against future invoices.",
+      default: "remainder",
+    },
+    outOfBandAmount: {
+      type: "integer",
+      description: "Recorded as settled outside VINR (e.g. a bank transfer you handled).",
+      default: "0",
+    },
+  }}
+/>
+
+```typescript
+// Half back to the card, half toward the next invoice.
+await vinr.creditNotes.create({
+  invoice: 'inv_8Q2pK',
+  amount: 2000,
+  refundAmount: 1000,             // EUR 10.00 → original card
+  creditAmount: 1000,             // EUR 10.00 → customer balance
+  reason: 'order_change',
+});
+```
+
+<Callout type="info">
+The three amounts must sum to the credit note `total`. A refund here behaves exactly like a standalone [refund](/docs/payments/refunds) — it can be partial, and it emits the same payment events.
+</Callout>
+
+## Impact on revenue
+
+A credit note reverses recognized revenue for the credited portion, dated to the note's creation — it never back-dates the original invoice. Two consequences worth internalizing:
+
+<Steps>
+
+### Pre-payment credits reduce amount due
+
+If the invoice is still `open`, the credit note lowers what the customer must pay. Collection proceeds against the reduced balance.
+
+### Post-payment credits refund or bank
+
+If the invoice is already `paid`, the credit becomes a refund and/or a balance entry — it cannot reduce a payment that already settled.
+
+</Steps>
+
+Tax is reversed proportionally: credit two of five taxed seats and VINR backs out the tax on those two. See [Tax](/docs/billing/tax) for how reversals appear in your filings.
+
+## Reporting
+
+Credit notes carry a `status` (`issued` or `void`) and surface in the same exports as invoices. Listen for events to keep downstream ledgers in sync:
+
+```typescript
+// Webhook handler (Edge or Node).
+const event = vinr.webhooks.verify(payload, signature); // x-vinr-signature
+
+switch (event.type) {
+  case 'credit_note.issued':
+    ledger.recordCredit(event.data.object);
+    break;
+  case 'credit_note.voided':
+    ledger.reverseCredit(event.data.object);
+    break;
+}
+```
+
+A note can be **voided** only while none of it has been refunded or spent against a balance; once any portion is consumed it is permanent. Pull a period's notes for reconciliation with `vinr.creditNotes.list({ invoice, status: 'issued' })`, or export them alongside invoices from [Operations &rarr; reports](/docs/operations).
+
+## Next steps
+
+<Cards>
+  <Card title="How billing works" href="/docs/billing/how-billing-works" description="The invoice lifecycle credit notes adjust." />
+  <Card title="Refunds" href="/docs/payments/refunds" description="Send money back to the original payment method." />
+  <Card title="Tax" href="/docs/billing/tax" description="How credits reverse tax for your filings." />
+</Cards>

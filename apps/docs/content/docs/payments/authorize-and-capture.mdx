@@ -1,0 +1,124 @@
+---
+title: Authorize & capture
+description: Separate authorization from capture for delayed fulfilment.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+By default VINR captures funds immediately. Authorize-only lets you reserve funds on a card now and capture them later — essential for shipping physical goods, free trials, deposits, and order amounts that aren't final at checkout.
+
+## Immediate vs. manual capture
+
+The `captureMethod` field on a payment decides whether VINR claims funds as soon as the issuer authorizes them, or holds the authorization for you to capture by hand.
+
+| Mode | `captureMethod` | What happens at checkout | When funds move |
+|---|---|---|---|
+| Immediate (default) | `automatic` | Authorize and capture in one step | Right away |
+| Manual | `manual` | Authorize only; funds are reserved | When you call capture |
+
+An authorization is a promise from the issuer, not a movement of money. The cardholder sees a pending hold that reduces their available balance; nothing settles to your VINR balance until you capture.
+
+<Callout type="info">
+Manual capture applies to **card** rails. Bank transfers and stablecoins are inherently single-step — see [How payments work](/docs/payments/how-payments-work) for the rail model.
+</Callout>
+
+## Placing an authorization
+
+Create the payment with `captureMethod: 'manual'`. Everything else is identical to a normal charge.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 5000,                 // €50.00 authorized
+  currency: 'EUR',
+  captureMethod: 'manual',
+  description: 'Order #4821',
+  returnUrl: 'https://yoursite.com/orders/4821',
+  metadata: { orderId: '4821' },
+});
+
+// payment.status            → "authorized"  (after the customer completes auth)
+// payment.amount            → 5000          (the authorized ceiling)
+// payment.amountCapturable  → 5000
+// payment.amountCaptured    → 0
+```
+
+Once the customer finishes the hosted flow, the payment moves to `authorized` and a `payment.authorized` event fires. Listen for it rather than polling — see [Webhooks](/docs/integration/webhooks).
+
+<Callout type="warn">
+Use sandbox card `4242 4242 4242 4242` for a clean authorization. Card `4000 0000 0000 0002` returns a decline, and `4000 0000 0000 3220` triggers a 3DS challenge before the hold is placed.
+</Callout>
+
+## Capturing (full & partial)
+
+Capture once you're ready to fulfil. Omit `amount` to capture the full authorized total, or pass a smaller integer to capture part of it.
+
+<Tabs items={["Full capture", "Partial capture"]}>
+<Tab value="Full capture">
+
+```typescript
+const captured = await vinr.payments.capture('pay_3Nf8x2a');
+
+// captured.status          → "completed"
+// captured.amountCaptured  → 5000
+```
+
+</Tab>
+<Tab value="Partial capture">
+
+```typescript
+// Customer ordered €50.00 but one item is out of stock.
+const captured = await vinr.payments.capture('pay_3Nf8x2a', {
+  amount: 3500,               // capture €35.00 of the €50.00 hold
+});
+
+// captured.status          → "completed"
+// captured.amountCaptured  → 3500
+// the remaining €15.00 hold is released automatically
+```
+
+</Tab>
+</Tabs>
+
+A capture cannot exceed the authorized amount. Capturing less than the hold automatically releases the difference back to the cardholder — you cannot top the same authorization back up afterward. If the final amount might be higher (e.g. tips or shipping), authorize the larger figure up front. Each successful capture emits `payment.completed`.
+
+## Authorization expiry
+
+Holds do not last forever. If you neither capture nor void within the window, VINR releases the funds and the payment moves to `expired`.
+
+<TypeTable
+  type={{
+    expiresAt: { type: "string (ISO 8601)", description: "When the authorization lapses if not captured.", default: "7 days after auth" },
+    captureMethod: { type: "'automatic' | 'manual'", description: "Whether capture is immediate or held.", default: "automatic" },
+    amountCapturable: { type: "integer", description: "Minor units still available to capture.", default: "amount" },
+  }}
+/>
+
+The standard window is **7 days** for most card networks; some issuers honour shorter or longer periods, so treat `expiresAt` on the payment object as authoritative. A `payment.expired` event fires when a hold lapses, after which the funds are gone and the customer must re-authorize.
+
+## Voids & releases
+
+If the order is cancelled before fulfilment, void the authorization to release the hold immediately rather than waiting for expiry.
+
+```bash
+curl -X POST https://api.vinr.com/v1/payments/pay_3Nf8x2a/void \
+  -H "X-Api-Key: $VINR_SECRET_KEY"
+```
+
+A void only works while the payment is still `authorized` (nothing captured). After any capture — full or partial — the funds have moved, so use a [refund](/docs/payments/refunds) instead. A void produces no settlement entry and no fee; a refund reverses a settled charge and is reported in [reconciliation](/docs/operations/reconciliation).
+
+<Callout type="info">
+Releasing a hold promptly is good practice: lingering authorizations inflate the cardholder's pending balance and increase dispute risk.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Refunds" href="/docs/payments/refunds" description="Reverse funds after a capture has settled." />
+  <Card title="Payment lifecycle" href="/docs/payments/payment-lifecycle" description="Every status from authorized to expired." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="React to payment.authorized and payment.completed." />
+</Cards>

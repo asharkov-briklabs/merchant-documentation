@@ -1,0 +1,139 @@
+---
+title: Redemption
+description: Let members spend points for rewards.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Redemption is the moment a member spends points for something of value — usually a discount applied at checkout, sometimes a physical item or store credit. A redemption is atomic: VINR deducts points and issues the reward together, or neither happens. This page covers the redemption flow, the two reward shapes, and how reversals keep balances honest.
+
+## The redemption flow
+
+A `redemption` (`rdm_`) ties a member's `loyalty_account` to a `reward` from your [catalog](/docs/engagement/rewards-catalog). Creating one deducts the reward's point cost, records a negative `points_transaction` (`ptx_`), and produces a usable artifact — a discount code, a fulfillment line, or a credit grant.
+
+<Steps>
+
+### Check the balance
+
+Redemption fails fast if the member can't afford the reward. You can pre-check, but VINR also enforces this server-side, so a race won't let a balance go negative.
+
+### Create the redemption
+
+`vinr.loyalty.redemptions.create` deducts points and returns the `redemption` with its artifact. This is a single, idempotent call.
+
+### Apply or fulfill
+
+For a discount reward, attach the returned code to the payment. For an item, hand the redemption to your fulfillment pipeline.
+
+### Settle
+
+When the linked payment completes, the redemption moves to `applied`. If the payment never completes, the redemption (and its points) can be released — see [Reversals](#reversals-and-clawbacks).
+
+</Steps>
+
+## Redeeming for a discount
+
+The common case: the member spends points for a discount that reduces what they pay at checkout. Create the redemption, then pass the resulting discount onto the payment.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// 1. Spend points for a EUR 5.00 discount reward.
+const redemption = await vinr.loyalty.redemptions.create(
+  {
+    account: 'loy_8sd2k1',
+    reward: 'rwd_fivecredit',
+  },
+  { idempotencyKey: 'rdm-cart-9f31' },     // safe to retry
+);
+
+// redemption.discount = { amount: 500, currency: 'EUR', code: 'VINR-9F31' }
+
+// 2. Apply the discount when you create the payment.
+const payment = await vinr.payments.create({
+  amount: 2999,
+  currency: 'EUR',
+  customer: 'cust_abc123',
+  discounts: [{ redemption: redemption.id }],   // pay_... charges 2499
+});
+```
+
+<Callout type="info">
+Always pass an `idempotencyKey`. If a checkout retries on a flaky network, the key guarantees the member is debited exactly once and you get the same `redemption` back.
+</Callout>
+
+The redemption starts in `pending` and links to the payment. When `payment.completed` fires, VINR transitions it to `applied` and emits `loyalty.redemption.applied`. If the payment is canceled or expires, the redemption auto-releases and the points return.
+
+## Redeeming for an item
+
+For physical goods, gift cards, or anything you fulfill yourself, omit the discount and read the redemption's fulfillment block. Points are deducted immediately; fulfillment is your responsibility.
+
+```typescript
+const redemption = await vinr.loyalty.redemptions.create({
+  account: 'loy_8sd2k1',
+  reward: 'rwd_totebag',
+  shipping: {
+    name: 'Mira Olsen',
+    line1: 'Storgata 12',
+    city: 'Oslo',
+    postalCode: '0155',
+    country: 'NO',
+  },
+});
+
+// redemption.status === 'fulfillment_pending'
+```
+
+Subscribe to `loyalty.redemption.created` to push the order into your warehouse system, then call `vinr.loyalty.redemptions.fulfill(redemption.id, { tracking: '...' })` to mark it shipped and emit `loyalty.redemption.fulfilled`.
+
+## Reversals and clawbacks
+
+Redemptions can be undone, returning points to the member. There are two paths:
+
+| Path | Trigger | Result |
+|---|---|---|
+| Auto-release | Linked payment is canceled or expires | Points refunded, redemption `released` |
+| Manual reversal | You call `redemptions.reverse` | Points refunded, artifact voided |
+
+```typescript
+// A member returns the item, or a discount was applied in error.
+await vinr.loyalty.redemptions.reverse('rdm_3kd9', {
+  reason: 'item_returned',
+});
+// Emits loyalty.redemption.reversed and a positive ptx_ restoring the balance.
+```
+
+A clawback differs from a reversal: it happens when the *purchase that earned points* is refunded, not the redemption itself. That logic lives upstream — see [Linking payments & loyalty](/docs/engagement/linking-payments-and-loyalty). A reversed redemption that was already `applied` cannot un-discount a completed payment; instead, reverse it before the payment settles, or issue a [refund](/docs/payments) for the discounted amount.
+
+## Failure handling
+
+Redemption rejects loudly so you never silently overspend a balance or double-issue a reward.
+
+<Accordions>
+<Accordion title="insufficient_points">
+The member's balance is below the reward's cost. Re-fetch the balance and surface the shortfall in your UI. VINR never partially redeems.
+</Accordion>
+<Accordion title="reward_unavailable">
+The reward is paused, out of stock, or past its `availableUntil`. Hide it from the catalog and prompt the member to choose another.
+</Accordion>
+<Accordion title="account_ineligible">
+The member's [tier](/docs/engagement/tiers-and-status) doesn't unlock this reward, or the account is suspended. Check `reward.eligibility`.
+</Accordion>
+<Accordion title="redemption_expired">
+A `pending` redemption was never applied within its hold window and auto-released. Create a fresh redemption.
+</Accordion>
+</Accordions>
+
+<Callout type="warn">
+Test the full loop in sandbox before launch: redeem, pay with `4242 4242 4242 4242` to confirm `applied`, then pay with `4000 0000 0000 0002` (declined) to confirm the redemption releases and points return.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Rewards catalog" href="/docs/engagement/rewards-catalog" description="Define the rewards members can redeem." />
+  <Card title="Linking payments & loyalty" href="/docs/engagement/linking-payments-and-loyalty" description="Earn on purchase, claw back on refund." />
+  <Card title="Loyalty accounts" href="/docs/engagement/loyalty-accounts" description="Enroll and manage members and balances." />
+</Cards>

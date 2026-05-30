@@ -1,0 +1,141 @@
+---
+title: Strong Customer Authentication
+description: How VINR applies SCA / PSD2 across methods.
+persona: ["developer", "compliance-officer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Strong Customer Authentication (SCA) is a European regulatory requirement that forces an extra identity check on many electronic payments. VINR decides when authentication is required, requests the right exemptions, and runs the 3D Secure challenge for you — so you write the same `payments.create` call whether or not a challenge ends up firing.
+
+This page is informational and not legal advice; consult your compliance counsel for binding decisions.
+
+## What SCA requires
+
+Under PSD2, a payment in the European Economic Area generally needs **two of three** independent authentication factors:
+
+| Factor | Category | Examples |
+|---|---|---|
+| Knowledge | Something the customer knows | Password, PIN |
+| Possession | Something the customer has | Phone, hardware token |
+| Inherence | Something the customer is | Fingerprint, face scan |
+
+The rule applies when both the cardholder's bank and the merchant's acquirer are in the EEA. It covers most card payments and many bank-initiated flows, with a defined set of exemptions for low-risk or low-value transactions.
+
+## How VINR applies it
+
+You do not call a separate "authenticate" endpoint. VINR evaluates every eligible payment at creation time, attaches an exemption where one is justified, and escalates to a challenge only when the issuer requires it.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 4900,            // €49.00 in minor units
+  currency: 'EUR',
+  description: 'Annual plan',
+  returnUrl: 'https://yoursite.com/payment/complete',
+  authentication: {
+    // Optional. Defaults to "automatic" exemption handling.
+    requestExemption: 'transaction_risk_analysis',
+  },
+});
+
+// payment.authentication.status → "pending" | "required" | "succeeded"
+//                                  | "failed" | "exempted"
+// payment.checkoutUrl → hosted page; runs the challenge if "required"
+```
+
+When `payment.authentication.status` is `required`, the customer must complete a challenge on `checkoutUrl` before the charge can be captured. VINR surfaces the outcome on the payment object and in webhooks, so your server logic stays the same across exempted and challenged payments.
+
+<Callout type="info">
+Always send the customer to `checkoutUrl` even when you expect an exemption. The issuer can override a requested exemption and demand a challenge ("soft decline"), and the hosted page handles that retry for you automatically.
+</Callout>
+
+## Exemptions
+
+Exemptions let you skip the challenge while staying compliant — they protect conversion without weakening the rule. VINR requests them on your behalf based on the request and your risk profile.
+
+<TypeTable
+  type={{
+    transaction_risk_analysis: {
+      type: "exemption",
+      description: "Low fraud rate lets you skip challenge up to a threshold tied to your acquirer fraud rate.",
+    },
+    low_value: {
+      type: "exemption",
+      description: "Payments under €30, capped at 5 consecutive or €100 cumulative since last challenge.",
+    },
+    recurring: {
+      type: "exemption",
+      description: "Fixed-amount subscription debits after the first authenticated charge.",
+    },
+    merchant_initiated: {
+      type: "exemption",
+      description: "Off-session charges you trigger (MIT), such as metered billing or saved-card top-ups.",
+    },
+  }}
+/>
+
+The issuer is the final authority: it can accept or reject any requested exemption. If it rejects, VINR transparently falls back to a 3D Secure challenge — the **liability shift** stays with you for unauthenticated exemptions you requested, and shifts to the issuer once a challenge completes.
+
+## The 3D Secure flow
+
+3D Secure (3DS2) is the network protocol that carries the authentication. VINR drives it through the hosted checkout in three phases.
+
+<Steps>
+
+### Fingerprint
+
+The hosted page silently collects device and browser data and sends it to the issuer. Most low-risk payments resolve here with no customer interaction (a "frictionless" flow).
+
+### Challenge
+
+If the issuer wants more assurance, the customer completes a step — typically a one-time code or a biometric prompt in their banking app. The page handles the redirect and return.
+
+### Result
+
+The issuer returns an authentication outcome. VINR records it, fires a webhook, and moves the payment toward capture or marks it failed.
+
+</Steps>
+
+Verify the outcome server-side from the webhook rather than trusting the browser redirect alone:
+
+```typescript
+const event = vinr.webhooks.verify(rawBody, req.headers['x-vinr-signature']);
+
+switch (event.type) {
+  case 'payment.completed':
+    // Authentication passed (or was validly exempted) and funds captured.
+    await fulfillOrder(event.data.metadata.orderId);
+    break;
+  case 'payment.authentication_failed':
+    // Challenge abandoned or rejected — prompt the customer to retry.
+    await flagForRetry(event.data.id);
+    break;
+}
+```
+
+Test the branches in sandbox with the standard cards: `4242 4242 4242 4242` succeeds frictionlessly, `4000 0000 0000 3220` forces a 3DS challenge, and `4000 0000 0000 0002` is declined.
+
+## Impact on conversion
+
+Every challenge adds friction, so the goal is to authenticate only when required. To keep approval rates high:
+
+- **Let VINR request exemptions** — the default handling maximizes frictionless flows within your acquirer's fraud-rate budget.
+- **Authenticate once, reuse it** — the first on-session charge of a subscription clears the way for `recurring` and `merchant_initiated` debits.
+- **Pass rich data** — accurate billing details and email improve the issuer's risk score and the odds of a frictionless result.
+- **Handle soft declines** — never treat an exemption rejection as a hard failure; the hosted page already retries with a challenge.
+
+<Callout type="warn">
+Off-session charges (MIT, metered billing) cannot show a challenge because the customer is absent. Ensure the initial setup charge is authenticated on-session, or the issuer may decline later debits.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Payment lifecycle" href="/docs/payments/payment-lifecycle" description="Every status and the events that fire." />
+  <Card title="Authorize & capture" href="/docs/payments/authorize-and-capture" description="Reserve funds now, capture after authentication." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Verify authentication outcomes server-side." />
+</Cards>

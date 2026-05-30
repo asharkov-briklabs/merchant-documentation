@@ -1,0 +1,21 @@
+{
+  "root": true,
+  "title": "Payments",
+  "icon": "CreditCard",
+  "pages": [
+    "index",
+    "how-payments-work",
+    "payment-lifecycle",
+    "customers",
+    "payment-methods",
+    "---Capabilities---",
+    "authorize-and-capture",
+    "refunds",
+    "disputes",
+    "recurring-payments",
+    "payment-links",
+    "multicurrency",
+    "strong-customer-authentication",
+    "fraud-prevention"
+  ]
+}

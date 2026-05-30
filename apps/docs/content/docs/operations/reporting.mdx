@@ -1,0 +1,139 @@
+---
+title: Reporting & exports
+description: Generate financial and operational reports.
+persona: ["finance-manager", "operations"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Reports turn the raw stream of payments, invoices, payouts, and loyalty events into the summaries your finance and operations teams actually work from — reconciliation files, revenue rollups, and audit trails. VINR generates reports asynchronously: you request one, VINR builds it, and you download a signed file or stream rows over the API.
+
+## Available reports
+
+Each report type covers one domain and accepts a date range plus optional filters. All amounts are integers in minor units (`1000` = EUR 10.00) and respect the currency on each underlying object.
+
+| Report type | What it contains | Common use |
+|---|---|---|
+| `payments` | Every `pay_` object with status, fees, and net. | Daily transaction review. |
+| `balance_transactions` | Ledger entries: charges, refunds, fees, adjustments. | Reconciling your VINR balance. |
+| `payouts` | `po_` and `setl_` records with bank reference. | Matching bank deposits. |
+| `invoices` | Finalized `inv_` objects with tax and discount breakdown. | Revenue and AR reporting. |
+| `subscriptions` | Active, trialing, and churned `sub_` snapshots. | MRR and churn analysis. |
+| `loyalty` | `ptx_` and `rdm_` activity per `loy_` account. | Liability of outstanding points. |
+
+<Callout type="info">
+The `balance_transactions` report is the source of truth for reconciliation. Every euro that moves through VINR — including fees and disputes — appears as a signed ledger entry there.
+</Callout>
+
+## Generating a report
+
+A report run is created against a type and an interval, then resolves from `pending` to `succeeded` (or `failed`). Poll the run or subscribe to the `report.completed` event rather than blocking.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// Request a payments report for April 2026.
+const run = await vinr.reports.create({
+  type: 'payments',
+  interval: { start: '2026-04-01', end: '2026-04-30' },
+  columns: ['id', 'created', 'status', 'amount', 'fee', 'net', 'currency'],
+  format: 'csv',                  // or 'json'
+});
+
+// run.status === 'pending' — wait for completion, then fetch the file URL.
+const ready = await vinr.reports.waitUntilDone(run.id);
+console.log(ready.fileUrl);       // signed, expires in 1 hour
+```
+
+The same call over raw REST:
+
+```bash
+curl https://api.vinr.com/v1/reports \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -d type=payments \
+  -d interval[start]=2026-04-01 \
+  -d interval[end]=2026-04-30 \
+  -d format=csv
+```
+
+<Callout type="warn">
+File URLs are short-lived signed links that expire one hour after issue. Download immediately, or re-fetch the report run to mint a fresh URL — do not store the URL itself.
+</Callout>
+
+## Scheduling exports
+
+For recurring delivery, attach a schedule to a report definition instead of calling `create` from a cron of your own. VINR runs it on the cadence you set and can push the result to a destination.
+
+<Steps>
+
+### Define the schedule
+
+Pick a `frequency` (`daily`, `weekly`, or `monthly`) and a `delivery` target — a webhook endpoint, an email group, or an SFTP/object-storage bucket you've registered under [Integration](/docs/integration).
+
+### VINR runs it
+
+At each interval VINR builds the report for the just-closed period (e.g. yesterday for `daily`) and emits `report.completed` with the run id.
+
+### Deliver
+
+The file is pushed to your destination, or you fetch it from the event payload. Failed deliveries retry with backoff and surface in [Operations alerts](/docs/operations).
+
+</Steps>
+
+```typescript
+const schedule = await vinr.reports.schedules.create({
+  type: 'balance_transactions',
+  frequency: 'daily',
+  format: 'csv',
+  delivery: { type: 'sftp', destination: 'finance-recon' },
+});
+```
+
+## Report schemas
+
+The `columns` you request map to typed fields. For the `payments` report the core schema is:
+
+<TypeTable
+  type={{
+    id: { type: "string", description: "Payment id, prefixed pay_." },
+    created: { type: "string", description: "ISO 8601 timestamp of capture.", default: "—" },
+    status: { type: "string", description: "completed, refunded, failed, or disputed." },
+    amount: { type: "integer", description: "Gross amount in minor units." },
+    fee: { type: "integer", description: "VINR processing fee in minor units.", default: "0" },
+    net: { type: "integer", description: "amount minus fee, settled to your balance." },
+    currency: { type: "string", description: "ISO 4217 code.", default: "EUR" },
+  }}
+/>
+
+Omitting `columns` returns the full default schema for the type. Requesting a column that doesn't exist for a type fails the run with a `report.invalid_column` error.
+
+## API access to reports
+
+Beyond file exports, list and inspect runs programmatically — useful for building an internal reporting dashboard or verifying that a scheduled run actually fired.
+
+```typescript
+// Did last night's reconciliation report succeed?
+const runs = await vinr.reports.list({
+  type: 'balance_transactions',
+  status: 'succeeded',
+  limit: 1,
+});
+
+for await (const row of vinr.reports.rows(runs.data[0].id)) {
+  // Stream JSON rows without downloading the whole file.
+  ledger.append(row);
+}
+```
+
+<Callout type="info">
+Reports are generated from settled, immutable data, so a run for a closed period always returns identical results. This makes them safe to re-pull for audits without risk of drift.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Payouts & settlement" href="/docs/operations/payouts" description="Match report rows to bank deposits." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="React to report.completed events." />
+  <Card title="Operations overview" href="/docs/operations" description="Alerts, monitoring, and run health." />
+</Cards>

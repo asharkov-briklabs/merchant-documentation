@@ -1,0 +1,165 @@
+---
+title: Metadata
+description: Attach custom key-value data to objects.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Most VINR objects accept a `metadata` field — a free-form map of string keys to string values that VINR stores and returns verbatim but never interprets. Use it to stitch VINR resources to your own systems: order IDs, internal user references, ledger codes, or experiment flags travel alongside the payment or subscription without a separate lookup table.
+
+## What metadata is for
+
+Metadata is your data, carried by VINR objects. VINR does not read, validate, or act on it — it is echoed back on every read, included in API list responses, and delivered inside webhook payloads. That makes it the right tool for:
+
+- Linking a `pay_` or `inv_` back to an order, cart, or invoice in your own database.
+- Tagging objects for reporting and reconciliation (cost center, region, sales channel).
+- Carrying lightweight flags through to webhook handlers so you avoid an extra round trip.
+
+It is the wrong tool for anything VINR needs to understand. Routing, pricing, tax, and loyalty rules are driven by typed fields, not metadata. Never store secrets, full card data, or sensitive personal information in metadata — it is visible in the Dashboard and returned in plain text to anyone with a valid API key.
+
+## Setting metadata
+
+Metadata can be set when you create an object and updated later. The following objects support it: payments, customers, refunds, products, prices, subscriptions, invoices, loyalty accounts, and rewards.
+
+<Tabs items={["SDK", "REST"]}>
+<Tab value="SDK">
+```ts
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 4500,            // EUR 45.00
+  currency: 'EUR',
+  returnUrl: 'https://shop.example.com/return',
+  metadata: {
+    order_id: 'ORD-2026-0512',
+    channel: 'mobile_app',
+    cost_center: 'EU-RETAIL',
+  },
+});
+
+console.log(payment.id, payment.metadata.order_id);
+```
+</Tab>
+<Tab value="REST">
+```bash
+curl -X POST https://api.vinr.com/payments \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 4500,
+    "currency": "EUR",
+    "returnUrl": "https://shop.example.com/return",
+    "metadata": {
+      "order_id": "ORD-2026-0512",
+      "channel": "mobile_app",
+      "cost_center": "EU-RETAIL"
+    }
+  }'
+```
+</Tab>
+</Tabs>
+
+### Updating and deleting keys
+
+Updates merge by key: keys you send are added or overwritten, and keys you omit are left untouched. To delete a single key, set its value to an empty string. To clear all metadata, send an empty object.
+
+```ts
+// Add one key, overwrite another, delete a third — in one call.
+await vinr.payments.update('pay_3Nk9aQ2zLpX', {
+  metadata: {
+    shipped: 'true',          // new key
+    channel: 'web',           // overwrites the previous value
+    cost_center: '',          // deletes this key
+  },
+});
+
+// Clear everything.
+await vinr.payments.update('pay_3Nk9aQ2zLpX', { metadata: {} });
+```
+
+<Callout type="info">
+Metadata updates do not change an object's lifecycle. Updating the metadata on a completed payment will not re-trigger `payment.completed`; it emits the object's `*.updated` event instead.
+</Callout>
+
+## Limits
+
+Metadata is intentionally small. Requests that exceed these limits fail with `400` and an error pointing at the offending key.
+
+<TypeTable
+  type={{
+    keys: { type: "number", description: "Maximum number of keys per object", default: "50" },
+    keyLength: { type: "number", description: "Maximum characters per key", default: "40" },
+    valueLength: { type: "number", description: "Maximum characters per value", default: "500" },
+    type: { type: "string", description: "Values must be strings — numbers and booleans are not accepted", default: "string" },
+    reserved: { type: "string", description: "Keys beginning with vinr_ are reserved for the platform", default: "—" },
+  }}
+/>
+
+A few rules that are easy to trip over:
+
+- Values must be strings. Serialize numbers and booleans yourself (`"true"`, `"4500"`); VINR does not coerce them.
+- Keys are case-sensitive and must be unique within an object. `OrderId` and `orderId` are two different keys.
+- Nested objects and arrays are not allowed. If you need structure, store a JSON string in a single value (within the 500-character limit) or, better, store a reference and keep the structured data in your own system.
+
+## Using metadata for reconciliation
+
+The common pattern is to write your own primary key onto the VINR object at creation, then read it back when settlements land or webhooks arrive — turning VINR events into rows in your ledger without a side lookup.
+
+<Steps>
+
+### Stamp your order ID at creation
+
+Set `metadata.order_id` (and any reporting tags) when you create the payment, as shown above. This is the only step that requires foresight — do it on every object you will later reconcile.
+
+### Read it back from the webhook
+
+Your webhook handler receives the full object, metadata included, so you can resolve the VINR event to your order immediately.
+
+```ts
+export async function POST(req: Request) {
+  const payload = await req.text();
+  const signature = req.headers.get('x-vinr-signature')!;
+
+  const event = vinr.webhooks.verify(payload, signature);
+
+  if (event.type === 'payment.completed') {
+    const payment = event.data;
+    await markOrderPaid(payment.metadata.order_id, payment.id);
+  }
+
+  return new Response(null, { status: 200 });
+}
+```
+
+### Match against the settlement report
+
+Each transaction in a settlement carries the originating object's metadata. Pull the settlement, group by `cost_center`, and post totals to your ledger.
+
+```ts
+const txns = await vinr.settlements.listTransactions('setl_7Qw2mE');
+
+for (const txn of txns.data) {
+  ledger.record({
+    orderId: txn.metadata.order_id,
+    center: txn.metadata.cost_center ?? 'UNTAGGED',
+    net: txn.net,
+  });
+}
+```
+
+</Steps>
+
+<Callout type="warn">
+Metadata is not searchable as a database index. The `metadata[order_id]=...` list filter is convenience-grade and may be eventually consistent. For authoritative reconciliation, key off the VINR object ID you stored and treat metadata as the human-readable cross-reference.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="API Reference" href="/docs/api-reference" description="Object schemas, parameters, and error codes." />
+  <Card title="Webhooks" href="/docs/integration" description="Receive and verify events that carry your metadata." />
+  <Card title="Settlements" href="/docs/operations" description="Reconcile payouts against your own ledger." />
+</Cards>

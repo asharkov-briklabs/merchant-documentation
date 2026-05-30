@@ -1,0 +1,164 @@
+---
+title: Offer a free trial
+description: Offer a free trial — a runnable, end-to-end guide verified against the VINR sandbox.
+category: "billing"
+persona: ["developer"]
+priority: "P2"
+lastUpdated: "2026-05-30"
+---
+
+A free trial lets a customer use a paid plan before they're charged. This guide creates a trialing [subscription](/docs/billing/subscriptions), shows both trial styles VINR supports, and handles the moment the trial ends — runnable against the sandbox.
+
+## Trial models
+
+VINR supports two trial shapes. Pick based on whether you collect a payment method up front.
+
+| Model | Card required? | Behavior at trial end |
+|---|---|---|
+| **No card up front** | No | Subscription pauses; customer must add a method to continue. |
+| **Card up front** | Yes | Subscription auto-converts and the first invoice is charged. |
+
+Card-up-front trials convert at much higher rates and let you charge the moment the trial ends. No-card trials reduce signup friction. The flows below cover both.
+
+<Callout type="info">
+A trial is just a subscription with a `trialPeriodDays` (or explicit `trialEnd`). No separate "trial" object exists — the subscription's `status` is `trialing` until the trial ends, then transitions to `active`, `past_due`, or `paused`.
+</Callout>
+
+## Create a trial subscription
+
+On your backend, create the subscription against an existing [price](/docs/api-reference/prices). Set `trialPeriodDays` to start the customer in `trialing` with no immediate charge.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+export async function POST(req: Request) {
+  const { customerId } = await req.json();
+
+  const subscription = await vinr.subscriptions.create(
+    {
+      customer: customerId,            // cust_...
+      price: 'price_pro_monthly',      // €29.00 / month
+      trialPeriodDays: 14,
+      metadata: { source: 'web-signup' },
+    },
+    { idempotencyKey: `trial-${customerId}` },
+  );
+
+  return Response.json({
+    subscriptionId: subscription.id,   // sub_...
+    trialEnd: subscription.trialEnd,   // unix seconds
+  });
+}
+```
+
+The first invoice is created but not charged — it sits at `0` due until the trial converts. No payment method is required for a no-card trial.
+
+## Collect payment up front
+
+To auto-convert, attach a payment method before the trial ends. Send the customer through [Checkout](/docs/integration/checkout) in setup mode to save a card, then create the subscription with `defaultPaymentMethod`.
+
+```typescript
+// 1. Save a card via hosted Checkout (no charge during the trial)
+const session = await vinr.checkout.sessions.create({
+  customer: customerId,
+  mode: 'setup',
+  returnUrl: 'https://yoursite.com/welcome',
+});
+// → redirect the customer to session.url
+
+// 2. After they return, start the trial with that method
+const subscription = await vinr.subscriptions.create({
+  customer: customerId,
+  price: 'price_pro_monthly',
+  trialPeriodDays: 14,
+  defaultPaymentMethod: session.paymentMethod,   // pm_...
+});
+```
+
+<Callout type="warn">
+Some [local methods](/docs/payments/payment-methods/local-methods) and 3DS-mandated cards can't be charged off-session without prior authorization. When you collect up front, VINR sets up the mandate during the setup session so the conversion charge succeeds. See [SCA & off-session](/docs/payments/sca).
+</Callout>
+
+## Trial-end behavior
+
+Three days before the trial ends, VINR emits `subscription.trial_will_end` — use it to remind no-card customers to add a method. At trial end, the path depends on whether a method is attached.
+
+<Tabs items={["Card on file", "No card"]}>
+<Tab value="Card on file">
+
+The trial converts automatically. VINR finalizes the first invoice and charges it.
+
+```typescript
+const event = vinr.webhooks.verify(
+  await req.text(),
+  req.headers.get('x-vinr-signature'),
+);
+
+switch (event.type) {
+  case 'subscription.trial_will_end':
+    await emailUpcomingCharge(event.data.customer);   // sub_... ends in 3 days
+    break;
+  case 'invoice.paid':
+    await grantAccess(event.data.subscription);       // converted!
+    break;
+  case 'invoice.payment_failed':
+    await startDunning(event.data.subscription);       // see Failed payments
+    break;
+}
+return new Response('OK', { status: 200 });
+```
+
+</Tab>
+<Tab value="No card">
+
+With no method, the subscription moves to `paused` at trial end and stops granting access. Listen for `subscription.paused` and prompt for payment.
+
+```typescript
+switch (event.type) {
+  case 'subscription.trial_will_end':
+    await emailAddCardReminder(event.data.customer);
+    break;
+  case 'subscription.paused':
+    await revokeAccess(event.data.id);                 // sub_...
+    break;
+}
+```
+
+</Tab>
+</Tabs>
+
+## Converting and ending early
+
+You can convert a trial immediately (end the trial now and charge) or extend it — handy for support credits or coupon flows.
+
+```typescript
+// Convert now: end the trial and charge the first invoice immediately
+await vinr.subscriptions.update('sub_...', { trialEnd: 'now' });
+
+// Extend: push trial end out by 7 days (unix seconds)
+await vinr.subscriptions.update('sub_...', {
+  trialEnd: Math.floor(Date.now() / 1000) + 7 * 86400,
+});
+```
+
+To reactivate a `paused` no-card subscription, attach a method and set `trialEnd: 'now'` to charge and resume.
+
+## Test it
+
+In the sandbox, set a short `trialPeriodDays` and use the [clock simulation](/docs/operations/test-clocks) to jump past the trial end, or trigger events manually.
+
+| Card | Conversion result |
+|---|---|
+| `4242 4242 4242 4242` | Converts and charges successfully |
+| `4000 0000 0000 0002` | `invoice.payment_failed` → dunning |
+| `4000 0000 0000 3220` | 3DS challenge on conversion |
+
+## Next steps
+
+<Cards>
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="Lifecycle, statuses, and proration." />
+  <Card title="Handle failed payments" href="/docs/guides/handle-failed-payments" description="Dunning and recovery when conversion fails." />
+  <Card title="Apply a coupon" href="/docs/guides/apply-a-coupon" description="Stack discounts on top of a trial." />
+</Cards>

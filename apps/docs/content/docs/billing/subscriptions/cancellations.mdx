@@ -1,0 +1,159 @@
+---
+title: Cancellations
+description: Cancel immediately or at period end.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Cancel a subscription now or schedule it for period end, controlling whether the customer keeps access until they have paid for, how the final invoice is settled, and whether any unused time is refunded.
+
+## Two cancellation modes
+
+Every cancellation answers one question: does access end **now** or at the **end of the period the customer already paid for**? VINR models this with a single field rather than two endpoints.
+
+| Mode | Field | Access ends | Final invoice |
+|---|---|---|---|
+| At period end (recommended) | `cancel_at_period_end: true` | At `current_period_end` | No new invoice; the current paid period runs out |
+| Immediately | `vinr.subscriptions.cancel(...)` | Right away | Optionally prorate a credit for unused time |
+
+<Callout type="info">
+Scheduling at period end is reversible — set `cancel_at_period_end: false` before the period ends and the subscription continues as normal. An immediate cancel is terminal; the subscription moves to `canceled` and a new subscription is required to resume.
+</Callout>
+
+## How it works
+
+A subscription tracks the window it has billed for as `current_period_start` and `current_period_end`. Cancellation never deletes history — it sets the subscription's `status` and a `canceled_at` timestamp, and the behaviour depends on the mode.
+
+<Steps>
+
+### Schedule or execute
+
+`cancel_at_period_end: true` leaves `status: active` but stamps `cancel_at` with the current period end. An immediate cancel transitions `status` to `canceled` synchronously.
+
+### Settle the final invoice
+
+For period-end cancellation no further invoice is generated; the customer simply stops being billed on the next cycle. For an immediate cancel with proration, VINR issues a credit line item for the unused portion of the current period.
+
+### Stop future cycles
+
+Once `canceled`, the subscription generates no new draft [invoices](/docs/billing/how-billing-works) and triggers no further [dunning](/docs/billing/dunning-and-recovery).
+
+### React on the event
+
+VINR emits `subscription.updated` when you schedule, and `subscription.deleted` when access actually ends. Revoke entitlements on `subscription.deleted`, not on the schedule.
+
+</Steps>
+
+## Schedule cancellation at period end
+
+The customer keeps everything they paid for and is not billed again. This is the default for self-service "cancel my plan" flows.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const sub = await vinr.subscriptions.update('sub_8Qd1Kf2pLm', {
+  cancel_at_period_end: true,
+});
+
+console.log(sub.status);              // "active"
+console.log(sub.cancel_at_period_end); // true
+console.log(sub.current_period_end);   // unix ts — access ends here
+```
+
+To undo a scheduled cancellation while the period is still running:
+
+```typescript
+await vinr.subscriptions.update('sub_8Qd1Kf2pLm', {
+  cancel_at_period_end: false,
+});
+```
+
+## Cancel immediately
+
+Use this when access must stop at once — fraud, an offboarding, or a downgrade to nothing. By default the time the customer already paid for is forfeited; pass `prorate: true` to credit the unused portion back.
+
+<Tabs items={['SDK', 'REST']}>
+<Tab value="SDK">
+
+```typescript
+const canceled = await vinr.subscriptions.cancel('sub_8Qd1Kf2pLm', {
+  prorate: true,            // credit unused time to the customer
+  invoice_now: true,        // finalize the prorated credit immediately
+});
+
+console.log(canceled.status);       // "canceled"
+console.log(canceled.canceled_at);  // unix ts of cancellation
+```
+
+</Tab>
+<Tab value="REST">
+
+```bash
+curl -X POST https://api.vinr.com/v1/subscriptions/sub_8Qd1Kf2pLm/cancel \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "prorate": true, "invoice_now": true }'
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="warn">
+`prorate: true` credits unused time but does **not** automatically refund the original [payment](/docs/payments/how-payments-work). The credit lands on the customer's balance and offsets future invoices. To return money to the card, issue an explicit [refund](/docs/payments/refunds) for the prorated amount.
+</Callout>
+
+## Resulting events
+
+| Action | Events emitted | When |
+|---|---|---|
+| Schedule at period end | `subscription.updated` | Immediately |
+| Period end reached | `subscription.deleted` | At `current_period_end` |
+| Cancel immediately | `subscription.deleted` | Immediately |
+| Immediate cancel with proration | `subscription.deleted`, `invoice.created` | Immediately |
+
+Always gate entitlement revocation on `subscription.deleted` so a customer who downgrades from a scheduled cancel is not locked out early.
+
+```typescript
+export async function POST(req: Request) {
+  const payload = await req.text();
+  const signature = req.headers.get('x-vinr-signature') ?? '';
+  const event = vinr.webhooks.verify(payload, signature);
+
+  if (event.type === 'subscription.deleted') {
+    await revokeAccess(event.data.object.customer); // "cust_..."
+  }
+  return new Response(null, { status: 200 });
+}
+```
+
+## Edge cases
+
+<Accordions>
+
+<Accordion title="Unpaid final invoice at cancellation">
+Cancelling does not waive an outstanding balance. An invoice left in `open` or `past_due` continues through dunning unless you explicitly void it with `vinr.invoices.voidInvoice(...)`.
+</Accordion>
+
+<Accordion title="Cancelling during a trial">
+A subscription in `trialing` can be cancelled in either mode. No proration applies because no money has been collected yet; you simply move to `canceled` and `subscription.deleted` fires.
+</Accordion>
+
+<Accordion title="Cancel at a specific future date">
+For a fixed end date that is not the period boundary, set `cancel_at` to a unix timestamp instead of `cancel_at_period_end`. VINR cancels at that moment and prorates the final partial period if you also pass `prorate: true`.
+</Accordion>
+
+<Accordion title="Reactivating after immediate cancel">
+There is no un-cancel for a terminated subscription. Create a new subscription on the same customer; the stored payment method and [loyalty](/docs/engagement) account carry over.
+</Accordion>
+
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="The full subscription lifecycle and statuses." />
+  <Card title="Trials & proration" href="/docs/billing/trials-and-proration" description="How VINR computes credits for partial periods." />
+  <Card title="Refunds" href="/docs/payments/refunds" description="Return money to the customer's payment method." />
+</Cards>

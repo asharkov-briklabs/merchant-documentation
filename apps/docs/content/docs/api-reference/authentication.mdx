@@ -1,0 +1,143 @@
+---
+title: Authentication
+description: Authenticate API requests with secret and publishable keys.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Every VINR API request is authenticated with an API key tied to your account and environment. This page covers the two key types, how to send them, how to rotate them safely, and how to scope restricted keys so a leaked credential can do as little damage as possible.
+
+## Key types
+
+VINR issues three kinds of keys. They are not interchangeable — using the wrong type returns `401 Unauthorized`.
+
+| Key | Prefix | Where it lives | Can do |
+|---|---|---|---|
+| Secret key | `sk_live_` / `sk_test_` | Your server only | Full read/write on every resource |
+| Publishable key | `pk_live_` / `pk_test_` | Browser / mobile client | Tokenize cards, create client sessions |
+| Restricted key | `rk_live_` / `rk_test_` | Your server only | A scoped subset you define |
+
+The `_live_` and `_test_` infixes select the environment. A `_test_` key only works against `https://sandbox.api.vinr.com` and never touches real money or real settlements.
+
+<Callout type="error">
+The secret key grants full account access. Never embed it in client-side code, mobile apps, public repositories, or analytics tools. If a secret key is exposed, roll it immediately (see [Key rotation](#key-rotation)).
+</Callout>
+
+## Sending the key
+
+Authenticate by passing the secret key as a Bearer token in the `Authorization` header, or as `X-Api-Key` — both are accepted. The SDK reads the key from your constructor and attaches the header on every call.
+
+<Tabs items={["SDK", "cURL", "Bearer"]}>
+<Tab value="SDK">
+```ts
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({
+  secretKey: process.env.VINR_SECRET_KEY, // sk_live_... or sk_test_...
+});
+
+const payment = await vinr.payments.create({
+  amount: 1000, // EUR 10.00 in minor units
+  currency: 'EUR',
+  returnUrl: 'https://shop.example.com/return',
+});
+```
+</Tab>
+<Tab value="cURL">
+```bash
+curl https://api.vinr.com/v1/payments \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "amount": 1000, "currency": "EUR", "returnUrl": "https://shop.example.com/return" }'
+```
+</Tab>
+<Tab value="Bearer">
+```bash
+curl https://api.vinr.com/v1/payments \
+  -H "Authorization: Bearer $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "amount": 1000, "currency": "EUR", "returnUrl": "https://shop.example.com/return" }'
+```
+</Tab>
+</Tabs>
+
+All requests must use HTTPS. Calls over plain HTTP are refused before the key is read, so the credential is never transmitted in the clear. Keep keys in environment variables or a secrets manager — never hard-code them.
+
+## Publishable keys in the client
+
+The publishable key is safe to ship to browsers and mobile apps. It can only create short-lived client sessions and tokenize payment details; it cannot read customers, list payments, or issue refunds.
+
+```ts
+// Browser bundle — publishable key only.
+const session = await fetch('https://api.vinr.com/v1/client_sessions', {
+  method: 'POST',
+  headers: { 'X-Api-Key': 'pk_live_your_publishable_key' },
+}).then((r) => r.json());
+// session.clientSecret is handed to the VINR payment element.
+```
+
+## Key rotation
+
+Rotate keys on a schedule and immediately on any suspected exposure. VINR supports overlapping keys so you can roll without downtime: the new key is live the moment it is created, and the old key keeps working until you revoke it.
+
+<Steps>
+
+### Create a replacement key
+
+In the Dashboard under **Developers -> API keys**, click **Roll key**. VINR generates a new secret and marks the old one for deprecation. You now have two valid keys.
+
+### Deploy the new key
+
+Update `VINR_SECRET_KEY` in your secrets store and redeploy every service that calls the API. Confirm traffic is flowing on the new key — the key list shows a **Last used** timestamp per key.
+
+### Revoke the old key
+
+Once no service has used the old key for at least one deploy cycle, click **Revoke**. From that instant any request bearing the old key returns `401`.
+
+</Steps>
+
+<Callout type="warn">
+Revoking a key is immediate and irreversible. Confirm the new key is serving all production traffic before you revoke — there is no grace period after revocation.
+</Callout>
+
+## Restricted keys
+
+Restricted keys (`rk_`) let you grant the minimum access a workload needs. A reporting job that only reads settlements should never hold a full secret key. You define per-resource permissions of `none`, `read`, or `write` when creating the key.
+
+<TypeTable
+  type={{
+    name: { type: "string", description: "Human-readable label shown in the Dashboard" },
+    permissions: { type: "Record<string, 'none' | 'read' | 'write'>", description: "Per-resource access map; 'write' implies 'read'", default: "all none" },
+    environment: { type: "'live' | 'test'", description: "Which environment the key operates in", default: "live" },
+  }}
+/>
+
+```ts
+// Create a read-only reporting key scoped to settlements and payouts.
+const key = await vinr.apiKeys.create({
+  name: 'finance-reporting',
+  permissions: {
+    settlements: 'read',
+    payouts: 'read',
+    payments: 'read',
+  },
+});
+
+console.log(key.id);     // rk_...
+console.log(key.secret); // shown once — store it now
+```
+
+The full `secret` is returned only at creation time and is never retrievable again. If you lose it, roll the key. A request that exceeds a restricted key's scope — for example calling `POST /refunds` with a key that has `refunds: read` — returns `403 Forbidden` rather than `401`, so you can distinguish a missing key from an under-scoped one.
+
+<Callout type="info">
+Restricted keys cannot create or modify other API keys, and they cannot read your account's billing details. Use them freely for CI, cron jobs, and third-party integrations.
+</Callout>
+
+## Next steps
+
+<Cards>
+<Card title="API Reference" href="/docs/api-reference" description="Endpoints, parameters, and the response format your keys unlock." />
+<Card title="Webhooks" href="/docs/integration/webhooks" description="Verify event signatures with the x-vinr-signature header." />
+<Card title="Operations & security" href="/docs/operations" description="Secrets management, key hygiene, and incident response." />
+</Cards>

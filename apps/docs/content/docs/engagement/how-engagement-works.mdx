@@ -1,0 +1,76 @@
+---
+title: How engagement works
+description: The objects and flow behind loyalty and rewards on VINR.
+persona: ["developer", "business-owner"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+Engagement composes members, a loyalty currency, earning rules, and rewards into programs that **react to events** — most often a payment. Understand the object graph and the event loop, and every feature (tiers, campaigns, referrals, store credit) becomes a variation on the same pattern.
+
+## Core objects
+
+| Object | What it answers |
+|---|---|
+| `program` | The loyalty program — its currency, rules, and tiers. |
+| `loyalty_account` | _Who_ — a member, linked to a [customer](/docs/payments/customers). |
+| `earning_rule` | _How_ members earn points from events. |
+| `points_transaction` | A single award, deduction, or expiry. |
+| `reward` / `redemption` | _What_ points buy, and a member spending them. |
+
+```typescript
+// Enroll a member and link them to an existing customer.
+const member = await vinr.loyalty.accounts.create({
+  program: 'prog_default',
+  customer: 'cust_abc123',
+});                                // "loy_..."
+```
+
+## Events that drive engagement
+
+Engagement subscribes to events from across VINR. The most important is `payment.completed`, but rules can react to many triggers:
+
+| Trigger | Typical rule |
+|---|---|
+| `payment.completed` | Award N points per €1 spent. |
+| `loyalty.account.created` | Welcome bonus. |
+| `subscription.created` | Bonus for going annual. |
+| `referral.converted` | Reward both referrer and referee. |
+
+## From purchase to points to reward
+
+<Steps>
+
+### A payment completes
+
+The customer pays. If the payment is linked to a member (via `customer` or `metadata`), Engagement evaluates earning rules.
+
+### Points are awarded
+
+A matching [earning rule](/docs/engagement/earning-rules) creates a `points_transaction`, increasing the member's balance and emitting `loyalty.points.earned`.
+
+### The member redeems
+
+The member spends points on a [reward](/docs/engagement/rewards-catalog) — often a discount applied at [checkout](/docs/engagement/redemption). This deducts points and issues the reward.
+
+### Refunds claw back
+
+If the original purchase is refunded, Engagement reverses the points it awarded, keeping balances honest. See [Linking payments & loyalty](/docs/engagement/linking-payments-and-loyalty).
+
+</Steps>
+
+## Where Payments & Billing fit
+
+Engagement sits _downstream_ of Payments and Billing — it never collects money, it reacts to it. A one-time [payment](/docs/payments) or a [subscription](/docs/billing/subscriptions) renewal both emit events that can earn points, qualify a member for a [tier](/docs/engagement/tiers-and-status), or progress a [campaign](/docs/engagement/campaigns).
+
+<Callout type="info">
+The single most important integration step is **identifying the member on each payment** so purchases earn and redemptions discount. Get that right and the rest is configuration.
+</Callout>
+
+## Where to go next
+
+<Cards>
+  <Card title="Loyalty accounts" href="/docs/engagement/loyalty-accounts" description="Enroll and manage members." />
+  <Card title="Linking payments & loyalty" href="/docs/engagement/linking-payments-and-loyalty" description="The core integration." />
+  <Card title="Launch a loyalty program" href="/docs/guides/launch-a-loyalty-program" description="A runnable end-to-end guide." />
+</Cards>

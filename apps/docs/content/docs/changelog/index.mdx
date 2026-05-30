@@ -1,0 +1,124 @@
+---
+title: Changelog
+description: API and product changes, additions, and deprecations over time.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Every dated, breaking, and additive change to the VINR API, SDKs, and products. Use this page to track what shipped, what's deprecated, and when removals land — so an integration that works today keeps working after you upgrade.
+
+The VINR API is versioned by date. Your account is pinned to the version you onboarded with; nothing on this page changes your integration's behavior until you explicitly upgrade. See [Versioning policy](#versioning-policy) below.
+
+## Subscribe (RSS / webhook)
+
+Stay ahead of changes without polling this page.
+
+<Tabs items={["RSS", "Webhook"]}>
+<Tab value="RSS">
+
+Subscribe your reader to the feed:
+
+```bash
+curl https://api.vinr.com/v1/changelog.rss
+```
+
+Entries are published the moment a change goes live in production, tagged `additive`, `fix`, or `breaking`.
+
+</Tab>
+<Tab value="Webhook">
+
+Register an endpoint for the `changelog.published` event and receive a payload for every entry — useful for posting to an internal Slack channel.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+await vinr.webhookEndpoints.create({
+  url: 'https://yoursite.com/hooks/vinr-changelog',
+  enabledEvents: ['changelog.published'],
+});
+```
+
+The event `data` carries `version`, `tag`, `title`, and a `url` back to the entry. Verify it like any other webhook with `vinr.webhooks.verify(payload, signature)`.
+
+</Tab>
+</Tabs>
+
+## Versioning policy
+
+VINR uses **date-based API versions** (for example `2026-04-01`). Your account is pinned at onboarding and stays there until you upgrade.
+
+- **Additive changes** — new endpoints, new optional request fields, new response fields, and new event types — ship continuously to *all* versions and are never considered breaking. Write parsers that ignore unknown fields.
+- **Breaking changes** — removing or renaming a field, changing a type, tightening validation, or altering default behavior — only ever appear behind a *new* dated version.
+- **Upgrading** is explicit. Set the version per request with the `Vinr-Version` header, or set the account default in the [Dashboard](/docs/getting-started/authentication).
+
+```bash
+curl https://api.vinr.com/v1/payments \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Vinr-Version: 2026-04-01"
+```
+
+<Callout type="info">
+SDK releases follow semantic versioning independently of the API version. A new major SDK (for example `@vinr/sdk` v3) may change method signatures even when targeting the same API date. Check the SDK release notes before bumping a major.
+</Callout>
+
+## Deprecation policy
+
+When a field or endpoint is deprecated we commit to a **minimum 12-month support window** before removal.
+
+<Steps>
+
+### Announced
+
+The change appears here tagged `deprecated`, and deprecated fields are marked in the [API reference](/docs/api-reference). Responses include a `Vinr-Deprecation` header naming the field and its sunset date.
+
+### Supported
+
+The old behavior keeps working for at least 12 months. We email the technical contact on the account 90 and 30 days before sunset.
+
+### Removed
+
+After the window, the field or endpoint is removed in a new dated version. Accounts pinned to older versions are unaffected until they upgrade.
+
+</Steps>
+
+## Recent changes
+
+### 2026-05-28 — `additive`
+
+- **Engagement:** added `loyalty.points.expiring` webhook, fired 30 days before a points balance expires so you can prompt redemption. See [Points expiry](/docs/engagement/points-expiry).
+- **Billing:** `subscriptions.create` now accepts `trialEndsAt` (RFC 3339) as an alternative to `trialDays`.
+
+### 2026-05-12 — `fix`
+
+- Fixed a case where `invoice.paid` could fire twice for invoices settled by a saved card during a retry. Consumers that were already idempotent were unaffected; the duplicate is now suppressed at source.
+- Refund objects (`re_…`) now always include `paymentId` even for partial refunds created via the Dashboard.
+
+### 2026-04-20 — `additive`
+
+- **Payments:** new `payment.requires_action` event surfaces 3DS step-ups initiated after creation. Pairs with the [3D Secure guide](/docs/guides/handle-3d-secure).
+- Added `mbu_` usage-record listing with cursor pagination to support high-volume metered billing.
+
+### 2026-04-01 — `breaking` (new version `2026-04-01`)
+
+<Callout type="warn">
+The following changes apply **only** if you set `Vinr-Version: 2026-04-01` or later. Older pinned accounts keep the previous behavior.
+</Callout>
+
+- `amount` is now rejected when not an integer. Previously decimal strings were silently floored — all amounts must be integers in minor units (`1000` = EUR 10.00).
+- `payment.status` value `pending` was split into `requires_action` and `processing`. Update any switch statements over status. See the [payment lifecycle](/docs/payments/payment-lifecycle).
+- The legacy `customer.email` top-level field on payment objects is removed; read it from the expanded `customer` object instead.
+
+### 2026-03-09 — `deprecated`
+
+- The `vinr.charges.*` namespace is deprecated in favor of `vinr.payments.*`. Sunset date **2027-03-09**. Method names map one-to-one; only the namespace changed.
+
+## Next steps
+
+<Cards>
+  <Card title="API reference" href="/docs/api-reference" description="Field-level docs with deprecation markers." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Subscribe to changelog.published and other events." />
+  <Card title="Go-live checklist" href="/docs/getting-started/go-live-checklist" description="Verify your version pin before launch." />
+</Cards>

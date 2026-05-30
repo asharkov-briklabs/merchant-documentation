@@ -1,0 +1,136 @@
+---
+title: Engagement analytics
+description: Measure program health and ROI.
+persona: ["business-owner", "operations"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+A loyalty program is only worth running if you can prove it changes behavior. This page covers the metrics that tell you whether VINR Engagement is healthy — enrollment, active members, points liability, redemption rate, and incremental revenue — and how to pull them via the dashboard, the API, and exports.
+
+## Key metrics
+
+Five numbers describe almost every program. Read them together: a metric in isolation usually misleads.
+
+| Metric | Definition | What it tells you |
+|---|---|---|
+| Enrollment | New `loyalty_account` objects created in the period | Top-of-funnel reach. |
+| Active members | Members with at least one earn or redeem in 90 days | Real engagement, not vanity sign-ups. |
+| Points liability | Sum of outstanding (unexpired, unredeemed) balances, valued at your redemption rate | Your accrued obligation in EUR. |
+| Redemption rate | Points redeemed / points earned over a trailing window | Whether members find rewards worth pursuing. |
+| Incremental revenue | Spend lift of members vs. a matched non-member control | The number your CFO cares about. |
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// Snapshot the headline metrics for a program over the last 30 days.
+const report = await vinr.loyalty.analytics.summary({
+  program: 'prog_default',
+  period: { gte: '2026-05-01', lt: '2026-05-31' },
+});
+
+console.log(report.enrollment);        // 412 new members
+console.log(report.activeMembers);     // 3187
+console.log(report.pointsLiability);   // 1_284_500 minor units (EUR 12,845.00)
+console.log(report.redemptionRate);    // 0.38
+```
+
+<Callout type="info">
+Amounts in analytics responses are integers in minor units, like everywhere else in VINR. `pointsLiability` is already converted to currency using the program's configured point value, so you do not multiply it again.
+</Callout>
+
+## Liability & breakage
+
+Every point you award is a promise to honor it later. **Liability** is the EUR value of all outstanding points; **breakage** is the share you expect never to be redeemed because points expire or members go dormant. Breakage reduces the real cost of the program, but over-relying on it is a finance and, in some regions, a compliance risk.
+
+```typescript
+const liability = await vinr.loyalty.analytics.liability({
+  program: 'prog_default',
+  asOf: '2026-05-30',
+});
+
+console.log(liability.outstandingPoints);   // 2_569_000 points
+console.log(liability.value);                // 1_284_500 minor units
+console.log(liability.expiringNext30Days);   // 95_000 points
+console.log(liability.breakageRateTrailing); // 0.21  (21% historically expired)
+```
+
+<Callout type="warn">
+Treat breakage as an observed trailing rate, not a target. If you change [expiry rules](/docs/engagement/points-and-currency) or run a [campaign](/docs/engagement/campaigns), historical breakage stops predicting the future. Re-baseline after any rule change.
+</Callout>
+
+## Redemption & engagement rates
+
+Redemption rate is the single best signal that rewards are desirable. Too low (under ~15%) and members do not see value; too high with rising liability can mean your earn rate is too generous.
+
+- **Redemption rate** — points redeemed divided by points earned over a trailing 90 days.
+- **Earn participation** — share of paying customers who earned at least once.
+- **Redeem participation** — share of members who redeemed at least once.
+- **Time-to-first-redemption** — median days from enrollment to first `redemption`.
+
+A healthy program shows redeem participation climbing as members cross their first reward threshold. If time-to-first-redemption is long, your lowest reward tier is probably priced too high — see [Rewards catalog](/docs/engagement/rewards-catalog).
+
+## Cohort & tier analysis
+
+Averages hide the story. Group members by enrollment month (cohort) or by [tier](/docs/engagement/tiers-and-status) to see where value concentrates and where members stall.
+
+```typescript
+// Compare spend and retention across tiers.
+const byTier = await vinr.loyalty.analytics.breakdown({
+  program: 'prog_default',
+  dimension: 'tier',
+  metrics: ['activeMembers', 'avgSpend', 'redemptionRate'],
+  period: { gte: '2026-03-01', lt: '2026-06-01' },
+});
+
+for (const row of byTier.rows) {
+  console.log(row.tier, row.avgSpend, row.redemptionRate);
+  // "silver" 4200 0.31 / "gold" 9800 0.52 ...
+}
+```
+
+The two cuts answer different questions:
+
+| Cut | Question it answers |
+|---|---|
+| Cohort | Are newer members retaining better than older ones? Is onboarding improving? |
+| Tier | Where does spend lift come from — and is the jump between tiers worth its perks? |
+
+A common finding: the top tier drives most incremental revenue but contains few members, so the highest-leverage move is helping mid-tier members climb, not over-rewarding the top.
+
+## Exports
+
+For finance reconciliation, BI tools, or ad-hoc analysis, export the underlying `points_transaction` ledger rather than working from rolled-up metrics. Exports run asynchronously and emit an event when ready.
+
+```bash
+curl -X POST https://api.vinr.com/v1/loyalty/analytics/exports \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "program": "prog_default",
+    "type": "points_transactions",
+    "period": { "gte": "2026-05-01", "lt": "2026-06-01" },
+    "format": "csv"
+  }'
+```
+
+Listen for the completion event and download the file:
+
+```typescript
+vinr.webhooks.on('loyalty.export.ready', (event) => {
+  console.log(event.data.downloadUrl); // signed URL, expires in 24h
+});
+```
+
+<Callout type="info">
+Reconcile points liability against your ledger monthly. The export's running balance per member should match the `pointsLiability` in the summary report for the same `asOf` date. A drift usually points to refunds that clawed back points — see [Linking payments & loyalty](/docs/engagement/linking-payments-and-loyalty).
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Points & currency" href="/docs/engagement/points-and-currency" description="Earn rates, expiry, and how liability accrues." />
+  <Card title="Tiers & status" href="/docs/engagement/tiers-and-status" description="Segment members for cohort and tier analysis." />
+  <Card title="Engagement overview" href="/docs/engagement" description="Back to the loyalty pillar index." />
+</Cards>

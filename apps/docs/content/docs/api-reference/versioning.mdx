@@ -1,0 +1,123 @@
+---
+title: API versioning
+description: How VINR versions the API and ships breaking changes.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+VINR uses dated API versions so your integration keeps behaving the same way even as the platform evolves. This page explains the version scheme, how to pin a version, and how to upgrade safely when a breaking change ships.
+
+## Version scheme
+
+API versions are named after the date they were released, in `YYYY-MM-DD` form (for example `2026-04-01`). A new dated version is published only when VINR introduces a **breaking change** — anything that could cause a previously valid integration to behave differently.
+
+We treat the following as breaking, and therefore version-gated:
+
+- Removing or renaming a field, endpoint, or enum value.
+- Changing the type or meaning of an existing field.
+- Adding a new required request parameter.
+- Changing default behavior (for example, auto-capture vs. authorize-only).
+
+The following are **non-breaking** and ship to every version without a new release:
+
+- Adding new endpoints, optional request parameters, or response fields.
+- Adding new enum values to a field documented as extensible.
+- Adding new webhook event types.
+
+<Callout type="warn">
+Always write clients that tolerate unknown fields and unknown enum values. A non-breaking change can add a `status` value or a response field at any time, on any version. Treat unrecognized values as a pass-through default rather than throwing.
+</Callout>
+
+## Pinning a version
+
+Every account has a **default version** — the one shown in your dashboard and applied to any request that does not specify one explicitly. New accounts default to the latest version available at signup; the default never changes underneath you unless you upgrade it deliberately.
+
+You can override the version per request with the `Vinr-Version` header. This is the recommended way to test a new version against your live traffic before committing.
+
+<Tabs items={["SDK", "cURL"]}>
+<Tab value="SDK">
+
+```ts
+import { Vinr } from '@vinr/sdk';
+
+// Pin the whole client to a specific version.
+const vinr = new Vinr({
+  secretKey: process.env.VINR_SECRET_KEY,
+  apiVersion: '2026-04-01',
+});
+
+// Or override a single call without changing the client default.
+const payment = await vinr.payments.create(
+  { amount: 1000, currency: 'EUR', returnUrl: 'https://shop.example/return' },
+  { apiVersion: '2026-05-15' },
+);
+
+console.log(payment.id); // pay_...
+```
+
+</Tab>
+<Tab value="cURL">
+
+```bash
+curl https://api.vinr.com/v1/payments \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Vinr-Version: 2026-04-01" \
+  -H "Content-Type: application/json" \
+  -d '{ "amount": 1000, "currency": "EUR", "returnUrl": "https://shop.example/return" }'
+```
+
+</Tab>
+</Tabs>
+
+The version that handled a request is echoed back on the response so you can confirm what you got:
+
+```
+Vinr-Version: 2026-04-01
+```
+
+<Callout type="info">
+Webhook payloads are serialized using the **default version of the webhook endpoint**, not the version of the request that triggered the event. Set the version when you register the endpoint so your handler always receives a stable shape. See [Webhooks](/docs/integration/webhooks).
+</Callout>
+
+## Upgrade process
+
+Upgrading is opt-in. Nothing changes for a pinned integration until you move it forward. We recommend the following sequence for every version bump.
+
+<Steps>
+
+### Read the changelog
+
+Review the [API changelog](/docs/api-reference/changelog) entry for the target version. Each breaking change lists the affected resource, the old and new behavior, and a migration note.
+
+### Test in sandbox
+
+Point your sandbox client at the new version using the `apiVersion` option and run your integration suite against `https://sandbox.api.vinr.com`. Use the standard test cards (`4242 4242 4242 4242` for success) to exercise the full payment lifecycle.
+
+### Pin in production
+
+Set `apiVersion` explicitly in your production client to the new version. Because the call is pinned, you control the rollout — deploy behind a feature flag or to a canary fleet first if you want a gradual cutover.
+
+### Promote the account default
+
+Once every service is pinned and stable, update the account default version in **Dashboard → Developers → API version**. This protects any remaining unpinned requests and any newly issued keys.
+
+</Steps>
+
+### Deprecation policy
+
+When a version is superseded it is not removed. VINR supports each dated version for a **minimum of 18 months** after its successor ships. Before a version reaches end-of-life:
+
+- The account owner receives email notices at 180, 90, and 30 days.
+- Requests on the deprecated version return a `Vinr-Deprecation` response header with the sunset date.
+- The version is flagged in the dashboard with its retirement date.
+
+After end-of-life, requests pinned to the retired version are transparently served by the **oldest still-supported version**, which may surface breaking differences. Upgrade before the sunset date to avoid surprises.
+
+## Next steps
+
+<Cards>
+<Card title="API reference" href="/docs/api-reference" description="Endpoints, objects, and authentication." />
+<Card title="API changelog" href="/docs/api-reference/changelog" description="Dated entries for every breaking and non-breaking change." />
+<Card title="Webhooks" href="/docs/integration/webhooks" description="Pin event payload versions and verify signatures." />
+</Cards>

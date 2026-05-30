@@ -1,0 +1,75 @@
+---
+title: How billing works
+description: The objects and flow behind recurring revenue on VINR.
+persona: ["developer", "finance-manager"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+Billing composes a handful of objects — customers, products, prices, subscriptions, and invoices — into recurring revenue. Once you understand how they fit together and how money moves, every capability (trials, proration, usage, dunning, tax) is a variation on the same flow.
+
+## Core objects
+
+| Object | What it answers |
+|---|---|
+| `customer` | _Who_ is being billed (shared with [Payments](/docs/payments/customers)). |
+| `product` | _What_ you sell. |
+| `price` | _How much_ and _how often_ — e.g. €20 / month. |
+| `subscription` | The ongoing _relationship_ that generates invoices. |
+| `invoice` | A _statement_ for one billing period that Billing collects. |
+
+```typescript
+// A product can have many prices (monthly, yearly, regional).
+const product = await vinr.products.create({ name: 'Pro plan' });
+
+const price = await vinr.prices.create({
+  product: product.id,            // "prod_..."
+  amount: 2000,                   // €20.00
+  currency: 'EUR',
+  recurring: { interval: 'month' },
+});                               // "price_..."
+```
+
+## From price to invoice to payment
+
+A subscription is the engine. On each cycle it does the same four things:
+
+<Steps>
+
+### Generate a draft invoice
+
+At the start of the period, the subscription creates a draft `invoice` with line items from its prices (and any [usage](/docs/billing/usage-based-billing) or one-off [invoice items](/docs/api-reference/invoice-items)).
+
+### Finalize
+
+VINR applies [discounts](/docs/billing/coupons-and-discounts) and [tax](/docs/billing/tax), then finalizes — locking the invoice and computing the amount due.
+
+### Collect
+
+The finalized invoice becomes a [payment](/docs/payments/how-payments-work) against the customer's default method. This is where Billing hands off to Payments.
+
+### React
+
+VINR emits `invoice.paid` (or `invoice.payment_failed`, which triggers [dunning](/docs/billing/dunning-and-recovery)). You fulfil access on the event.
+
+</Steps>
+
+## Billing cycles & anchors
+
+The **billing cycle anchor** is the moment each period begins. By default it's the subscription's creation time, so a subscription created on the 15th bills on the 15th. You can align cycles (e.g. everyone bills on the 1st) by setting an explicit anchor — VINR [prorates](/docs/billing/trials-and-proration) the first partial period.
+
+<Callout type="info">
+Changing quantity or price mid-cycle creates **proration** line items on the next invoice — credit for unused time and a charge for the new rate. See [Trials & proration](/docs/billing/trials-and-proration).
+</Callout>
+
+## Where Payments fits
+
+Billing decides _what_ and _when_; Payments executes the collection. That separation means everything you configured in Payments — stored methods, [SCA](/docs/payments/strong-customer-authentication), retries, multicurrency — applies automatically to recurring charges. Failed collections flow into dunning rather than silently lapsing.
+
+## Where to go next
+
+<Cards>
+  <Card title="Products & prices" href="/docs/billing/products-and-prices" description="Model your catalog and pricing." />
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="The full subscription lifecycle." />
+  <Card title="Create a subscription" href="/docs/guides/create-a-subscription" description="A runnable end-to-end guide." />
+</Cards>

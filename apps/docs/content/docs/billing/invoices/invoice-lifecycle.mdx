@@ -1,0 +1,147 @@
+---
+title: Invoice lifecycle
+description: Draft, open, paid, void, and uncollectible states.
+persona: ["developer", "finance-manager"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+Every invoice on VINR moves through a small, well-defined set of states. Knowing which transitions are allowed — and which events fire on each — lets you reconcile revenue, automate fulfilment, and reason about money that is owed, collected, or written off.
+
+## The five states
+
+| Status | Meaning | Mutable? | Terminal? |
+|---|---|---|---|
+| `draft` | Being assembled; line items can still change. | Yes | No |
+| `open` | Finalized and awaiting payment. Amount due is locked. | No | No |
+| `paid` | Fully collected. | No | Yes |
+| `void` | Cancelled before payment; no money owed. | No | Yes |
+| `uncollectible` | Owed, but you've given up collecting it (bad debt). | No | Yes* |
+
+\*`uncollectible` is terminal for collection purposes, but you can still mark a later out-of-band payment, which moves it to `paid`.
+
+## The transition graph
+
+A draft is the only mutable state. Finalizing locks the invoice and computes `amount_due`; from there money decides the rest.
+
+<Steps>
+
+### draft → open
+
+Finalization applies [discounts](/docs/billing/coupons-and-discounts) and [tax](/docs/billing/tax), freezes line items, and assigns the invoice number. Drafts that belong to a subscription finalize automatically about an hour after creation; standalone drafts finalize when you call `finalize`.
+
+### open → paid
+
+A successful [payment](/docs/payments/how-payments-work) against the invoice — automatic collection on the customer's default method, or a recorded out-of-band payment — settles it.
+
+### open → void
+
+You cancel an invoice that should never be collected (duplicate, error, customer churned before paying). Voiding leaves an audit trail; deleting a `draft` does not. Only `open` and `draft` invoices can be voided.
+
+### open → uncollectible
+
+You accept the invoice won't be paid and write it off as bad debt. This stops [dunning](/docs/billing/dunning-and-recovery) but keeps the receivable visible for accounting.
+
+</Steps>
+
+<Callout type="info">
+`void` and `uncollectible` look similar but mean opposite things to finance. **Void** = "this was never a real debt." **Uncollectible** = "this was a real debt we failed to collect." Pick deliberately — they reconcile differently.
+</Callout>
+
+## Driving the lifecycle in code
+
+This walks a standalone invoice from draft to a terminal state. Amounts are integers in minor units (`1000` = EUR 10.00).
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// 1. Create a draft and attach a line item.
+const draft = await vinr.invoices.create({
+  customer: 'cust_8Qx2',
+  collectionMethod: 'charge_automatically',
+});                                          // "inv_..." status: draft
+
+await vinr.invoiceItems.create({
+  invoice: draft.id,
+  amount: 2500,                              // EUR 25.00
+  currency: 'EUR',
+  description: 'Onboarding setup fee',
+});
+
+// 2. Finalize -> open. Locks line items and computes amount_due.
+const open = await vinr.invoices.finalize(draft.id);
+console.log(open.status, open.amountDue);    // "open" 2500
+
+// 3a. Collect now -> paid.
+const paid = await vinr.invoices.pay(open.id);
+console.log(paid.status);                    // "paid"
+```
+
+To retire an invoice instead of collecting it, choose the transition that matches your accounting intent:
+
+```typescript
+// Cancel a debt that should never have existed.
+await vinr.invoices.void('inv_3kPq');         // open -> void
+
+// Write off a real debt you can't collect.
+await vinr.invoices.markUncollectible('inv_7Lm9'); // open -> uncollectible
+```
+
+<Callout type="warn">
+Once an invoice is `open` you cannot edit its line items — `amount_due` is locked for audit integrity. If the amount is wrong, `void` it and issue a corrected invoice rather than mutating the original.
+</Callout>
+
+## Events on each transition
+
+Wire fulfilment and reconciliation to webhooks, not to API responses, so retries and out-of-band payments are handled the same way. Verify every payload before trusting it.
+
+```typescript
+const event = vinr.webhooks.verify(payload, signature); // x-vinr-signature
+
+switch (event.type) {
+  case 'invoice.finalized':     /* draft -> open */      break;
+  case 'invoice.paid':          /* -> paid: grant access */ break;
+  case 'invoice.payment_failed':/* stays open: dunning */ break;
+  case 'invoice.voided':        /* -> void */             break;
+  case 'invoice.marked_uncollectible': /* -> uncollectible */ break;
+}
+```
+
+| Transition | Event |
+|---|---|
+| `draft` → `open` | `invoice.finalized` |
+| `open` → `paid` | `invoice.paid` |
+| collection fails (stays `open`) | `invoice.payment_failed` |
+| `open` → `void` | `invoice.voided` |
+| `open` → `uncollectible` | `invoice.marked_uncollectible` |
+
+## Edge cases
+
+<Accordions>
+
+<Accordion title="Failed collection does not change status">
+A declined charge leaves the invoice `open` and emits `invoice.payment_failed`. The invoice enters [dunning](/docs/billing/dunning-and-recovery), which retries on your schedule. Status only changes once a retry succeeds (`paid`) or you give up (`uncollectible`).
+</Accordion>
+
+<Accordion title="Refunding a paid invoice">
+A [refund](/docs/payments/refunds) returns money but does not move the invoice out of `paid` — the statement was still collected. Track the refund on the underlying `payment` (`re_...`), not the invoice status.
+</Accordion>
+
+<Accordion title="Subscription invoices auto-finalize">
+Invoices generated by a [subscription](/docs/billing/subscriptions) finalize automatically (~1 hour after the draft is created), giving you a window to add usage or one-off items before the amount locks. Standalone drafts wait for an explicit `finalize` call.
+</Accordion>
+
+<Accordion title="Recovering an uncollectible invoice">
+If a written-off customer pays out of band, record the payment on the invoice. VINR moves it from `uncollectible` to `paid` and emits `invoice.paid`, reversing the bad-debt entry in your reconciliation.
+</Accordion>
+
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="How billing works" href="/docs/billing/how-billing-works" description="Where invoices fit among customers, prices, and subscriptions." />
+  <Card title="Dunning & recovery" href="/docs/billing/dunning-and-recovery" description="What happens when an open invoice fails to collect." />
+  <Card title="Invoice events" href="/docs/api-reference/invoice-items" description="Build line items and react to invoice webhooks." />
+</Cards>

@@ -1,0 +1,119 @@
+---
+title: Revenue recognition
+description: Turn billing activity into recognized revenue reports.
+persona: ["finance-manager"]
+priority: "P2"
+lastUpdated: "2026-05-30"
+---
+
+Cash arrives when an invoice is paid, but revenue is _earned_ over the period you deliver the service. Revenue recognition translates VINR billing activity — invoices, refunds, and credits — into recognized and deferred revenue over time, so your books reflect when value was delivered rather than when money moved.
+
+<Callout type="info">
+Recognition runs on **accrual accounting** principles (ASC 606 / IFRS 15). VINR computes the schedules; your accountant decides the policies. This page is informational and is not accounting advice.
+</Callout>
+
+## Recognition basics
+
+When a customer pays €120 upfront for a year of service, you have not earned €120 — you have earned roughly €10 per month. VINR splits every invoice line item into two ledgers:
+
+| Term | Meaning |
+|---|---|
+| **Booked** | The total contract value, recorded when an invoice is finalized. |
+| **Recognized** | The portion already earned, as service is delivered over time. |
+| **Deferred** | Booked revenue not yet earned — a liability until you deliver. |
+
+Recognized plus deferred always equals booked for a given line item. As each day passes, VINR moves a slice from deferred to recognized.
+
+## Deferred vs. recognized
+
+The split is driven by the line item's **service period** — the window over which the obligation is fulfilled. A monthly subscription line has a one-month service period; a one-off setup fee may recognize immediately.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// Inspect how a paid invoice is recognized over time.
+const schedule = await vinr.revenue.schedules.retrieve('inv_8Qz1Kp');
+
+console.log(schedule.booked);      // 12000  → €120.00 total
+console.log(schedule.recognized);  // 1000   → €10.00 earned so far
+console.log(schedule.deferred);    // 11000  → €110.00 still a liability
+```
+
+A €120/year subscription finalized on Jan 1 recognizes ~€10 each month. By March 31 you have recognized €30 and deferred €90 — even though all €120 hit your bank in January.
+
+## Schedules & rules
+
+A **recognition schedule** is the per-line plan for moving revenue from deferred to recognized. VINR generates one automatically from each finalized invoice line, using the **recognition rule** that matches the line.
+
+<TypeTable
+  type={{
+    method: { type: '"ratable" | "immediate" | "milestone"', description: "How revenue spreads across the service period.", default: '"ratable"' },
+    startDate: { type: "timestamp", description: "When recognition begins. Defaults to the service period start.", default: "service_start" },
+    endDate: { type: "timestamp", description: "When recognition completes.", default: "service_end" },
+    account: { type: "string", description: "Ledger account code mapped to your chart of accounts.", default: "null" },
+  }}
+/>
+
+<Steps>
+
+### Choose a method
+
+`ratable` spreads evenly across the period (the default for subscriptions). `immediate` recognizes the full amount at finalization (typical for one-off fees). `milestone` recognizes on explicit completion events.
+
+### Map to your chart of accounts
+
+Tag each rule with an `account` code so exports line up with the ledger your accountant maintains. Set it once per product or price.
+
+### Handle adjustments
+
+Refunds, credit notes, and mid-cycle [proration](/docs/billing/trials-and-proration) generate their own schedule entries — VINR reverses the unearned portion and re-recognizes the rest. You never edit recognized revenue by hand.
+
+</Steps>
+
+<Callout type="warn">
+A **refund** reverses both recognized and deferred revenue proportionally to what was earned at the refund date. Refunding a half-consumed annual plan claws back only the deferred half, not revenue you already earned.
+</Callout>
+
+## Reports & exports
+
+Pull recognized revenue for any window — for example, a monthly close.
+
+```bash
+curl https://api.vinr.com/v1/revenue/reports \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -d "period_start=2026-05-01" \
+  -d "period_end=2026-05-31" \
+  -d "group_by=account"
+```
+
+```json
+{
+  "object": "revenue.report",
+  "period": { "start": "2026-05-01", "end": "2026-05-31" },
+  "currency": "EUR",
+  "totals": { "recognized": 482300, "deferred_end": 1190050 },
+  "by_account": [
+    { "account": "4000-subscriptions", "recognized": 461200 },
+    { "account": "4010-setup-fees",    "recognized":  21100 }
+  ]
+}
+```
+
+Reports are immutable once a period is closed, giving you an auditable trail. Export as CSV for spreadsheets or JSON for your ledger sync, and reconcile `recognized` against the journal entries in your accounting system.
+
+## Working with your accountant
+
+VINR produces the schedules; your finance team owns the policy decisions. Agree up front on the recognition method per product, the chart-of-accounts mapping, and your close cadence. Lock each period only after reconciling — reopening a closed period regenerates downstream reports.
+
+<Callout type="info">
+Recognition reflects [invoice](/docs/billing/how-billing-works) and refund activity, not raw [payments](/docs/payments/how-payments-work). A payment that never finalizes an invoice does not create recognized revenue.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="How billing works" href="/docs/billing/how-billing-works" description="The objects and flow that feed recognition." />
+  <Card title="Trials & proration" href="/docs/billing/trials-and-proration" description="How mid-cycle changes adjust schedules." />
+  <Card title="Reporting & reconciliation" href="/docs/operations/reporting" description="Close the books and reconcile payouts." />
+</Cards>

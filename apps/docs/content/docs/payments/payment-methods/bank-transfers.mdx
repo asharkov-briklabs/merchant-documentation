@@ -1,0 +1,160 @@
+---
+title: Bank transfers
+description: SEPA, faster payments, and account-to-account rails.
+persona: ["developer", "finance-manager"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Bank transfers move money directly between accounts, with no card network in between. They settle with strong finality and low cost, which makes them ideal for high-value orders, invoices, and recurring B2B billing — at the price of being slower and asynchronous. This page covers which rails VINR supports, how the push-vs-pull flow works, how to create a transfer payment, and how settlement and refunds behave.
+
+## Availability & currencies
+
+VINR exposes account-to-account rails under a single `bank_transfer` method, automatically selecting the right network from the currency and the customer's country.
+
+| Rail | Currencies | Region | Speed | Type |
+|---|---|---|---|---|
+| SEPA Credit Transfer | EUR | EEA | 1–2 business days | Push |
+| SEPA Instant | EUR | EEA | Seconds–minutes | Push |
+| Faster Payments | GBP | UK | Minutes | Push |
+| SEPA Direct Debit | EUR | EEA | 2–5 business days | Pull |
+| Bacs Direct Debit | GBP | UK | 3 business days | Pull |
+
+<Callout type="info">
+**Push** rails ask the customer to send funds to a VINR-generated virtual account (a credit transfer). **Pull** rails (direct debit) let you collect from a mandate the customer authorized once — these are the backbone of [recurring billing](/docs/billing). Availability depends on your account's enabled capabilities; check the Dashboard or call `vinr.account.capabilities()`.
+</Callout>
+
+## How the flow works
+
+A push transfer is inherently asynchronous: you cannot confirm funds at checkout the way you can with a card. The payment exists before the money arrives.
+
+<Steps>
+
+### Create the payment
+
+You create a `payment` with `method: 'bank_transfer'`. VINR returns virtual account credentials (IBAN/account number) and a unique reference the customer must include.
+
+### Customer initiates the transfer
+
+The customer pushes funds from their own bank, quoting the reference. For SEPA Instant or Faster Payments this lands in seconds; standard SEPA takes 1–2 business days.
+
+### VINR reconciles the inbound funds
+
+VINR matches the incoming credit to the reference and amount. The `payment` transitions `pending` → `processing` → `completed`, firing `payment.completed`.
+
+### You fulfill the order
+
+Wait for the webhook before releasing goods. Never fulfill on `pending` for push transfers — the funds are not yet guaranteed.
+
+</Steps>
+
+```
+customer's bank → [push transfer w/ reference] → VINR virtual account → [reconcile] → your balance
+```
+
+## Creating a payment
+
+Create the payment server-side and surface the returned bank instructions to your customer.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 49900,                 // €499.00 in minor units
+  currency: 'EUR',
+  method: 'bank_transfer',
+  description: 'Invoice INV-2026-0042',
+  customer: 'cust_8Hk2mPq',
+  metadata: { invoiceId: 'inv_8Hk2mPq' },
+});
+
+// payment.id     → "pay_3Nf8x2a..."
+// payment.status → "pending"
+// payment.bankTransfer → {
+//   iban: "DE89 3704 0044 0532 0130 00",
+//   reference: "VINR-9KX2-7QP4",   // customer MUST include this
+//   accountHolder: "VINR Payments",
+//   rail: "sepa_credit_transfer"
+// }
+```
+
+Display `payment.bankTransfer.reference` prominently — it is how VINR attributes the inbound funds. Transfers missing or mismatching the reference land in a manual review queue and settle late.
+
+For pull rails, collect a mandate first and reference it on the charge:
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 1999,
+  currency: 'EUR',
+  method: 'bank_transfer',
+  customer: 'cust_8Hk2mPq',
+  mandate: 'mandate_4Tg1Lz',      // SEPA Direct Debit authorization
+});
+```
+
+### React to the result with webhooks
+
+Because confirmation is asynchronous, webhooks — not the create response — are the source of truth.
+
+```typescript
+export async function POST(req: Request) {
+  const payload = await req.text();
+  const signature = req.headers.get('x-vinr-signature')!;
+
+  const event = vinr.webhooks.verify(payload, signature);
+
+  switch (event.type) {
+    case 'payment.completed':
+      await fulfillOrder(event.data.metadata.invoiceId);
+      break;
+    case 'payment.failed':       // e.g. direct debit returned for insufficient funds
+      await flagUnpaid(event.data.id);
+      break;
+  }
+
+  return new Response('ok', { status: 200 });
+}
+```
+
+## Settlement & timing
+
+Once a transfer reaches `completed`, the funds enter your VINR balance and pay out on your normal [settlement](/docs/operations/settlement) schedule. Two timings matter:
+
+- **Time to completion** — how long until `payment.completed`. SEPA Instant and Faster Payments are near-real-time; standard SEPA and direct debit take days.
+- **Time to settlement** — when the balance reaches your bank, governed by your payout schedule, independent of the rail.
+
+<Callout type="warn">
+Push payments can sit in `pending` indefinitely if the customer never sends funds. VINR expires unpaid push payments after the window set on your account (default 14 days), firing `payment.expired`. Reconcile open invoices against this event rather than assuming a `pending` payment will complete.
+</Callout>
+
+## Refunds & reversals
+
+Refunds return funds to the originating account using the stored payout details. Create one against a completed payment:
+
+```typescript
+const refund = await vinr.refunds.create({
+  payment: 'pay_3Nf8x2a',
+  amount: 49900,                 // omit for a full refund
+  reason: 'requested_by_customer',
+});
+// refund.id → "re_6Pd9w1c", refund.status → "pending"
+```
+
+Bank refunds are themselves transfers, so they take 1–2 business days to land and fire `refund.completed` when done. Direct debit collections can also be **returned** by the customer's bank (e.g. no mandate, insufficient funds) after they appeared to succeed; VINR surfaces this as `payment.failed` and reverses the balance — design fulfillment to tolerate a clawback within the return window.
+
+## Limitations
+
+- No instant authorization on push rails — never fulfill before `payment.completed`.
+- Partial inbound amounts are held for review, not auto-completed.
+- Direct debit requires a valid mandate and is subject to return windows.
+- Disputes work differently than cards: there are no chargebacks on credit transfers, but direct debit returns can occur.
+
+## Next steps
+
+<Cards>
+  <Card title="How payments work" href="/docs/payments/how-payments-work" description="The object model and states behind every rail." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Verify and handle asynchronous payment events." />
+  <Card title="Settlement" href="/docs/operations/settlement" description="When completed funds reach your bank." />
+</Cards>

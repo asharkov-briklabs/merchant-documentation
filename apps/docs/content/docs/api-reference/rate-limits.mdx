@@ -1,0 +1,139 @@
+---
+title: Rate limits
+description: Request limits and how to handle 429s.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+VINR throttles API traffic to keep the platform fast and fair for every merchant. This page explains the per-environment limits, the headers that let you track your budget in real time, and how to back off cleanly when you hit a `429 Too Many Requests`.
+
+## How limiting works
+
+Limits are enforced per **secret key** using a token-bucket algorithm. Each bucket refills continuously at a fixed rate and holds a burst allowance on top, so short spikes are absorbed while sustained overuse is throttled. Read and write operations share the same key but are metered in separate buckets — a flood of `GET /payments` calls will not consume your capacity to create payments.
+
+<Callout type="info">
+Limits apply to your account as a whole, not to individual IP addresses. Spreading requests across many servers or containers does not raise your ceiling.
+</Callout>
+
+## Limits by environment
+
+| Environment | Sustained rate | Burst | Scope |
+|---|---|---|---|
+| Sandbox | 25 req/s | 50 | Per secret key |
+| Production (standard) | 100 req/s | 200 | Per secret key |
+| Production (scale) | 500 req/s | 1000 | Per secret key |
+
+Webhook delivery, hosted checkout sessions, and the dashboard are not counted against your API budget. Bulk endpoints such as list operations return up to 100 objects per page; paginate with the `starting_after` cursor rather than polling a single page in a tight loop.
+
+<Callout type="warn">
+The **scale** tier is enabled per account, not self-served. If a launch or migration needs headroom, request an increase before the event — see [Next steps](#next-steps).
+</Callout>
+
+## Rate-limit headers
+
+Every response includes headers describing your current budget. Read them on success as well as on `429`, so you can throttle proactively instead of reacting to errors.
+
+| Header | Meaning |
+|---|---|
+| `X-RateLimit-Limit` | Maximum requests allowed in the current window |
+| `X-RateLimit-Remaining` | Requests left before throttling kicks in |
+| `X-RateLimit-Reset` | Unix epoch seconds when the bucket fully refills |
+| `Retry-After` | Seconds to wait before retrying (present only on `429`) |
+
+A throttled response uses status `429` with a structured body:
+
+```json
+{
+  "error": {
+    "type": "rate_limit_error",
+    "code": "too_many_requests",
+    "message": "Request rate exceeded. Retry after 2 seconds.",
+    "retry_after": 2
+  }
+}
+```
+
+## Backoff strategy
+
+When you receive a `429`, wait at least the number of seconds in `Retry-After`, then retry with **exponential backoff and jitter**. Jitter prevents many clients from retrying in lockstep and re-triggering the limit. The SDK applies this automatically for idempotent operations, but here is the logic if you call the REST API directly.
+
+<Tabs items={["SDK", "REST (fetch)"]}>
+<Tab value="SDK">
+
+The SDK retries `429` and `5xx` responses transparently, honoring `Retry-After`. Tune the behavior at construction time:
+
+```ts
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({
+  secretKey: process.env.VINR_SECRET_KEY,
+  maxRetries: 5,        // attempts after the initial request
+  retryBaseDelayMs: 250 // grows exponentially with jitter, capped at Retry-After
+});
+
+// No special handling needed — throttled calls are retried for you.
+const payment = await vinr.payments.create({
+  amount: 1000,
+  currency: 'EUR',
+  returnUrl: 'https://shop.example.com/return',
+});
+```
+
+</Tab>
+<Tab value="REST (fetch)">
+
+```ts
+async function callWithBackoff(path: string, init: RequestInit, attempt = 0): Promise<Response> {
+  const res = await fetch(`https://api.vinr.com/v1${path}`, {
+    ...init,
+    headers: { 'X-Api-Key': process.env.VINR_SECRET_KEY!, ...init.headers },
+  });
+
+  if (res.status !== 429 || attempt >= 5) return res;
+
+  const retryAfter = Number(res.headers.get('Retry-After') ?? 1);
+  const backoff = Math.min(2 ** attempt * 250, retryAfter * 1000);
+  const jitter = Math.random() * backoff;
+  await new Promise((r) => setTimeout(r, backoff + jitter));
+
+  return callWithBackoff(path, init, attempt + 1);
+}
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="error">
+Never retry in a tight `while` loop without delay. Hammering a throttled key keeps the bucket empty, extends your `Retry-After`, and can trip abuse protection.
+</Callout>
+
+## Staying under the limit
+
+<Steps>
+
+### Read the remaining budget
+
+Inspect `X-RateLimit-Remaining` on responses and slow down before it reaches zero, rather than waiting for the first `429`.
+
+### Prefer webhooks over polling
+
+Subscribe to events like `payment.completed` and `invoice.paid` instead of polling list endpoints. See [Webhooks](/docs/integration/webhooks).
+
+### Batch and paginate
+
+Use cursor pagination and request the largest page size you need, instead of issuing many small calls.
+
+### Use idempotency keys
+
+Send an `idempotencyKey` on writes so a safe retry never creates a duplicate `pay_` or `re_` resource.
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="API Reference" href="/docs/api-reference" description="Endpoints, parameters, and the full error code table." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Replace polling with event-driven delivery to cut request volume." />
+  <Card title="Errors & troubleshooting" href="/docs/troubleshooting" description="Diagnose 429s and other API errors in production." />
+</Cards>

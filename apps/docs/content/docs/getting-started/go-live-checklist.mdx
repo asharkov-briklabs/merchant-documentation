@@ -1,0 +1,148 @@
+---
+title: Go-live checklist
+description: Everything to verify before switching to live keys.
+persona: ["developer", "operations"]
+priority: "P0"
+lastUpdated: "2026-05-30"
+---
+
+Switching from sandbox to live keys means you start moving real money — there are no test cards in production. Work through every item below before you flip the switch, and keep this page handy for your launch retro.
+
+<Callout type="warn">
+Live keys process real charges, real payouts, and real disputes. Treat the cutover as a release: schedule it, assign an owner, and have a rollback plan (revert to sandbox keys and pause traffic).
+</Callout>
+
+## Keys & environments
+
+Your sandbox key (`sk_test_…`) and live key (`sk_live_…`) are interchangeable in code — only the value changes. The mistake that causes most launch incidents is a key leaking into the wrong environment.
+
+<Steps>
+
+### Separate keys per environment
+
+Store the live secret key only in your production secret manager. Never commit it, never log it, and never ship it to a browser bundle. The public key (`pk_live_…`) is the only credential allowed client-side.
+
+```bash
+# Production environment only
+VINR_SECRET_KEY=sk_live_xxxxxxxxxxxxxxxxxxxx
+VINR_PUBLIC_KEY=pk_live_xxxxxxxxxxxxxxxxxxxx
+VINR_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxx
+```
+
+### Confirm the base URL switches with the key
+
+The SDK targets `https://api.vinr.com` automatically for live keys and `https://sandbox.api.vinr.com` for test keys. If you call the REST API directly, make sure your environment config flips the host alongside the `X-Api-Key` header — a live key against the sandbox host returns `401`.
+
+### Rotate any exposed test keys
+
+If a sandbox key ever appeared in a public repo, a screenshot, or a support ticket, rotate it in **Settings → API Keys** before launch so old credentials cannot be confused with new ones.
+
+</Steps>
+
+## Webhooks & idempotency
+
+Webhooks are how your backend learns that money actually moved. A missed or duplicated event becomes a missed fulfillment or a double shipment.
+
+<Steps>
+
+### Register a live endpoint
+
+Create a webhook endpoint (`we_…`) pointing at your production URL and subscribe to the events you act on — at minimum `payment.completed`, `payment.failed`, `invoice.paid`, and any `loyalty.points.earned` events you reconcile.
+
+### Verify every signature
+
+Always verify the `x-vinr-signature` header before trusting a payload. Reject anything that fails.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+export async function POST(req: Request) {
+  const payload = await req.text();
+  const signature = req.headers.get('x-vinr-signature');
+
+  let event;
+  try {
+    event = vinr.webhooks.verify(payload, signature);
+  } catch {
+    return new Response('Invalid signature', { status: 400 });
+  }
+
+  // De-duplicate: VINR may redeliver the same evt_ on retry.
+  if (await alreadyProcessed(event.id)) {
+    return new Response('OK', { status: 200 });
+  }
+
+  await handleEvent(event);
+  await markProcessed(event.id);
+
+  return new Response('OK', { status: 200 });
+}
+```
+
+### Make handlers idempotent
+
+Persist each processed `evt_` id and short-circuit duplicates. Return `2xx` only after you have durably recorded the result; return `5xx` to trigger a retry. Send an `Idempotency-Key` on write requests so client-side retries never create a second `pay_`.
+
+</Steps>
+
+<Callout type="info">
+Test the full path in sandbox first: trigger a redelivery from the dashboard and confirm your handler returns `200` without double-processing.
+</Callout>
+
+## Error & decline handling
+
+In production, declines and network errors are routine, not edge cases. Handle them explicitly so customers see clear messaging and your team is not paged for expected failures.
+
+- **Declines** — Surface a retry prompt for soft declines and a "use another method" path for hard declines. Do not retry a hard decline automatically.
+- **Network & timeouts** — Wrap API calls with bounded retries and backoff, keyed by `Idempotency-Key`.
+- **Webhook lag** — Never assume synchronous success. Show a pending state until `payment.completed` arrives.
+- **Validation errors** — Log the request id from `4xx` responses for support, but never echo raw error bodies to end users.
+
+Confirm your decline copy in sandbox using the test cards `4000 0000 0000 0002` (declined) and `4000 0000 0000 3220` (3DS challenge).
+
+## Compliance sign-off
+
+<TypeTable
+  type={{
+    businessVerified: { type: "boolean", description: "KYB / business verification approved in the dashboard", default: "required" },
+    payoutAccount: { type: "boolean", description: "Settlement bank account added and confirmed", default: "required" },
+    refundPolicy: { type: "boolean", description: "Refund and cancellation terms published to customers", default: "required" },
+    scaReady: { type: "boolean", description: "3DS / SCA enabled for in-scope regions", default: "required" },
+  }}
+/>
+
+Confirm your account is fully verified, your payout (`po_`) destination is set, and that any region-specific authentication (such as SCA in the EEA) is enabled. Make sure your customer-facing terms, refund policy, and privacy notice are live before you accept real payments.
+
+## Monitoring & alerts
+
+You cannot fix what you cannot see. Wire up observability before the first live charge, not after the first incident.
+
+<Steps>
+
+### Alert on the metrics that matter
+
+Set alerts on authorization rate, dispute (`dp_`) rate, webhook delivery failures, and payout (`po_`) status. A sudden drop in authorization rate is the earliest signal of a misconfiguration.
+
+### Log every payment id
+
+Record the `pay_` id, `evt_` id, and request id for every transaction so you can trace a single customer's journey end to end during a support escalation.
+
+### Run a smoke test on live keys
+
+Process one small real payment, confirm the webhook fires, then refund it (`re_`). This proves keys, webhooks, and payouts work together in production.
+
+</Steps>
+
+<Callout type="info">
+Once live, watch your first hour closely. Keep the rollback plan one command away: swap back to sandbox keys and pause inbound traffic if authorization rate or webhook delivery degrades.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Authentication" href="/docs/getting-started/authentication" description="Manage live and test keys securely." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Build reliable, idempotent event handling." />
+  <Card title="Monitoring & alerts" href="/docs/operations" description="Dashboards and alerting for live traffic." />
+</Cards>

@@ -1,0 +1,147 @@
+---
+title: Dunning & recovery
+description: Retry failed payments and recover revenue.
+persona: ["developer", "finance-manager", "operations"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+When a recurring payment fails, VINR's dunning engine retries on a schedule, notifies customers, and can pause or cancel — maximizing recovered revenue without manual chasing. This page covers why charges fail, how retries are scheduled, and how to wire your application to the resulting events.
+
+## Why recurring payments fail
+
+Most failures are not fraud — they are transient. Knowing the reason lets the engine choose the right recovery path.
+
+| Failure class | Typical cause | Recoverable by retry? |
+|---|---|---|
+| Soft decline | Insufficient funds, temporary limit | Yes — often within days |
+| Expired card | Stored method past its expiry | Yes, after card update |
+| SCA required | Issuer demands [authentication](/docs/payments/strong-customer-authentication) | Yes, via off-session prompt |
+| Hard decline | Stolen card, closed account | No — requires a new method |
+
+VINR records the decline reason on the failed `payment` and on the `invoice.payment_failed` event so you can branch on it.
+
+## Retry schedules
+
+A **dunning policy** defines the cadence of retry attempts after the first collection fails. Attach one to a subscription, or set an account default that applies everywhere.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const policy = await vinr.billing.dunningPolicies.create({
+  name: 'Standard recovery',
+  retries: [
+    { afterDays: 1 },             // first retry, 1 day after failure
+    { afterDays: 3 },
+    { afterDays: 5, smart: true }, // let VINR pick the optimal time
+    { afterDays: 7 },
+  ],
+  onExhausted: 'cancel',          // 'cancel' | 'pause' | 'leave_unpaid'
+  notify: true,                   // send the built-in dunning emails
+});
+
+await vinr.subscriptions.update('sub_4Kp2', { dunningPolicy: policy.id });
+```
+
+<Callout type="info">
+Each retry reuses the customer's default payment method. To recover expired cards, prompt the customer to update their method — the next scheduled retry picks up the new card automatically.
+</Callout>
+
+## Smart retries
+
+Setting `smart: true` on an attempt hands timing to VINR's model instead of a fixed offset. Rather than retrying at a literal clock time, it estimates when the issuer is most likely to approve — for example, just after a typical payday or once a temporary hold clears — and shifts the attempt within a window around your configured day. Smart retries also suppress duplicate attempts when the network signals a permanent (hard) decline, so you do not burn retry budget on a charge that can never succeed.
+
+## The recovery lifecycle
+
+<Steps>
+
+### First collection fails
+
+The finalized invoice's payment is declined. VINR marks the invoice `past_due`, emits `invoice.payment_failed`, and starts the attached dunning policy.
+
+### Scheduled retries run
+
+At each configured offset VINR re-attempts collection. A success emits `invoice.paid` and ends the cycle; a failure emits `invoice.payment_failed` again with the attempt count.
+
+### Customer is notified
+
+If `notify` is on, VINR sends the dunning email sequence (see below). The customer can update their card via the hosted [billing portal](/docs/billing/customer-portal).
+
+### Retries are exhausted
+
+If every attempt fails, VINR applies the policy's `onExhausted` outcome and emits a terminal event such as `subscription.deleted` or `subscription.paused`.
+
+</Steps>
+
+## React to dunning in code
+
+Verify the webhook signature, then branch on the event and the decline reason. This is the single integration point most merchants need.
+
+```typescript
+app.post('/webhooks/vinr', async (req, res) => {
+  const event = vinr.webhooks.verify(
+    req.rawBody,
+    req.headers['x-vinr-signature'],
+  );
+
+  switch (event.type) {
+    case 'invoice.payment_failed': {
+      const inv = event.data;             // "inv_..."
+      // attempt 0 = first failure; later attempts come from retries
+      if (inv.dunning.reason === 'card_expired') {
+        await emailUpdateCardLink(inv.customer);
+      }
+      break;
+    }
+    case 'invoice.paid':
+      await grantAccess(event.data.customer);   // recovered
+      break;
+    case 'subscription.deleted':
+      await revokeAccess(event.data.customer);  // exhausted
+      break;
+  }
+
+  res.sendStatus(200);
+});
+```
+
+## Subscription outcomes
+
+When retries run out, the `onExhausted` setting decides what happens to the relationship:
+
+- **`cancel`** — the subscription is deleted and access should be revoked. Use for self-serve plans where churn is acceptable.
+- **`pause`** — billing stops but the subscription is retained, so the customer can resume by paying once their method works. Best for high-value accounts you want to win back.
+- **`leave_unpaid`** — the subscription stays active with an unpaid balance, deferring the collections decision to your team. Use with manual finance review.
+
+<Callout type="warn">
+`leave_unpaid` keeps granting service while revenue is uncollected. Pair it with an internal alert on `invoice.payment_failed` so an operator follows up before the balance grows.
+</Callout>
+
+## Customer emails
+
+With `notify: true`, VINR sends a localized sequence — an initial "payment failed" notice, reminders before later retries, and a final "subscription ending" message if collection is abandoned. Each links to the hosted portal where the customer updates their card. You can disable the built-in emails and drive your own messaging entirely from the webhook events above.
+
+## Recovery reporting
+
+Every dunning cycle is summarized for finance. Pull recovered revenue and recovery rate over a window to measure policy effectiveness.
+
+```typescript
+const report = await vinr.billing.dunningPolicies.recovery({
+  from: '2026-05-01',
+  to: '2026-05-31',
+});
+
+console.log(report.recoveredAmount); // minor units, e.g. 184500 = €1,845.00
+console.log(report.recoveryRate);    // 0.62 → 62% of failed invoices recovered
+```
+
+Recovery data also appears on each [settlement](/docs/operations/settlements-and-payouts) so recovered amounts reconcile against payouts.
+
+## Next steps
+
+<Cards>
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="The full subscription lifecycle dunning acts on." />
+  <Card title="Customer portal" href="/docs/billing/customer-portal" description="Let customers update failed payment methods." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Verify and handle the events dunning emits." />
+</Cards>

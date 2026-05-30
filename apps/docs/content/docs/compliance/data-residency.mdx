@@ -1,0 +1,130 @@
+---
+title: Data residency
+description: Where VINR stores and processes data.
+persona: ["compliance-officer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+VINR lets you control the geographic region where your account's data is stored at rest, while a smaller set of operational data is processed globally to run the network. This page explains which regions exist, what you can pin to a region, and how cross-border transfers are governed.
+
+This page is informational and not legal advice; consult your compliance counsel for binding decisions.
+
+## Processing regions
+
+Every VINR account is provisioned in exactly one **primary region**, selected at signup and shown on your dashboard under Settings, Compliance. The primary region determines where your customer, payment, billing, and loyalty records live at rest.
+
+| Region | Code | Data center footprint | Default for |
+|---|---|---|---|
+| European Union | `eu` | Frankfurt, Dublin | EEA-headquartered accounts |
+| United Kingdom | `uk` | London | UK-headquartered accounts |
+| United States | `us` | Virginia, Oregon | US-headquartered accounts |
+
+Within a region, VINR replicates data across at least two availability zones for durability. Replication never crosses a region boundary, so an `eu` account's records do not leave the EU at rest.
+
+<Callout type="info">
+The primary region is fixed for the life of the account. Migrating an existing account to a different region requires a supervised data move — open a request with support rather than re-signing up, so your historical `pay_`, `inv_`, and `loy_` records move with you.
+</Callout>
+
+You can read your account's region programmatically. The value is stable, so it is safe to cache.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const account = await vinr.account.retrieve();
+
+console.log(account.region);            // "eu"
+console.log(account.data_residency);    // "pinned" | "standard"
+```
+
+## Residency options
+
+Two tiers control how strictly data is bound to your primary region.
+
+<TypeTable
+  type={{
+    standard: {
+      type: "tier",
+      description: "Data at rest stays in the primary region; transient processing (fraud scoring, 3DS routing) may use global edge nodes.",
+      default: "all accounts",
+    },
+    pinned: {
+      type: "tier",
+      description: "Data at rest and all primary processing stay in-region. Available for eu and uk accounts on Scale plans.",
+      default: "opt-in",
+    },
+  }}
+/>
+
+The distinction matters because not all data is equal. The table below shows what each tier guarantees.
+
+| Data class | Examples | `standard` | `pinned` |
+|---|---|---|---|
+| Records at rest | Customers, payments, invoices, loyalty accounts | In-region | In-region |
+| Card data (PAN) | Tokenized at the network HSM | In-region | In-region |
+| Fraud signals | Device fingerprint, velocity counters | Global | In-region |
+| Webhook delivery | Outbound `evt_` payloads | Egress from region | Egress from region |
+| Operational logs | Request traces, error logs (no PAN) | Global, 30-day retention | In-region, 30-day retention |
+
+<Callout type="warn">
+Card primary account numbers (PANs) are never stored in your VINR region in plaintext under any tier — they are tokenized inside a PCI-DSS Level 1 HSM boundary. Your records hold only `pay_` tokens. See [PCI compliance](/docs/compliance/pci-compliance).
+</Callout>
+
+## Cross-border transfers
+
+Some flows are inherently cross-border: a customer in Canada paying an `eu` merchant, or a card network in the US authorizing a transaction. VINR minimizes and governs these transfers rather than eliminating them.
+
+<Steps>
+
+### Authorization routing
+
+When a card is charged, the authorization request is routed to the card network's regional endpoint. This carries the token and amount, never your stored records.
+
+### Standard contractual clauses
+
+Transfers of personal data out of the EEA or UK are covered by EU SCCs and the UK International Data Transfer Addendum, executed as part of the VINR [Data Processing Addendum](/docs/compliance/dpa). You do not sign these per-transfer.
+
+### Sub-processor flow-down
+
+VINR's sub-processors are bound by the same transfer terms. The current list is published and version-controlled at the link in Next steps.
+
+</Steps>
+
+You can audit where a given object was last processed using the residency field on the event log. Each `evt_` records the region that emitted it.
+
+```bash
+curl https://api.vinr.com/v1/events/evt_1a2b3c \
+  -H "X-Api-Key: $VINR_SECRET_KEY"
+```
+
+```json
+{
+  "id": "evt_1a2b3c",
+  "type": "payment.completed",
+  "region": "eu",
+  "created": 1779999999
+}
+```
+
+## Certifications
+
+VINR maintains the certifications most relevant to payment and personal data, scoped to the regions above. Certificates and audit reports are available under NDA from the dashboard.
+
+- **PCI-DSS Level 1** — annual ROC, covering card data handling across all regions.
+- **SOC 2 Type II** — covering security, availability, and confidentiality.
+- **ISO 27001** — information security management for the EU and UK regions.
+- **GDPR / UK GDPR** — VINR acts as a processor under your instructions per the DPA.
+
+<Callout type="info">
+Certification scope is per region. If you operate in multiple regions through separate accounts, confirm the certificate you rely on lists the specific region code (`eu`, `uk`, or `us`).
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="PCI compliance" href="/docs/compliance/pci-compliance" description="How VINR tokenizes card data and reduces your scope." />
+  <Card title="Data Processing Addendum" href="/docs/compliance/dpa" description="Transfer terms, SCCs, and the sub-processor list." />
+  <Card title="Compliance overview" href="/docs/compliance" description="All certifications and regulatory programs." />
+</Cards>

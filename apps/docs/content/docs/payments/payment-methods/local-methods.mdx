@@ -1,0 +1,130 @@
+---
+title: Local methods
+description: Region-specific methods such as iDEAL, Blik, and more.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Local methods are region-specific ways to pay that customers trust over cards in their home market — iDEAL in the Netherlands, Blik in Poland, Bancontact in Belgium, and more. Most are bank-redirect or app-confirmation flows: the customer approves the charge in their own banking app, which means high conversion and, for many of them, payments that are final the moment they confirm.
+
+## Availability & currencies
+
+Each method is tied to the customer's country and a single settlement currency. VINR surfaces only the methods that match the payment's currency and the customer's region, so you can pass `methods: ['auto']` and let the hosted page decide.
+
+| Method | Region | Currency | Flow | Finality |
+|---|---|---|---|---|
+| iDEAL | Netherlands | EUR | Bank redirect | Final |
+| Blik | Poland | PLN | 6-digit code / app | Final |
+| Bancontact | Belgium | EUR | Bank redirect / app | Final |
+| EPS | Austria | EUR | Bank redirect | Final |
+| Przelewy24 | Poland | PLN, EUR | Bank redirect | Final |
+| Twint | Switzerland | CHF | App confirmation | Final |
+
+<Callout type="info">
+Local methods are single-currency: a customer paying with iDEAL must be charged in EUR, Blik in PLN. To present a local method to a shopper in another currency, convert the amount before creating the payment. See [multi-currency](/docs/payments/multi-currency).
+</Callout>
+
+## How the flow works
+
+A local-method payment moves through the same `payment` object as any other rail, but always involves a redirect or app handoff:
+
+<Steps>
+
+### Create the payment
+
+You create a `pending` payment scoped to one or more local methods and receive a `checkoutUrl`.
+
+### Customer authenticates with their bank
+
+The customer is redirected to (or confirms in) their bank or banking app. For Blik they enter a 6-digit code generated in-app.
+
+### Bank confirms and redirects back
+
+On approval the bank pushes the customer to your `returnUrl`. The payment moves to `completed`; most local methods are **final** at this point with no chargeback path.
+
+### You fulfill on the webhook
+
+Treat the `payment.completed` webhook — not the browser redirect — as the source of truth before releasing goods.
+
+</Steps>
+
+## Creating a payment
+
+Restrict the payment to the methods you want, or pass `'auto'` to let VINR pick by region and currency. The hosted checkout renders the right bank picker or code entry.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 2500,                 // €25.00 in minor units
+  currency: 'EUR',
+  description: 'Order #4471',
+  methods: ['ideal', 'bancontact'],
+  returnUrl: 'https://yoursite.com/payment/complete',
+  metadata: { orderId: '4471' },
+});
+
+// payment.id          → "pay_3Nf8x2a..."
+// payment.status      → "pending"
+// payment.checkoutUrl → hosted page with the iDEAL bank picker
+```
+
+Send the customer to `payment.checkoutUrl`. After the bank redirect, confirm fulfillment from the webhook rather than the return URL, which the customer may never reach:
+
+```typescript
+// POST /webhooks/vinr
+const event = vinr.webhooks.verify(rawBody, req.headers['x-vinr-signature']);
+
+if (event.type === 'payment.completed') {
+  const payment = event.data;
+  // payment.method → "ideal"
+  await fulfillOrder(payment.metadata.orderId);
+}
+```
+
+<Callout type="warn">
+In sandbox, local-method redirects open a VINR test page where you choose **Approve** or **Fail** instead of a real bank. Test cards do not apply to these flows.
+</Callout>
+
+## Settlement & timing
+
+Most local methods authorize and confirm in seconds, and the captured amount lands in your [balance](/docs/operations/balances) immediately — there is no separate capture step. From there, funds follow your normal [settlement](/docs/operations/settlement) schedule and are netted against fees and refunds during [reconciliation](/docs/operations/reconciliation).
+
+A few methods (some bank-transfer-backed ones via Przelewy24) can stay `pending` for minutes while the underlying transfer clears. Always drive fulfillment from `payment.completed`, and surface `payment.expired` to the customer if they abandon the redirect.
+
+## Refunds & reversals
+
+Local methods support refunds through the standard refund API; the money is returned to the customer's originating bank account, typically within a few business days.
+
+```typescript
+const refund = await vinr.refunds.create({
+  payment: 'pay_3Nf8x2a...',
+  amount: 2500,                 // full refund; omit amount for full
+  reason: 'requested_by_customer',
+});
+
+// refund.id     → "re_8Kd2p..."
+// refund.status → "pending"
+```
+
+<Callout type="info">
+Because most local methods are final, there are **no chargebacks** — a refund is the only way to return funds. Once a method completes you cannot reverse it any other way, so validate orders before fulfilling.
+</Callout>
+
+## Limitations
+
+- **Single currency per method.** You cannot charge iDEAL in PLN or Blik in EUR.
+- **No partial authorization or manual capture.** Local methods capture in full at confirmation.
+- **No card-style 3DS step-up** — authentication happens inside the customer's bank.
+- **Region-locked.** A method only appears for customers in its home country; presenting it elsewhere returns a `method_not_available` error.
+
+## Next steps
+
+<Cards>
+  <Card title="Payment methods" href="/docs/payments/payment-methods" description="The full catalog of rails and methods." />
+  <Card title="How payments work" href="/docs/payments/how-payments-work" description="The shared object model behind every rail." />
+  <Card title="Refunds" href="/docs/payments/refunds" description="Issue full or partial refunds across any method." />
+</Cards>

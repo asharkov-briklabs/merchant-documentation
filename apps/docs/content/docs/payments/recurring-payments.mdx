@@ -1,0 +1,131 @@
+---
+title: Recurring payments
+description: Charge stored methods on a schedule.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-30"
+---
+
+Recurring payments reuse a saved payment method to bill a customer over time, without the customer being present at each charge. They depend on three things working together: a stored method, a recorded mandate, and a retry strategy for when a charge fails. [Billing](/docs/billing) builds subscriptions and invoices on top of these primitives, but you can drive recurring charges directly too.
+
+## Mandates & consent
+
+A **mandate** is the customer's recorded agreement to be charged off-session. VINR stores it alongside the payment method and replays the relevant proof (consent text, timestamp, IP) to the network on each charge. You collect a mandate once, during an on-session payment, by setting `usage: 'recurring'`.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// First, on-session charge that also stores the method + mandate.
+const initial = await vinr.payments.create({
+  amount: 1000,                 // €10.00
+  currency: 'EUR',
+  customer: 'cust_8Qd2...',
+  description: 'Pro plan — first month',
+  setupFutureUsage: 'recurring', // capture consent for off-session reuse
+  returnUrl: 'https://yoursite.com/billing/complete',
+});
+
+// After completion, the stored method is referenced by its id.
+// initial.paymentMethod → "pm_4Rk9..."
+```
+
+<Callout type="warn">
+A mandate captured for `recurring` use is not interchangeable with one captured for one-off `on_session` reuse. Charging off-session against a method that has no recurring mandate will be declined, and may be treated as fraud by the issuer.
+</Callout>
+
+## Scheduling charges
+
+Once a method has a recurring mandate, charge it off-session by passing the stored `paymentMethod` and `offSession: true`. The `offSession` flag tells VINR (and the network) that the customer is not present, which changes how authentication is handled.
+
+```typescript
+const renewal = await vinr.payments.create({
+  amount: 1000,
+  currency: 'EUR',
+  customer: 'cust_8Qd2...',
+  paymentMethod: 'pm_4Rk9...',
+  offSession: true,
+  confirm: true,                // charge immediately, no checkout page
+  description: 'Pro plan — May 2026',
+  idempotencyKey: 'renewal-cust_8Qd2-2026-05',
+});
+
+// renewal.status → "completed" | "requires_action" | "failed"
+```
+
+<Callout type="info">
+Always pass an `idempotencyKey` for scheduled charges. Cron jobs and retries can fire the same billing cycle twice; a stable key (customer + period) guarantees the customer is charged once.
+</Callout>
+
+VINR does not run your billing calendar for raw payments — you decide when to call `payments.create`. If you want VINR to own the schedule, proration, and invoicing, use [subscriptions](/docs/billing/subscriptions) instead.
+
+## Retry logic & dunning
+
+Off-session charges fail for recoverable reasons: insufficient funds, a temporary issuer hold, an expired card. **Dunning** is the retry-and-notify process that recovers those payments. When you drive charges directly, inspect the failure and decide whether to retry.
+
+| `declineCode` | Recoverable? | Recommended action |
+|---|---|---|
+| `insufficient_funds` | Yes | Retry in 3–5 days (payday cycles) |
+| `issuer_unavailable` | Yes | Retry within hours |
+| `expired_card` | No | Prompt customer to update method |
+| `card_declined` (generic) | Maybe | One retry, then notify |
+| `do_not_honor` | No | Notify; stop retrying |
+
+```typescript
+try {
+  await vinr.payments.create({ /* …off-session charge… */ });
+} catch (err) {
+  if (err.code === 'card_declined' && err.declineCode === 'insufficient_funds') {
+    await scheduleRetry({ customer: 'cust_8Qd2...', inDays: 3 });
+  } else {
+    await notifyCustomerToUpdateMethod('cust_8Qd2...');
+  }
+}
+```
+
+[Subscriptions](/docs/billing/subscriptions) include a configurable smart-retry schedule and hosted dunning emails out of the box, so most teams let Billing handle this rather than rebuilding it.
+
+## Authentication on recurring charges
+
+The first, on-session payment is where Strong Customer Authentication (SCA / 3DS) happens. The mandate you captured then lets subsequent off-session charges qualify for an exemption, so the customer is not challenged on every renewal.
+
+Occasionally an issuer still requires a step-up on an off-session charge. When that happens the charge returns `requires_action` rather than failing outright:
+
+```typescript
+const renewal = await vinr.payments.create({ /* …off-session… */ });
+
+if (renewal.status === 'requires_action') {
+  // Bring the customer back on-session to complete authentication.
+  await vinr.notifications.requestAuthentication({
+    payment: renewal.id,
+    returnUrl: 'https://yoursite.com/billing/authenticate',
+  });
+}
+```
+
+Use sandbox card `4000 0000 0000 3220` to force a 3DS challenge while testing. See [SCA & 3D Secure](/docs/compliance/sca-3ds) for the regulatory detail.
+
+## Network tokenization
+
+VINR automatically tokenizes stored cards with the card networks (Visa VTS, Mastercard MDES). Network tokens are not the raw PAN — they are network-issued credentials tied to your merchant, which means:
+
+- **Higher approval rates** on off-session charges, because issuers trust tokenized credentials.
+- **Automatic card updates.** When a customer's card is reissued or expires, the network refreshes the token, so renewals keep working without the customer re-entering details.
+
+Tokenization is on by default; no flags are required. You can confirm a stored method is tokenized by checking `paymentMethod.networkToken.status === 'active'`. Listen for the `payment_method.updated` webhook to know when a token was refreshed.
+
+```typescript
+const event = vinr.webhooks.verify(payload, signature); // x-vinr-signature header
+if (event.type === 'payment_method.updated') {
+  console.log('Network token refreshed for', event.data.object.id);
+}
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="Let VINR own the schedule, proration, and dunning." />
+  <Card title="SCA & 3D Secure" href="/docs/compliance/sca-3ds" description="When off-session charges still need authentication." />
+  <Card title="Payment methods" href="/docs/payments/payment-methods" description="Store and reuse cards, bank debits, and more." />
+</Cards>
