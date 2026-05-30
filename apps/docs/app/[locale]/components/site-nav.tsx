@@ -20,33 +20,20 @@ export function SiteNav({ t, locale, activeKey }: SiteNavProps) {
       className="sticky top-0 z-40 h-14 border-b border-white/[0.07] bg-[#05191d] px-10"
       style={{ height: 56 }}
     >
-      <div className="grid h-full w-full max-w-[1200px] mx-auto grid-cols-[auto_1fr_auto] items-center gap-4 md:gap-8">
+      <div className="grid h-full w-full max-w-[1200px] mx-auto grid-cols-[auto_1fr_auto] items-center gap-3 md:gap-5">
         {/* Left: logo + categories */}
         <div className="flex items-center">
           <Link href={localeHref(locale, "/")} className="flex items-center">
             <VinrWordmark height={18} fill="#F7FDFC" />
           </Link>
 
-          <div className="mx-5 hidden h-[18px] w-px bg-white/[0.15] md:block" />
+          <div className="mx-4 hidden h-[18px] w-px bg-white/[0.15] md:block" />
 
-          <div className="flex items-center gap-1">
-            <Link
-              href={localeHref(locale, "/docs")}
-              className={[
-                "hidden h-8 items-center rounded-md px-3 text-[13px] font-medium transition-colors duration-[120ms] md:flex",
-                activeKey === "docs"
-                  ? "text-[#f7fdfc]"
-                  : "text-[rgba(247,253,252,0.72)] hover:bg-white/[0.08] hover:text-[#f7fdfc]",
-              ].join(" ")}
-            >
-              {t.docs}
-            </Link>
-            <CategoryMenu t={t} locale={locale} />
-          </div>
+          <CategoryMenu t={t} locale={locale} />
         </div>
 
         {/* Center: prominent search box */}
-        <div className="flex justify-end md:mx-auto md:w-full md:max-w-[440px] md:justify-center">
+        <div className="flex justify-end md:mx-auto md:w-full md:max-w-[400px] md:justify-center">
           <SearchTrigger placeholder={t.searchPlaceholder} variant="nav" />
         </div>
 
