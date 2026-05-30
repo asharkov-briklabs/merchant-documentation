@@ -54,6 +54,8 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   "getting-started": "Getting started",
   integration: "Integration",
   payments: "Payments",
+  billing: "Billing",
+  engagement: "Engagement",
   compliance: "Compliance",
   operations: "Operations",
   "api-reference": "API reference",
