@@ -101,8 +101,34 @@ const translations = {
     askSuggestion3: "How does settlement work?",
     askSuggestion4: "What are the compliance requirements?",
 
+    // Nav mega-menu
+    navProducts: "Products",
+    navBuild: "Build",
+    navOperate: "Operate",
+    navReference: "Reference",
+    navViewAll: "View all docs",
+    navMenu: "Menu",
+    searchShort: "Search",
+    billing: "Billing",
+    billingDesc: "Subscriptions, invoicing, and usage.",
+    engagement: "Engagement",
+    engagementDesc: "Loyalty, rewards, and campaigns.",
+    guides: "Guides",
+    guidesDesc: "End-to-end recipes by product.",
+    changelog: "Changelog",
+    changelogDesc: "API and product changes.",
+
+    // Announcement banner
+    bannerText: "New: Stablecoin payouts are now live.",
+    bannerCta: "Read the announcement",
+
     // Code snippet
     codeComment: "// Redirect to checkout",
+    codeTabPayment: "Create payment",
+    codeTabPoints: "Issue points",
+    codeTabReward: "Redeem reward",
+    copyLabel: "Copy",
+    copiedLabel: "Copied",
   },
   bg: {
     // Navbar
@@ -206,8 +232,34 @@ const translations = {
     askSuggestion3: "Как работи сетълментът?",
     askSuggestion4: "Какви са изискванията за съответствие?",
 
+    // Nav mega-menu
+    navProducts: "Продукти",
+    navBuild: "Изграждане",
+    navOperate: "Опериране",
+    navReference: "Справка",
+    navViewAll: "Вижте цялата документация",
+    navMenu: "Меню",
+    searchShort: "Търсене",
+    billing: "Фактуриране",
+    billingDesc: "Абонаменти, фактуриране и потребление.",
+    engagement: "Ангажиране",
+    engagementDesc: "Лоялност, награди и кампании.",
+    guides: "Ръководства",
+    guidesDesc: "Цялостни рецепти по продукт.",
+    changelog: "Промени",
+    changelogDesc: "Промени в API и продукта.",
+
+    // Announcement banner
+    bannerText: "Ново: Изплащанията в стейбълкойни вече са активни.",
+    bannerCta: "Прочетете съобщението",
+
     // Code snippet
     codeComment: "// Пренасочване към чекаут",
+    codeTabPayment: "Създаване на плащане",
+    codeTabPoints: "Начисляване на точки",
+    codeTabReward: "Осребряване на награда",
+    copyLabel: "Копирай",
+    copiedLabel: "Копирано",
   },
 } as const;
 

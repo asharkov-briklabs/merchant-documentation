@@ -4,13 +4,33 @@ import { useSearchContext } from "fumadocs-ui/provider";
 
 interface SearchTriggerProps {
   placeholder?: string;
-  variant?: "light" | "dark";
+  variant?: "light" | "dark" | "nav";
 }
 
 export function SearchTrigger({ placeholder, variant = "light" }: SearchTriggerProps) {
   const { setOpenSearch } = useSearchContext();
 
   const isDark = variant === "dark";
+
+  // Compact pill for the sticky nav bar (dark theme, fixed width).
+  if (variant === "nav") {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpenSearch(true)}
+        className="flex h-8 items-center gap-2 rounded-md border border-white/[0.12] bg-white/[0.05] px-2.5 text-[rgba(247,253,252,0.5)] transition-colors hover:border-[rgba(42,157,144,0.5)] hover:bg-white/[0.08]"
+      >
+        <svg className="h-3.5 w-3.5 shrink-0 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <circle cx="11" cy="11" r="7" />
+          <path d="M21 21l-4-4" strokeLinecap="round" />
+        </svg>
+        <span className="hidden text-[13px] sm:inline">{placeholder ?? "Search"}</span>
+        <kbd className="ml-1 hidden rounded border border-white/[0.12] bg-white/[0.08] px-1.5 py-0.5 font-mono text-[10px] font-medium text-white/40 sm:inline-block">
+          ⌘K
+        </kbd>
+      </button>
+    );
+  }
 
   return (
     <button

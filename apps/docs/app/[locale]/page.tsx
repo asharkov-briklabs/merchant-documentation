@@ -7,6 +7,7 @@ import { LiveTicker } from "./components/live-ticker";
 import { CodeCard } from "./components/code-card";
 import { SearchTrigger } from "./components/search-trigger";
 import { SectionHeading } from "./components/section-heading";
+import { AnnouncementBanner } from "./components/announcement-banner";
 import { getTranslations } from "@/lib/translations";
 
 export default function HomePage({
@@ -18,6 +19,7 @@ export default function HomePage({
 
   return (
     <main>
+      <AnnouncementBanner t={t} locale={params.locale} />
       <SiteNav t={t} locale={params.locale} activeKey="docs" />
 
       {/* Hero */}
@@ -78,7 +80,7 @@ export default function HomePage({
 
           {/* Right column — Code card */}
           <div className="hidden md:block">
-            <CodeCard />
+            <CodeCard t={t} />
           </div>
         </div>
       </section>

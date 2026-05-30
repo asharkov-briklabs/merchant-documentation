@@ -2,6 +2,8 @@ import Link from "next/link";
 import { VinrWordmark } from "./vinr-wordmark";
 import type { getTranslations } from "@/lib/translations";
 import { localeHref } from "@/lib/locale-href";
+import { CategoryMenu } from "./category-menu";
+import { SearchTrigger } from "./search-trigger";
 
 interface SiteNavProps {
   t: ReturnType<typeof getTranslations>;
@@ -29,7 +31,7 @@ export function SiteNav({ t, locale, activeKey }: SiteNavProps) {
           <Link
             href={localeHref(locale, "/docs")}
             className={[
-              "flex h-8 items-center rounded-md px-3 text-[13px] font-medium transition-colors duration-[120ms]",
+              "hidden h-8 items-center rounded-md px-3 text-[13px] font-medium transition-colors duration-[120ms] md:flex",
               activeKey === "docs"
                 ? "text-[#f7fdfc]"
                 : "text-[rgba(247,253,252,0.72)] hover:bg-white/[0.08] hover:text-[#f7fdfc]",
@@ -37,20 +39,14 @@ export function SiteNav({ t, locale, activeKey }: SiteNavProps) {
           >
             {t.docs}
           </Link>
-          <Link
-            href={localeHref(locale, "/docs/api-reference")}
-            className={[
-              "flex h-8 items-center rounded-md px-3 text-[13px] font-medium transition-colors duration-[120ms]",
-              activeKey === "api"
-                ? "text-[#f7fdfc]"
-                : "text-[rgba(247,253,252,0.72)] hover:bg-white/[0.08] hover:text-[#f7fdfc]",
-            ].join(" ")}
-          >
-            {t.api}
-          </Link>
+          <CategoryMenu t={t} locale={locale} />
         </div>
 
         <div className="flex-1" />
+
+        <div className="mr-3">
+          <SearchTrigger placeholder={t.searchShort} variant="nav" />
+        </div>
 
         <Link
           href={localeHref(locale, "/ask")}
