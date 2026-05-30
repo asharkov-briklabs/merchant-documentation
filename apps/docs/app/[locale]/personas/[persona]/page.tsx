@@ -1,80 +1,68 @@
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
+import { source } from "@/lib/source";
+import { PersonaEnum, type Persona } from "@/lib/schema";
 import logoDark from "../../assets/Full-logo_Vinr_dark.svg";
 
-const personaData: Record<
-  string,
-  { title: string; description: string; categories: { slug: string; label: string }[] }
-> = {
+// Display copy per persona. Which docs appear is driven by the `persona`
+// frontmatter on each page (see lib/schema.ts), not by this map.
+const personaMeta: Record<Persona, { title: string; description: string }> = {
   developer: {
     title: "Developer",
     description:
       "API references, SDKs, integration guides, webhooks, and code examples for building on VINR.",
-    categories: [
-      { slug: "getting-started", label: "Getting Started" },
-      { slug: "integration", label: "Integration" },
-      { slug: "api-reference", label: "API Reference" },
-      { slug: "troubleshooting", label: "Troubleshooting" },
-    ],
   },
   "finance-manager": {
     title: "Finance Manager",
     description:
       "Settlement schedules, reconciliation, fee structures, and financial reporting.",
-    categories: [
-      { slug: "payments", label: "Payments" },
-      { slug: "operations", label: "Operations" },
-      { slug: "compliance", label: "Compliance" },
-    ],
   },
   operations: {
     title: "Operations",
     description:
       "Dashboard guides, monitoring, alerts, and day-to-day operational processes.",
-    categories: [
-      { slug: "operations", label: "Operations" },
-      { slug: "payments", label: "Payments" },
-      { slug: "troubleshooting", label: "Troubleshooting" },
-    ],
   },
   "compliance-officer": {
     title: "Compliance Officer",
     description:
       "KYC/AML requirements, PCI DSS, data protection, and regulatory obligations.",
-    categories: [
-      { slug: "compliance", label: "Compliance" },
-      { slug: "operations", label: "Operations" },
-    ],
   },
   "business-owner": {
     title: "Business Owner",
     description:
       "Platform overview, pricing, getting started, and strategic integration decisions.",
-    categories: [
-      { slug: "getting-started", label: "Getting Started" },
-      { slug: "payments", label: "Payments" },
-      { slug: "operations", label: "Operations" },
-    ],
   },
   partner: {
     title: "Partner",
     description:
       "Bank partner integration, co-branded solutions, and partner-specific guides.",
-    categories: [
-      { slug: "integration", label: "Integration" },
-      { slug: "compliance", label: "Compliance" },
-      { slug: "api-reference", label: "API Reference" },
-    ],
   },
 };
 
+// P0 documents surface before P1 before P2; ties broken alphabetically by title.
+const PRIORITY_ORDER: Record<string, number> = { P0: 0, P1: 1, P2: 2 };
+
 export default async function PersonaPage(props: {
-  params: Promise<{ persona: string }>;
+  params: Promise<{ persona: string; locale: string }>;
 }) {
   const params = await props.params;
-  const data = personaData[params.persona];
-  if (!data) notFound();
+  const parsed = PersonaEnum.safeParse(params.persona);
+  if (!parsed.success) notFound();
+  const persona = parsed.data;
+  const data = personaMeta[persona];
+
+  const pages = source
+    .getPages(params.locale)
+    .filter((page) => page.data.persona?.includes(persona))
+    .sort((a, b) => {
+      const byPriority =
+        (PRIORITY_ORDER[a.data.priority] ?? 99) -
+        (PRIORITY_ORDER[b.data.priority] ?? 99);
+      return byPriority !== 0
+        ? byPriority
+        : a.data.title.localeCompare(b.data.title);
+    });
 
   return (
     <main className="flex min-h-screen flex-col">
@@ -108,27 +96,33 @@ export default async function PersonaPage(props: {
         </div>
       </section>
 
-      {/* Recommended topics */}
+      {/* Recommended pages */}
       <section className="mx-auto w-full max-w-[1200px] px-6 py-10">
         <h2 className="text-sm font-semibold text-foreground">
-          Recommended topics
+          Recommended reading
         </h2>
-        <div className="mt-4 grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
-          {data.categories.map((cat) => (
-            <Link
-              key={cat.slug}
-              href={`/docs/${cat.slug}`}
-              className="group bg-card p-5 transition-colors hover:bg-accent"
-            >
-              <h3 className="text-sm font-medium text-foreground group-hover:text-vinr-700 dark:group-hover:text-vinr-300">
-                {cat.label}
-              </h3>
-              <p className="mt-1 text-[13px] text-muted-foreground">
-                Browse {cat.label.toLowerCase()} documentation
-              </p>
-            </Link>
-          ))}
-        </div>
+        {pages.length > 0 ? (
+          <div className="mt-4 grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
+            {pages.map((page) => (
+              <Link
+                key={page.url}
+                href={page.url}
+                className="group bg-card p-5 transition-colors hover:bg-accent"
+              >
+                <h3 className="text-sm font-medium text-foreground group-hover:text-vinr-700 dark:group-hover:text-vinr-300">
+                  {page.data.title}
+                </h3>
+                <p className="mt-1 text-[13px] text-muted-foreground">
+                  {page.data.description}
+                </p>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 text-[13px] text-muted-foreground">
+            No pages are tagged for this persona yet.
+          </p>
+        )}
 
         <div className="mt-10 border-t border-border pt-8">
           <p className="text-sm text-muted-foreground">
@@ -155,5 +149,5 @@ export default async function PersonaPage(props: {
 }
 
 export function generateStaticParams() {
-  return Object.keys(personaData).map((persona) => ({ persona }));
+  return Object.keys(personaMeta).map((persona) => ({ persona }));
 }
