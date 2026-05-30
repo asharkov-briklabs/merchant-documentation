@@ -1,6 +1,7 @@
 import "./globals.css";
 import "fumadocs-ui/style.css";
 import { RootProvider } from "fumadocs-ui/provider";
+import { CATEGORY_TAGS } from "@/lib/schema";
 import { Inter, Roboto_Mono } from "next/font/google";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
@@ -37,7 +38,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       suppressHydrationWarning
     >
       <body className="flex min-h-screen flex-col antialiased">
-        <RootProvider>{children}</RootProvider>
+        <RootProvider search={{ options: { tags: CATEGORY_TAGS } }}>
+          {children}
+        </RootProvider>
       </body>
     </html>
   );
