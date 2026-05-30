@@ -36,7 +36,12 @@ export const frontmatterExtension = {
   category: CategoryEnum,
   persona: z.array(PersonaEnum).min(1),
   priority: z.enum(["P0", "P1", "P2"]).default("P1"),
-  lastUpdated: z.string().date(),
+  lastUpdated: z
+    .string()
+    .date()
+    .refine((value) => value <= new Date().toISOString().slice(0, 10), {
+      message: "lastUpdated cannot be in the future",
+    }),
 };
 
 export type Persona = z.infer<typeof PersonaEnum>;
