@@ -1,4 +1,13 @@
 {
   "title": "Integration",
-  "pages": ["checkout", "elements", "webhooks"]
+  "pages": [
+    "index",
+    "checkout",
+    "elements",
+    "mobile-sdks",
+    "webhooks",
+    "idempotency",
+    "error-handling",
+    "testing"
+  ]
 }

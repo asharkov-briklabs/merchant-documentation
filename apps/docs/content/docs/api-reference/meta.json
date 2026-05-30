@@ -1,0 +1,25 @@
+{
+  "title": "API Reference",
+  "pages": [
+    "index",
+    "---Core concepts---",
+    "authentication",
+    "errors",
+    "pagination",
+    "idempotency",
+    "rate-limits",
+    "versioning",
+    "metadata",
+    "expanding-responses",
+    "---Resources---",
+    "payments",
+    "refunds",
+    "payment-methods",
+    "disputes",
+    "settlements",
+    "payouts",
+    "balance",
+    "events",
+    "webhook-endpoints"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "title": "Guides",
+  "pages": [
+    "index",
+    "accept-a-payment",
+    "save-and-reuse-cards",
+    "build-a-subscription",
+    "handle-3d-secure",
+    "accept-stablecoins",
+    "accept-bank-transfers",
+    "accept-local-methods",
+    "reconcile-settlements",
+    "migrate-to-vinr"
+  ]
+}

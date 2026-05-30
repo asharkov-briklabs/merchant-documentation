@@ -2,15 +2,19 @@
   "root": true,
   "title": "VINR Docs",
   "pages": [
+    "index",
     "---Start here---",
     "getting-started",
-    "---Products---",
+    "guides",
+    "---Build---",
     "payments",
     "integration",
+    "---Run---",
     "operations",
     "compliance",
     "---Reference---",
     "api-reference",
-    "troubleshooting"
+    "troubleshooting",
+    "changelog"
   ]
 }

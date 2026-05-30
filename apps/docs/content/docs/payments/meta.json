@@ -1,0 +1,16 @@
+{
+  "title": "Payments",
+  "pages": [
+    "index",
+    "how-payments-work",
+    "payment-lifecycle",
+    "payment-methods",
+    "---Capabilities---",
+    "authorize-and-capture",
+    "refunds",
+    "disputes",
+    "recurring-payments",
+    "multicurrency",
+    "strong-customer-authentication"
+  ]
+}

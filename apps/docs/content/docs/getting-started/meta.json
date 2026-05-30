@@ -1,4 +1,10 @@
 {
   "title": "Getting Started",
-  "pages": ["quick-start", "authentication"]
+  "pages": [
+    "index",
+    "quick-start",
+    "authentication",
+    "test-mode",
+    "sdks"
+  ]
 }
