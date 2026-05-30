@@ -32,6 +32,21 @@ export const CategoryEnum = z.enum([
  * Extension fields, expressed as a raw shape so `source.config.ts` can pass
  * them straight to `frontmatterSchema.extend(...)`.
  */
+/**
+ * Latest `lastUpdated` we accept: tomorrow in UTC. `toISOString()` is always
+ * UTC, and the one day of slack absorbs authors in timezones ahead of UTC who
+ * date a doc "today" in their local time just before UTC midnight.
+ */
+const maxLastUpdated = (() => {
+  const now = new Date();
+  const tomorrowUtc = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() + 1,
+  );
+  return new Date(tomorrowUtc).toISOString().slice(0, 10);
+})();
+
 export const frontmatterExtension = {
   category: CategoryEnum,
   persona: z.array(PersonaEnum).min(1),
@@ -39,7 +54,7 @@ export const frontmatterExtension = {
   lastUpdated: z
     .string()
     .date()
-    .refine((value) => value <= new Date().toISOString().slice(0, 10), {
+    .refine((value) => value <= maxLastUpdated, {
       message: "lastUpdated cannot be in the future",
     }),
 };
