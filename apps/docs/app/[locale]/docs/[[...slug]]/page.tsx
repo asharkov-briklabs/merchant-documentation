@@ -27,7 +27,9 @@ export default async function Page(props: {
     <DocsPage
       toc={page.data.toc}
       full={page.data.full}
-      lastUpdate={new Date(page.data.lastUpdated)}
+      lastUpdate={
+        page.data.lastUpdated ? new Date(page.data.lastUpdated) : undefined
+      }
       editOnGithub={{
         owner: "vinr",
         repo: "documentation",
