@@ -15,9 +15,11 @@ jobs:
     name: type-check · lint · links · build
     runs-on: ubuntu-latest
     env:
-      # Dummy value so lib/site-url.ts's production fail-fast doesn't trip the
-      # build in CI (VERCEL_ENV is unset here, but be explicit and safe).
+      # Canonical URL for the build, plus an explicit opt-out so lib/site-url.ts's
+      # production fail-fast never trips in CI (platform-agnostic guard — see
+      # that file). GitHub Actions also sets CI=true, which opts out too.
       NEXT_PUBLIC_SITE_URL: https://docs.vinr.com
+      ALLOW_DEFAULT_SITE_URL: "true"
     steps:
       - uses: actions/checkout@v4
 

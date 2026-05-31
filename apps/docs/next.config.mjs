@@ -49,6 +49,12 @@ const securityHeaders = [
 const config = {
   reactStrictMode: true,
 
+  // NOTE: `output: "standalone"` is intentionally NOT used. The fumadocs i18n
+  // middleware (default-locale hiding) redirect-loops the root URL under the
+  // standalone `node server.js` server. The app is run with `next start`
+  // instead (see Dockerfile / DEPLOYMENT.md) — equally platform-agnostic, no
+  // Vercel coupling, and behaves identically to production.
+
   experimental: {
     // Enables instrumentation.ts (Sentry server/edge init) — stable in Next 15,
     // still flagged in 14.x.

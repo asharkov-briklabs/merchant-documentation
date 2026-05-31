@@ -24,20 +24,43 @@ function getRateLimitKey(req: NextRequest): string {
 // First line of abuse defense: only allow browser requests from our own site.
 // Blocks naive scripted abuse that hammers the endpoint cross-origin. We allow
 // requests with no Origin header (non-browser clients) — the rate limiter still
-// covers those — and explicitly permit localhost + Vercel preview hosts so dev
-// and preview deploys keep working.
+// covers those — and permit localhost for dev. Additional hosts (custom
+// domains, preview/staging deploys on any platform) are configured via the
+// comma-separated ALLOWED_ORIGINS env var, e.g.
+//   ALLOWED_ORIGINS=staging.example.com,*.preview.example.com
+// A leading "*." entry matches that domain and any subdomain. The legacy
+// VERCEL_URL / *.vercel.app hosts are still honored when present, so existing
+// Vercel deploys keep working without extra config — but nothing requires them.
 const SITE_HOST = new URL(SITE_ORIGIN).host;
+
+const EXTRA_ALLOWED = (process.env.ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((h) => h.trim().toLowerCase())
+  .filter(Boolean);
+
+function matchesAllowed(host: string): boolean {
+  return EXTRA_ALLOWED.some((pattern) => {
+    if (pattern.startsWith("*.")) {
+      const base = pattern.slice(2);
+      return host === base || host.endsWith(`.${base}`);
+    }
+    return host === pattern;
+  });
+}
+
 function isAllowedOrigin(req: NextRequest): boolean {
   const origin = req.headers.get("origin");
   if (!origin) return true;
   let host: string;
   try {
-    host = new URL(origin).host;
+    host = new URL(origin).host.toLowerCase();
   } catch {
     return false;
   }
-  if (host === SITE_HOST) return true;
+  if (host === SITE_HOST.toLowerCase()) return true;
   if (host === "localhost" || host.startsWith("localhost:")) return true;
+  if (matchesAllowed(host)) return true;
+  // Optional, platform-specific conveniences — only ever match on Vercel.
   if (process.env.VERCEL_URL && host === process.env.VERCEL_URL) return true;
   if (host.endsWith(".vercel.app")) return true;
   return false;

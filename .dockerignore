@@ -1,0 +1,25 @@
+# Keep the build context small and reproducible. Anything generated, secret,
+# or host-specific stays out of the image.
+**/node_modules
+**/.next
+**/.turbo
+**/.git
+.git
+.github
+**/.vercel
+vercel.json
+
+# Env / secrets — never bake these in (build args + runtime env instead)
+**/.env
+**/.env.*
+!**/.env.example
+
+# Local + editor noise
+**/*.log
+**/.DS_Store
+**/.idea
+**/.vscode
+notes
+TODO.md
+*.md
+!README.md
