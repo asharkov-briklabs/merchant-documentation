@@ -168,7 +168,7 @@ Storing and reusing cards carries obligations beyond the API call:
 - **Consent and mandate.** Record explicit consent, the date, and the terms shown before the first off-session charge. Keep it retrievable for the life of the agreement.
 - **SCA.** In the EEA, the initial save is authenticated with 3D Secure so subsequent merchant-initiated charges can claim an exemption. VINR requests this automatically when `usage` is `off_session`.
 - **Network mandates.** For recurring charges, send a pre-debit notification per card-network rules. VINR stores the mandate reference returned at save time and attaches it to each charge.
-- **PCI scope.** Because card entry happens on VINR-hosted pages and you only ever handle `pm_…` tokens, you stay within the reduced SAQ A scope. See [PCI compliance](/docs/compliance/pci).
+- **PCI scope.** Because card entry happens on VINR-hosted pages and you only ever handle `pm_…` tokens, you stay within the reduced SAQ A scope. See [PCI compliance](/docs/compliance/pci-dss).
 
 This page is informational and not legal advice; consult your compliance counsel for binding decisions.
 

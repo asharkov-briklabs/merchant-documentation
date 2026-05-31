@@ -1,9 +1,11 @@
 import Link from "next/link";
-import Image from "next/image";
 import { notFound } from "next/navigation";
 import { source } from "@/lib/source";
-import { PersonaEnum, type Persona } from "@/lib/schema";
-import logoDark from "../../assets/Full-logo_Vinr_dark.svg";
+import { PersonaEnum, type Persona, type Priority } from "@/lib/schema";
+import { getTranslations } from "@/lib/translations";
+import { localeHref } from "@/lib/locale-href";
+import { SiteNav } from "../../components/site-nav";
+import { SiteFooter } from "../../components/site-footer";
 
 // Display copy per persona. Which docs appear is driven by the `persona`
 // frontmatter on each page (see lib/schema.ts), not by this map.
@@ -41,7 +43,7 @@ const personaMeta: Record<Persona, { title: string; description: string }> = {
 };
 
 // P0 documents surface before P1 before P2; ties broken alphabetically by title.
-const PRIORITY_ORDER: Record<string, number> = { P0: 0, P1: 1, P2: 2 };
+const PRIORITY_ORDER: Record<Priority, number> = { P0: 0, P1: 1, P2: 2 };
 
 export default async function PersonaPage(props: {
   params: Promise<{ persona: string; locale: string }>;
@@ -51,14 +53,14 @@ export default async function PersonaPage(props: {
   if (!parsed.success) notFound();
   const persona = parsed.data;
   const data = personaMeta[persona];
+  const t = getTranslations(params.locale);
 
   const pages = source
     .getPages(params.locale)
     .filter((page) => page.data.persona?.includes(persona))
     .sort((a, b) => {
       const byPriority =
-        (PRIORITY_ORDER[a.data.priority] ?? 99) -
-        (PRIORITY_ORDER[b.data.priority] ?? 99);
+        PRIORITY_ORDER[a.data.priority] - PRIORITY_ORDER[b.data.priority];
       return byPriority !== 0
         ? byPriority
         : a.data.title.localeCompare(b.data.title);
@@ -66,20 +68,7 @@ export default async function PersonaPage(props: {
 
   return (
     <main className="flex min-h-screen flex-col">
-      {/* Nav */}
-      <nav className="sticky top-0 z-50 border-b border-border bg-background">
-        <div className="mx-auto flex h-14 max-w-[1200px] items-center justify-between px-6">
-          <Link href="/" className="flex items-center">
-            <Image src={logoDark} alt="VINR" height={22} priority />
-          </Link>
-          <Link
-            href="/docs"
-            className="text-[13px] font-medium text-muted-foreground hover:text-foreground"
-          >
-            All documentation
-          </Link>
-        </div>
-      </nav>
+      <SiteNav t={t} locale={params.locale} activeKey="docs" />
 
       {/* Header */}
       <section className="border-b border-border">
@@ -128,14 +117,14 @@ export default async function PersonaPage(props: {
           <p className="text-sm text-muted-foreground">
             Need help?{" "}
             <Link
-              href="/ask"
+              href={localeHref(params.locale, "/ask")}
               className="font-medium text-vinr-700 hover:text-vinr-900 dark:text-vinr-300 dark:hover:text-vinr-200"
             >
               Ask our AI assistant
             </Link>{" "}
             or{" "}
             <Link
-              href="/docs"
+              href={localeHref(params.locale, "/docs")}
               className="font-medium text-vinr-700 hover:text-vinr-900 dark:text-vinr-300 dark:hover:text-vinr-200"
             >
               browse all documentation
@@ -144,6 +133,8 @@ export default async function PersonaPage(props: {
           </p>
         </div>
       </section>
+
+      <SiteFooter t={t} locale={params.locale} />
     </main>
   );
 }

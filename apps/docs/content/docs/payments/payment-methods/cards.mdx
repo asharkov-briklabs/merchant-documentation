@@ -30,7 +30,7 @@ Default currency is `EUR`. To present prices in the customer's local currency, s
 
 A card payment moves through up to two money-movement steps, plus an optional authentication challenge:
 
-1. **Authentication** — for many European cards, the issuer requires a [3D Secure](/docs/payments/sca-and-3ds) challenge to satisfy SCA. VINR triggers this automatically on the hosted checkout.
+1. **Authentication** — for many European cards, the issuer requires a [3D Secure](/docs/payments/strong-customer-authentication) challenge to satisfy SCA. VINR triggers this automatically on the hosted checkout.
 2. **Authorization** — the issuer reserves the funds on the cardholder's account. The `payment` enters `authorized`.
 3. **Capture** — you claim the reserved funds. With the default immediate capture, this happens in the same request and the payment becomes `processing`, then `completed`.
 
@@ -120,7 +120,7 @@ Card payments are reversible by the cardholder through **chargebacks**. A disput
 ## Next steps
 
 <Cards>
-  <Card title="SCA & 3D Secure" href="/docs/payments/sca-and-3ds" description="When authentication is required and how VINR handles it." />
+  <Card title="SCA & 3D Secure" href="/docs/payments/strong-customer-authentication" description="When authentication is required and how VINR handles it." />
   <Card title="Authorize & capture" href="/docs/payments/authorize-and-capture" description="Reserve funds now, capture later." />
   <Card title="Disputes & chargebacks" href="/docs/payments/disputes" description="Respond to card chargebacks and manage exposure." />
 </Cards>

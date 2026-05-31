@@ -7,11 +7,7 @@ const config = {
   reactStrictMode: true,
 };
 
-const finalConfig = withMDX(config);
-
-// Disable Turbopack in dev - incompatible with fumadocs-ui client components
-if (finalConfig.experimental) {
-  delete finalConfig.experimental.turbo;
-}
-
-export default finalConfig;
+// The `dev` script runs plain `next dev` (no --turbo), so Turbopack is already
+// off; no config surgery needed. If Turbopack is ever desired, validate it
+// against fumadocs-ui's client components first.
+export default withMDX(config);

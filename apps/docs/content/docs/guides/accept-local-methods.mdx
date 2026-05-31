@@ -127,7 +127,7 @@ SEPA Direct Debit can succeed and then **return** (insufficient funds, mandate r
 
 ## Settlement currency
 
-Local methods always settle in their native currency — EUR for iDEAL, Bancontact, and SEPA. If your payout currency differs, VINR converts at settlement and records the rate on the [settlement](/docs/operations/settlements) object.
+Local methods always settle in their native currency — EUR for iDEAL, Bancontact, and SEPA. If your payout currency differs, VINR converts at settlement and records the rate on the [settlement](/docs/operations/settlement) object.
 
 ```typescript
 const payment = await vinr.payments.retrieve(paymentId);
@@ -173,5 +173,5 @@ Confirm webhook handling for `pending`, `expired`, and `debit_returned` against 
 <Cards>
   <Card title="Accept a one-time payment" href="/docs/guides/accept-a-payment" description="The full create-checkout-confirm flow." />
   <Card title="Local methods reference" href="/docs/payments/payment-methods/local-methods" description="Every method, its markets, and behavior." />
-  <Card title="Reconcile settlements" href="/docs/operations/settlements" description="Match payouts to payments and fees." />
+  <Card title="Reconcile settlements" href="/docs/operations/settlement" description="Match payouts to payments and fees." />
 </Cards>

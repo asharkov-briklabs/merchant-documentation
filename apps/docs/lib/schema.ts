@@ -21,8 +21,14 @@ export const PersonaEnum = z.enum([
   "partner",
 ]);
 
+// Must stay in sync with the top-level folders under content/docs. The search
+// route (app/api/search/route.ts) derives a doc's category from its top-level
+// folder and validates it against this enum — any folder missing here gets an
+// empty search tag and becomes unreachable by category filtering. A build-time
+// assertion in app/api/search/route.ts enforces that folders ⊆ this enum.
 export const CategoryEnum = z.enum([
   "getting-started",
+  "guides",
   "integration",
   "payments",
   "billing",
@@ -31,6 +37,7 @@ export const CategoryEnum = z.enum([
   "operations",
   "api-reference",
   "troubleshooting",
+  "changelog",
 ]);
 
 /**
@@ -38,8 +45,10 @@ export const CategoryEnum = z.enum([
  * straight to `frontmatterSchema.extend(...)`.
  */
 export const frontmatterExtension = {
-  // Defaults to the page's top-level folder; set only to classify a doc
-  // outside its physical location.
+  // Optional override. There is NO schema-level default: when omitted, a doc's
+  // category is computed from its top-level folder by the search route
+  // (app/api/search/route.ts). Set this only to classify a doc outside its
+  // physical folder.
   category: CategoryEnum.optional(),
   persona: z.array(PersonaEnum).min(1).optional(),
   priority: z.enum(["P0", "P1", "P2"]).default("P1"),
@@ -48,22 +57,8 @@ export const frontmatterExtension = {
 
 export type Persona = z.infer<typeof PersonaEnum>;
 export type Category = z.infer<typeof CategoryEnum>;
+export type Priority = "P0" | "P1" | "P2";
 
-/** Human-readable label per category, shared by the search facet and any UI. */
-export const CATEGORY_LABELS: Record<Category, string> = {
-  "getting-started": "Getting started",
-  integration: "Integration",
-  payments: "Payments",
-  billing: "Billing",
-  engagement: "Engagement",
-  compliance: "Compliance",
-  operations: "Operations",
-  "api-reference": "API reference",
-  troubleshooting: "Troubleshooting",
-};
-
-/** Tag items consumed by the fumadocs search dialog for category filtering. */
-export const CATEGORY_TAGS = CategoryEnum.options.map((value) => ({
-  name: CATEGORY_LABELS[value],
-  value,
-}));
+// Per-category labels/icons/descriptions now live in lib/taxonomy.ts (the
+// single registry) so the search facet, sidebar product switcher, and any UI
+// can't drift apart. CATEGORY_LABELS / CATEGORY_TAGS are re-exported from there.

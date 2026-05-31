@@ -136,7 +136,7 @@ These arise from subscription and invoice state machines.
 | `service_unavailable` | 503 | VINR is degraded. Retry with exponential backoff. |
 
 <Callout type="info">
-For `429` and `5xx`, retry with exponential backoff and jitter, capped at around 5 attempts. Always reuse your original [idempotency key](/docs/integration/idempotency) so a retry never double-charges.
+For `429` and `5xx`, retry with exponential backoff and jitter, capped at around 5 attempts. Always reuse your original [idempotency key](/docs/api-reference/idempotency) so a retry never double-charges.
 </Callout>
 
 ```typescript
@@ -170,6 +170,6 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
 
 <Cards>
   <Card title="Webhooks" href="/docs/integration/webhooks" description="Receive and verify events, including failure events." />
-  <Card title="Idempotency" href="/docs/integration/idempotency" description="Make retries safe so errors never double-charge." />
+  <Card title="Idempotency" href="/docs/api-reference/idempotency" description="Make retries safe so errors never double-charge." />
   <Card title="Payment lifecycle" href="/docs/payments/payment-lifecycle" description="Understand the states payment errors move through." />
 </Cards>

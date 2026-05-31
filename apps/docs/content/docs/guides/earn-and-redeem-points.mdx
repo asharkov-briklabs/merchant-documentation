@@ -29,7 +29,7 @@ your server            VINR                  customer
 You'll do all of this server-side with the secret key. The customer never touches the loyalty API directly.
 
 <Callout type="info">
-This guide assumes you already have a program. If you don't, create one first — see [Create a loyalty program](/docs/engagement/programs). The `programId` below is the `prog_` it returns.
+This guide assumes you already have a program. If you don't, create one first — see [Create a loyalty program](/docs/guides/launch-a-loyalty-program). The `programId` below is the `prog_` it returns.
 </Callout>
 
 ## Enrol a member
@@ -142,7 +142,7 @@ Apply the benefit in your own system — a discount, free shipping, a voucher co
 
 </Steps>
 
-If the balance is insufficient, the create call fails with `insufficient_points` and no points are deducted. See [Loyalty errors](/docs/troubleshooting/loyalty-errors) for the full list.
+If the balance is insufficient, the create call fails with `insufficient_points` and no points are deducted. See [Loyalty errors](/docs/troubleshooting/error-codes) for the full list.
 
 ## Handle reversals
 
@@ -195,6 +195,6 @@ In the sandbox, awards and redemptions settle instantly — no waiting period. D
 
 <Cards>
   <Card title="Earn loyalty at checkout" href="/docs/guides/earn-loyalty-at-checkout" description="Award points automatically on every payment." />
-  <Card title="Loyalty programs" href="/docs/engagement/programs" description="Configure earn rules, tiers, and rewards." />
+  <Card title="Loyalty programs" href="/docs/guides/launch-a-loyalty-program" description="Configure earn rules, tiers, and rewards." />
   <Card title="Engagement overview" href="/docs/engagement" description="Accounts, points, and redemptions explained." />
 </Cards>

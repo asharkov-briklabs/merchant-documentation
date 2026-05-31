@@ -2,44 +2,28 @@ import { source } from "@/lib/source";
 import { DocsLayout } from "fumadocs-ui/layout";
 import { RootToggle } from "fumadocs-ui/components/layout/root-toggle";
 import type { ReactNode } from "react";
-import {
-  Rocket,
-  BookOpen,
-  CreditCard,
-  ReceiptText,
-  Gift,
-  Blocks,
-  Activity,
-  ShieldCheck,
-  Code,
-  LifeBuoy,
-  History,
-} from "lucide-react";
-import { VinrWordmark } from "../components/vinr-wordmark";
+import { icons } from "lucide-react";
+import { createElement } from "react";
 import { getTranslations } from "@/lib/translations";
 import { localeHref } from "@/lib/locale-href";
+import { CATEGORIES } from "@/lib/taxonomy";
+import { SiteNav } from "../components/site-nav";
 
-// Product switcher (Stripe-style): each entry is a root folder in
-// content/docs (meta.json `"root": true`). The sidebar auto-scopes to the
-// active root; this toggle lets users jump between them.
+// Product switcher (Stripe-style): one entry per doc category. Projected from
+// the single taxonomy registry (lib/taxonomy.ts) so titles/icons stay in sync
+// with the search facet and never drift. The sidebar auto-scopes to the active
+// root; this toggle lets users jump between them.
 const ROOTS: {
   path: string;
   title: string;
   description: string;
   icon: ReactNode;
-}[] = [
-  { path: "/docs/getting-started", title: "Get started", description: "Set up and make your first call", icon: <Rocket /> },
-  { path: "/docs/guides", title: "Guides", description: "End-to-end recipes by product", icon: <BookOpen /> },
-  { path: "/docs/payments", title: "Payments", description: "Accept and process payments", icon: <CreditCard /> },
-  { path: "/docs/billing", title: "Billing", description: "Subscriptions, invoicing, usage", icon: <ReceiptText /> },
-  { path: "/docs/engagement", title: "Engagement", description: "Loyalty, rewards, campaigns", icon: <Gift /> },
-  { path: "/docs/integration", title: "Integration", description: "Checkout, Elements, webhooks", icon: <Blocks /> },
-  { path: "/docs/operations", title: "Operations", description: "Settlement, payouts, reporting", icon: <Activity /> },
-  { path: "/docs/compliance", title: "Compliance", description: "PCI, KYC/AML, PSD2, GDPR", icon: <ShieldCheck /> },
-  { path: "/docs/api-reference", title: "API reference", description: "Endpoints, objects, errors", icon: <Code /> },
-  { path: "/docs/troubleshooting", title: "Troubleshooting", description: "Errors, declines, debugging", icon: <LifeBuoy /> },
-  { path: "/docs/changelog", title: "Changelog", description: "API and product changes", icon: <History /> },
-];
+}[] = CATEGORIES.map((c) => ({
+  path: `/docs/${c.slug}`,
+  title: c.label,
+  description: c.description,
+  icon: createElement(icons[c.icon as keyof typeof icons]),
+}));
 
 export default function Layout({
   children,
@@ -54,8 +38,11 @@ export default function Layout({
     <DocsLayout
       tree={source.pageTree[params.locale]}
       nav={{
-        title: <VinrWordmark height={18} fill="#0b3b45" />,
-        url: localeHref(params.locale, "/"),
+        // Replace fumadocs' built-in navbar with our marketing SiteNav so the
+        // Stripe/Adyen-style top nav (category dropdowns + centered search)
+        // shows on every docs page. SiteNav is 56px (h-14) sticky — the same
+        // height fumadocs assumes — so sidebar/TOC offsets stay correct.
+        component: <SiteNav t={t} locale={params.locale} fluid />,
       }}
       sidebar={{
         banner: (
@@ -69,12 +56,6 @@ export default function Layout({
           />
         ),
       }}
-      links={[
-        { text: t.docs, url: localeHref(params.locale, "/docs"), type: "main" },
-        { text: t.api, url: localeHref(params.locale, "/docs/api-reference"), type: "main" },
-        { text: t.askAi, url: localeHref(params.locale, "/ask"), type: "button" },
-      ]}
-      i18n
     >
       {children}
     </DocsLayout>

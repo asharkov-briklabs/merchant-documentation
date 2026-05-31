@@ -1,3 +1,7 @@
+// UI string table. Currently English-only — the Bulgarian (`bg`) block was
+// removed alongside the locale (see lib/i18n.ts); restore it from git history
+// when Bulgarian content ships. `getTranslations` falls back to `en` for any
+// unknown locale, so adding a locale here is the single switch to flip.
 const translations = {
   en: {
     // Navbar
@@ -18,17 +22,6 @@ const translations = {
     apiReference: "API Reference",
     payments: "Payments",
     searchPlaceholder: "Search documentation...",
-    tickerLabel: "Live ·",
-
-    // Metrics
-    metric1Val: "140+",
-    metric1Lbl: "Payment methods",
-    metric2Val: "99.99%",
-    metric2Lbl: "API uptime",
-    metric3Val: "PCI L1",
-    metric3Lbl: "Compliance",
-    metric4Val: "< 200ms",
-    metric4Lbl: "Median latency",
 
     // Use cases
     useCasesEyebrow: "Use cases",
@@ -81,7 +74,6 @@ const translations = {
     documentation: "Documentation",
     resources: "Resources",
     company: "Company",
-    footerCopyright: "© 2026 VINR. All rights reserved.",
     footerTagline: "Multi-rail payment infrastructure for modern businesses.",
     footerCopy: "© 2026 VINR. All rights reserved.",
     complianceBadge1: "PCI DSS L1",
@@ -102,13 +94,8 @@ const translations = {
     askSuggestion4: "What are the compliance requirements?",
 
     // Nav mega-menu
-    navProducts: "Products",
-    navBuild: "Build",
-    navOperate: "Operate",
-    navReference: "Reference",
     navViewAll: "View all docs",
     navMenu: "Menu",
-    searchShort: "Search",
     billing: "Billing",
     billingDesc: "Subscriptions, invoicing, and usage.",
     engagement: "Engagement",
@@ -129,137 +116,6 @@ const translations = {
     codeTabReward: "Redeem reward",
     copyLabel: "Copy",
     copiedLabel: "Copied",
-  },
-  bg: {
-    // Navbar
-    docs: "Документация",
-    api: "API",
-    askAi: "Попитай AI",
-
-    // Hero
-    heroTitle: "Документация",
-    heroEyebrow: "Мулти-рейлова платежна инфраструктура",
-    heroTitleLine1: "Създайте плащания",
-    heroTitleLine2: "които работят",
-    heroTitleAccent: "навсякъде.",
-    heroSubtitle:
-      "Карти, банкови преводи, стейбълкойни и локални методи — всичко през един API. Приемайте плащания, управлявайте операции и стартирайте.",
-    getStarted: "Започнете →",
-    getStartedCta: "Започнете →",
-    apiReference: "API Справка",
-    payments: "Плащания",
-    searchPlaceholder: "Търсене в документацията...",
-    tickerLabel: "На живо ·",
-
-    // Metrics
-    metric1Val: "140+",
-    metric1Lbl: "Методи за плащане",
-    metric2Val: "99.99%",
-    metric2Lbl: "API ъптайм",
-    metric3Val: "PCI L1",
-    metric3Lbl: "Съответствие",
-    metric4Val: "< 200ms",
-    metric4Lbl: "Медианна латентност",
-
-    // Use cases
-    useCasesEyebrow: "Приложения",
-    useCasesTitle: "Какво искате да изградите?",
-    useCasePayments: "Плащания",
-    useCaseIntegration: "Интеграция",
-    useCaseDevelopers: "Разработчици",
-    acceptOnlinePayments: "Приемане на онлайн плащания",
-    paymentMethodsRails: "Методи за плащане",
-    settlementPayouts: "Сетълмент и изплащания",
-    quickStartGuide: "Ръководство за бърз старт",
-    authenticationKeys: "Автентикация и ключове",
-    webhooksEvents: "Уебхукове и събития",
-    fullApiReference: "Пълна API Справка",
-    sdksLibraries: "SDK-та и библиотеки",
-    troubleshooting: "Отстраняване на проблеми",
-
-    // Products
-    productsEyebrow: "Документация",
-    browseByProduct: "Разгледайте по продукт",
-    gettingStarted: "Първи стъпки",
-    gettingStartedDesc: "Настройка на акаунт, първо API извикване и sandbox.",
-    paymentsTitle: "Плащания",
-    paymentsDesc: "Методи, жизнен цикъл и чекаут процеси.",
-    integration: "Интеграция",
-    integrationDesc: "SDK-та, уебхукове и хостван чекаут.",
-    operations: "Операции",
-    operationsDesc: "Сетълмент, рекончилиация и известия.",
-    compliance: "Съответствие",
-    complianceDesc: "PCI DSS, KYC/AML и GDPR.",
-    apiReferenceTitle: "API Справка",
-    apiReferenceDesc: "Ендпойнти, схеми и примери.",
-    troubleshootingTitle: "Отстраняване на проблеми",
-    troubleshootingDesc: "Кодове за грешки и ръководства за дебъгване.",
-
-    // Dev resources
-    devResEyebrow: "Ресурси за разработчици",
-    devResTitle: "Инструменти и бързи връзки",
-    developerResources: "Ресурси за разработчици",
-    apiExplorer: "API Explorer",
-    apiExplorerDesc: "Интерактивна справка с ендпойнти и заявки на живо.",
-    webhooks: "Уебхукове",
-    webhooksDesc: "Известия за събития в реално време за плащания и спорове.",
-    quickStart: "Бърз старт",
-    quickStartDesc: "Направете първото си API извикване и обработете тестово плащане.",
-    aiAssistant: "AI Асистент",
-    aiAssistantDesc: "Получете незабавни отговори от цялата документация на VINR.",
-
-    // Footer
-    documentation: "Документация",
-    resources: "Ресурси",
-    company: "Компания",
-    footerCopyright: "© 2026 VINR. Всички права запазени.",
-    footerTagline: "Мулти-рейлова платежна инфраструктура за модерни бизнеси.",
-    footerCopy: "© 2026 VINR. Всички права запазени.",
-    complianceBadge1: "PCI DSS L1",
-    complianceBadge2: "SOC 2 Type II",
-    complianceBadge3: "GDPR",
-    backToDocs: "Към документацията",
-
-    // Ask page
-    askTitle: "Задайте въпрос",
-    askSubtitle:
-      "AI асистент, обучен върху документацията на VINR. Питайте за интеграция, плащания, съответствие или операции.",
-    askPlaceholder: "Задайте въпрос за VINR...",
-    askDisclaimer:
-      "AI отговорите са генерирани от документацията на VINR. Проверете критичната информация преди използване в продукция.",
-    askSuggestion1: "Как да интегрирам плащания с VINR?",
-    askSuggestion2: "Какви методи за плащане се поддържат?",
-    askSuggestion3: "Как работи сетълментът?",
-    askSuggestion4: "Какви са изискванията за съответствие?",
-
-    // Nav mega-menu
-    navProducts: "Продукти",
-    navBuild: "Изграждане",
-    navOperate: "Опериране",
-    navReference: "Справка",
-    navViewAll: "Вижте цялата документация",
-    navMenu: "Меню",
-    searchShort: "Търсене",
-    billing: "Фактуриране",
-    billingDesc: "Абонаменти, фактуриране и потребление.",
-    engagement: "Ангажиране",
-    engagementDesc: "Лоялност, награди и кампании.",
-    guides: "Ръководства",
-    guidesDesc: "Цялостни рецепти по продукт.",
-    changelog: "Промени",
-    changelogDesc: "Промени в API и продукта.",
-
-    // Announcement banner
-    bannerText: "Ново: Изплащанията в стейбълкойни вече са активни.",
-    bannerCta: "Прочетете съобщението",
-
-    // Code snippet
-    codeComment: "// Пренасочване към чекаут",
-    codeTabPayment: "Създаване на плащане",
-    codeTabPoints: "Начисляване на точки",
-    codeTabReward: "Осребряване на награда",
-    copyLabel: "Копирай",
-    copiedLabel: "Копирано",
   },
 } as const;
 

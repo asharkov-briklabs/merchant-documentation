@@ -7,7 +7,7 @@ interface SectionHeadingProps {
 export function SectionHeading({ eyebrow, title, mb = "md" }: SectionHeadingProps) {
   return (
     <div>
-      <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#2a9d90] mb-2">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-vinr-500 mb-2">
         {eyebrow}
       </div>
       <h2

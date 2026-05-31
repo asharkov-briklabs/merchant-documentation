@@ -4,70 +4,10 @@
 
 @layer base {
   :root {
-    /* VINR teal scale */
-    --vinr-teal-50:  #f7fdfc;
-    --vinr-teal-100: #e7f7f7;
-    --vinr-teal-200: #c6e8e8;
-    --vinr-teal-300: #97d1d1;
-    --vinr-teal-500: #2a9d90;
-    --vinr-teal-700: #0b3b45;
-    --vinr-teal-800: #082d35;
-    --vinr-teal-900: #05191d;
-
-    /* VINR lime */
-    --vinr-lime-500: #6da544;
-    --vinr-lime-700: #496e2d;
-    --vinr-lime-900: #225f47;
-
-    /* VINR blue */
-    --vinr-blue-500: #338af3;
-    --vinr-blue-700: #0052b4;
-
-    /* VINR accent colors */
-    --vinr-purple:   #9747ff;
-    --vinr-yellow:   #ffda44;
-    --vinr-red:      #d80027;
-    --vinr-red-deep: #a2001d;
-
-    /* Zinc neutrals */
-    --zinc-50:   #fafafa;
-    --zinc-100:  #f8f9f9;
-    --zinc-200:  #f4f6f6;
-    --zinc-300:  #eff2f2;
-    --zinc-400:  #eceff0;
-    --zinc-500:  #e7ebec;
-    --zinc-600:  #d2d6d7;
-    --zinc-700:  #a4a7a8;
-    --zinc-800:  #7f8182;
-    --zinc-900:  #616363;
-    --zinc-1000: #2c2e2e;
-
-    /* Shadows */
-    --shadow-xs: 0 1px 2px 0 rgba(0,0,0,0.05);
-    --shadow-sm: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1);
-    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
-    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
-
-    /* Radii */
-    --radius-sm:   4px;
-    --radius-md:   6px;
-    --radius-lg:   8px;
-    --radius-xl:   12px;
-    --radius-full: 9999px;
-
-    /* Spacing */
-    --space-1:  4px;
-    --space-2:  8px;
-    --space-3:  12px;
-    --space-4:  16px;
-    --space-5:  20px;
-    --space-6:  24px;
-    --space-8:  32px;
-    --space-10: 40px;
-    --space-12: 48px;
-    --space-16: 64px;
-    --space-24: 96px;
-    --space-32: 128px;
+    /* Design tokens (colors, spacing, radii, shadows) are defined once in
+       tailwind.config.ts and consumed as Tailwind classes (e.g. bg-vinr-900).
+       Only the font families and the fumadocs --fd-* theme overrides need to
+       live here as CSS variables. */
 
     /* Font families */
     --font-sans:    var(--font-inter, "Inter"), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -142,14 +82,21 @@
   }
 }
 
-/* Ticker + pulse animations */
-@keyframes tickerScroll {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-50%); }
-}
-
+/* Pulse animation (live-status dot in the hero code card). */
 @keyframes pulseDot {
   0%, 100% { opacity: 1; }
   50%       { opacity: .4; }
+}
+
+/* Respect users who prefer reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 

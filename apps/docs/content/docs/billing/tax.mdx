@@ -118,7 +118,7 @@ curl https://api.vinr.com/v1/tax/reports \
   -d country=DE
 ```
 
-The response breaks down collected tax by jurisdiction, rate, and taxability so you can reconcile against [settlements](/docs/operations/settlements-and-payouts). Subscribe to the `invoice.finalized` event to stream each calculation into your own ledger as it happens.
+The response breaks down collected tax by jurisdiction, rate, and taxability so you can reconcile against [settlements](/docs/operations/settlement). Subscribe to the `invoice.finalized` event to stream each calculation into your own ledger as it happens.
 
 <Callout type="info">
 This page is informational and not legal advice; consult your compliance counsel for binding decisions about where you are obligated to register and collect.

@@ -121,7 +121,7 @@ The completed event includes a `stablecoin` block with the settled token, networ
 
 By default, VINR auto-converts received tokens to your account currency and adds the proceeds to your fiat balance, which pays out via the normal [payout schedule](/docs/operations/payouts). EURC into a EUR account settles 1:1 with no FX spread; USD-denominated tokens incur a conversion at the quoted rate.
 
-To hold the asset instead of converting, set `stablecoin.settlement: 'crypto'` at creation — proceeds accrue to a per-asset crypto balance you can withdraw to an external address. See [settlements](/docs/operations/settlements) for the conversion ledger and fee breakdown.
+To hold the asset instead of converting, set `stablecoin.settlement: 'crypto'` at creation — proceeds accrue to a per-asset crypto balance you can withdraw to an external address. See [settlements](/docs/operations/settlement) for the conversion ledger and fee breakdown.
 
 ## Test it
 
@@ -152,7 +152,7 @@ Switch the stablecoin payment method to live in the Dashboard and confirm the ne
 
 ### Choose a settlement policy
 
-Decide between `fiat` (auto-convert) and `crypto` (hold) settlement, and review the FX spread on the [pricing page](/docs/operations/settlements).
+Decide between `fiat` (auto-convert) and `crypto` (hold) settlement, and review the FX spread on the [pricing page](/docs/operations/settlement).
 
 ### Walk the go-live checklist
 
@@ -165,5 +165,5 @@ Confirm webhook handling for `processing` and `requires_action`, then run the [g
 <Cards>
   <Card title="Accept a one-time payment" href="/docs/guides/accept-a-payment" description="The card-based flow this guide builds on." />
   <Card title="Payouts" href="/docs/operations/payouts" description="How settled fiat reaches your bank." />
-  <Card title="Settlements" href="/docs/operations/settlements" description="Conversion ledger, FX, and fees." />
+  <Card title="Settlements" href="/docs/operations/settlement" description="Conversion ledger, FX, and fees." />
 </Cards>

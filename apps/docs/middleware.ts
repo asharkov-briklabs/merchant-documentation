@@ -11,5 +11,10 @@ import { i18n } from "@/lib/i18n";
 export default createI18nMiddleware(i18n);
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|favicon.png|api/).*)"],
+  // Exclude Next internals, the API, and file-based metadata routes
+  // (sitemap.xml, robots.txt, opengraph-image, icon) so the i18n middleware
+  // doesn't try to locale-rewrite them.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|favicon.png|sitemap.xml|robots.txt|opengraph-image|icon|api/).*)",
+  ],
 };

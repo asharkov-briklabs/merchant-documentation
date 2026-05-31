@@ -39,7 +39,7 @@ for (const point of series.points) {
 ```
 
 <Callout type="info">
-Metrics are derived from the same [events](/docs/integration/events) that drive webhooks, so a metric and the event stream never disagree. If you need raw rows for your own warehouse, export events rather than reconstructing them from metrics.
+Metrics are derived from the same [events](/docs/integration/webhooks) that drive webhooks, so a metric and the event stream never disagree. If you need raw rows for your own warehouse, export events rather than reconstructing them from metrics.
 </Callout>
 
 ## Configuring alerts
@@ -136,6 +136,6 @@ During a `degraded` webhook window, expect elevated `delivery_lag_p95`. Gate you
 
 <Cards>
   <Card title="Webhooks" href="/docs/integration/webhooks" description="Verify, retry, and replay event deliveries." />
-  <Card title="Events" href="/docs/integration/events" description="The event stream behind every metric and alert." />
+  <Card title="Events" href="/docs/integration/webhooks" description="The event stream behind every metric and alert." />
   <Card title="Dunning & recovery" href="/docs/billing/dunning-and-recovery" description="Automated recovery for failed collections." />
 </Cards>

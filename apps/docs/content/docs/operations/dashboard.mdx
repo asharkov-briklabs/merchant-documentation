@@ -23,7 +23,7 @@ The home screen summarizes the metrics most teams check first:
 | Tile | What it shows |
 |---|---|
 | Gross volume | Total captured payment value for the selected range. |
-| Net volume | Gross minus refunds, disputes, and VINR fees — what reaches a [payout](/docs/operations/payouts-and-settlement). |
+| Net volume | Gross minus refunds, disputes, and VINR fees — what reaches a [payout](/docs/operations/payouts). |
 | Successful payments | Count and success rate, with declines broken out by reason. |
 | MRR & active subscriptions | Recurring revenue pulled from [Billing](/docs/billing). |
 
@@ -98,7 +98,7 @@ Settings is grouped so you rarely hunt for a control:
 - **Account** — business name, branding for hosted pages and receipts, default currency.
 - **API keys** — create, roll, and revoke secret and publishable keys per mode.
 - **Webhooks** — register `we_` endpoints, pick events, and replay deliveries. See [Webhooks](/docs/integration/webhooks).
-- **Payouts** — bank account and [settlement schedule](/docs/operations/payouts-and-settlement).
+- **Payouts** — bank account and [settlement schedule](/docs/operations/payouts).
 - **Tax and compliance** — tax registrations and [data-export](/docs/compliance) controls.
 
 <Callout type="warn">
@@ -108,7 +108,7 @@ Rolling a secret key invalidates the old one immediately. Update your server's `
 ## Next steps
 
 <Cards>
-  <Card title="Payouts & settlement" href="/docs/operations/payouts-and-settlement" description="How net volume becomes money in your bank." />
+  <Card title="Payouts & settlement" href="/docs/operations/payouts" description="How net volume becomes money in your bank." />
   <Card title="Webhooks" href="/docs/integration/webhooks" description="Automate what the dashboard does by hand." />
   <Card title="Operations overview" href="/docs/operations" description="The rest of the day-to-day tooling." />
 </Cards>

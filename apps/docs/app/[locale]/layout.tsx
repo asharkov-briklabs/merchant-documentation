@@ -16,22 +16,6 @@ export default function LocaleLayout({
         name: localeNames[lang] || lang,
         locale: lang,
       }))}
-      translations={
-        params.locale === "bg"
-          ? {
-              search: "Търсене",
-              searchNoResult: "Няма резултати",
-              toc: "Съдържание",
-              tocNoHeadings: "Няма заглавия",
-              lastUpdate: "Последна промяна",
-              chooseLanguage: "Изберете език",
-              nextPage: "Следваща страница",
-              previousPage: "Предишна страница",
-              chooseTheme: "Изберете тема",
-              editOnGithub: "Редактиране в GitHub",
-            }
-          : undefined
-      }
     >
       {children}
     </I18nProvider>

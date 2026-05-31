@@ -8,22 +8,16 @@ import ReactMarkdown from "react-markdown";
 import brandmarkDark from "../assets/Brandmark_Vinr_dark.svg";
 import brandmarkLight from "../assets/Brandmark_Vinr_light.svg";
 import { SiteNav } from "../components/site-nav";
+import type { getTranslations } from "@/lib/translations";
 
-interface AskTranslations {
-  askTitle: string;
-  askSubtitle: string;
-  askPlaceholder: string;
-  askDisclaimer: string;
-  backToDocs: string;
-  aiAssistant: string;
-  suggestions: string[];
-  docs: string;
-  api: string;
-  askAi: string;
-  [key: string]: unknown;
-}
+export function AskClient({ t, locale }: { t: ReturnType<typeof getTranslations>; locale: string }) {
+  const suggestions = [
+    t.askSuggestion1,
+    t.askSuggestion2,
+    t.askSuggestion3,
+    t.askSuggestion4,
+  ];
 
-export function AskClient({ translations: t, locale }: { translations: AskTranslations; locale: string }) {
   const { messages, input, handleInputChange, handleSubmit, isLoading, error, reload, stop } =
     useChat({
       api: "/api/ask",
@@ -81,7 +75,7 @@ export function AskClient({ translations: t, locale }: { translations: AskTransl
   return (
     <main className="flex h-screen flex-col bg-fd-background">
       {/* Dark Nav */}
-      <SiteNav t={t as any} locale={locale} activeKey="ask" />
+      <SiteNav t={t} locale={locale} activeKey="ask" />
 
       {/* Conversation Area */}
       <div className="flex-1 overflow-y-auto">
@@ -106,7 +100,7 @@ export function AskClient({ translations: t, locale }: { translations: AskTransl
 
             {/* Suggestion Pills */}
             <div className="mt-8 flex max-w-xl flex-wrap justify-center gap-2">
-              {t.suggestions.map((s) => (
+              {suggestions.map((s) => (
                 <button
                   key={s}
                   onClick={() => selectSuggestion(s)}

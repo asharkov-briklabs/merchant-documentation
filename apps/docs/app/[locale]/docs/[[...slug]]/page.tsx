@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { source } from "@/lib/source";
 import {
   DocsPage,
@@ -22,8 +23,14 @@ export default async function Page(props: {
   if (!page) notFound();
 
   const MDX = page.data.body;
+  const jsonLd = buildJsonLd(page.url, page.data.title, page.data.description);
 
   return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
     <DocsPage
       toc={page.data.toc}
       full={page.data.full}
@@ -31,10 +38,10 @@ export default async function Page(props: {
         page.data.lastUpdated ? new Date(page.data.lastUpdated) : undefined
       }
       editOnGithub={{
-        owner: "vinr",
-        repo: "documentation",
+        owner: "asharkov-briklabs",
+        repo: "Vinr-Merchant_Documentation",
         sha: "main",
-        path: `content/docs/${page.file.path}`,
+        path: `apps/docs/content/docs/${page.file.path}`,
       }}
     >
       <DocsTitle>{page.data.title}</DocsTitle>
@@ -43,7 +50,41 @@ export default async function Page(props: {
         <MDX components={{ ...defaultMdxComponents, Step, Steps, Tab, Tabs, Accordion, Accordions, TypeTable, File, Files, Folder, ImageZoom }} />
       </DocsBody>
     </DocsPage>
+    </>
   );
+}
+
+const SITE_URL = (
+  process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+).replace(/\/$/, "");
+
+/** TechArticle + BreadcrumbList structured data for the current doc page. */
+function buildJsonLd(url: string, title: string, description?: string) {
+  const segments = url.split("/").filter(Boolean); // ["docs", "payments", ...]
+  const crumbs = segments.map((seg, i) => ({
+    "@type": "ListItem",
+    position: i + 1,
+    name: seg
+      .replace(/-/g, " ")
+      .replace(/^\w/, (c) => c.toUpperCase()),
+    item: `${SITE_URL}/${segments.slice(0, i + 1).join("/")}`,
+  }));
+
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "TechArticle",
+        headline: title,
+        description,
+        url: `${SITE_URL}${url}`,
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: crumbs,
+      },
+    ],
+  };
 }
 
 export async function generateStaticParams() {
@@ -52,13 +93,26 @@ export async function generateStaticParams() {
 
 export async function generateMetadata(props: {
   params: Promise<{ slug?: string[]; locale: string }>;
-}) {
+}): Promise<Metadata> {
   const params = await props.params;
   const page = source.getPage(params.slug, params.locale);
   if (!page) notFound();
 
+  const { title, description } = page.data;
   return {
-    title: page.data.title,
-    description: page.data.description,
+    title,
+    description,
+    alternates: { canonical: page.url },
+    openGraph: {
+      type: "article",
+      title,
+      description,
+      url: page.url,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
   };
 }

@@ -75,7 +75,7 @@ const payment = await vinr.payments.create({
 });
 ```
 
-`offSession: true` signals that the buyer isn't in the checkout flow. Some cards still require a fresh authentication — when that happens the payment returns status `requires_action` rather than completing, and you should fall back to an on-session flow. See [authentication & 3DS](/docs/payments/authentication) for handling that branch.
+`offSession: true` signals that the buyer isn't in the checkout flow. Some cards still require a fresh authentication — when that happens the payment returns status `requires_action` rather than completing, and you should fall back to an on-session flow. See [authentication & 3DS](/docs/payments/strong-customer-authentication) for handling that branch.
 
 ## Updating, listing & detaching
 
@@ -119,7 +119,7 @@ The customer is a single object across all three pillars. A method saved during 
 ## Next steps
 
 <Cards>
-  <Card title="Authentication & 3DS" href="/docs/payments/authentication" description="Handle requires_action on off-session charges." />
+  <Card title="Authentication & 3DS" href="/docs/payments/strong-customer-authentication" description="Handle requires_action on off-session charges." />
   <Card title="Subscriptions" href="/docs/billing/subscriptions" description="Bill a stored method on a recurring schedule." />
   <Card title="Loyalty accounts" href="/docs/engagement/loyalty-accounts" description="Tie a customer to points and rewards." />
 </Cards>

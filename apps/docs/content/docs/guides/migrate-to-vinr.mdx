@@ -78,7 +78,7 @@ A token transfer can take several days to clear the card networks. Start payment
 
 ## Migrate subscriptions
 
-Recreate each subscription against an existing [price](/docs/billing/prices), then anchor the billing cycle so the customer is not charged twice for a period the old provider already billed.
+Recreate each subscription against an existing [price](/docs/billing/products-and-prices), then anchor the billing cycle so the customer is not charged twice for a period the old provider already billed.
 
 ```typescript
 const sub = await vinr.subscriptions.create(

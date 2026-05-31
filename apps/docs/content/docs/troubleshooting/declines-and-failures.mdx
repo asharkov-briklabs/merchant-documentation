@@ -91,7 +91,7 @@ If `failure.retryable` is `false`, stop. Request a new payment method instead of
 
 ### Reuse a saved method, not a new charge object
 
-Retry against the stored `pm_...` method with a fresh [idempotency key](/docs/integration/idempotency) per attempt so a network retry of the _same_ attempt never double-charges.
+Retry against the stored `pm_...` method with a fresh [idempotency key](/docs/api-reference/idempotency) per attempt so a network retry of the _same_ attempt never double-charges.
 
 ### Space out soft declines
 
@@ -114,7 +114,7 @@ curl https://api.vinr.com/v1/payments \
 ```
 
 <Callout type="warn">
-Smart-retry behaviour is built into [Billing dunning](/docs/billing/dunning) for subscription invoices. Only build your own retry loop for one-off payments.
+Smart-retry behaviour is built into [Billing dunning](/docs/billing/dunning-and-recovery) for subscription invoices. Only build your own retry loop for one-off payments.
 </Callout>
 
 ## Reducing decline rates
@@ -129,6 +129,6 @@ Smart-retry behaviour is built into [Billing dunning](/docs/billing/dunning) for
 
 <Cards>
   <Card title="Payment lifecycle" href="/docs/payments/payment-lifecycle" description="Every status and the transitions between them." />
-  <Card title="Dunning" href="/docs/billing/dunning" description="Automated retries and recovery for failed invoices." />
-  <Card title="Idempotency" href="/docs/integration/idempotency" description="Retry safely without double-charging." />
+  <Card title="Dunning" href="/docs/billing/dunning-and-recovery" description="Automated retries and recovery for failed invoices." />
+  <Card title="Idempotency" href="/docs/api-reference/idempotency" description="Retry safely without double-charging." />
 </Cards>

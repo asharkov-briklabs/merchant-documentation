@@ -86,7 +86,7 @@ await vinr.subscriptions.update('sub_8Q2k...', {
 });
 ```
 
-A subscription with no remaining active items is invalid — to end billing entirely, [cancel the subscription](/docs/billing/subscriptions/canceling-subscriptions) instead of deleting its last item.
+A subscription with no remaining active items is invalid — to end billing entirely, [cancel the subscription](/docs/billing/subscriptions/cancellations) instead of deleting its last item.
 
 ## Updating metadata
 
@@ -130,7 +130,7 @@ Updates during a trial do not prorate — there is nothing billed yet. The new c
 The surplus becomes **customer credit balance** and is automatically applied to future invoices. VINR never issues a cash refund for a downgrade unless you explicitly create one.
 </Accordion>
 <Accordion title="An update lands while an invoice is past_due">
-The change is accepted, but new proration items wait for the open invoice to settle. Resolve collection through dunning first; see [Troubleshooting failed payments](/docs/troubleshooting/failed-payments).
+The change is accepted, but new proration items wait for the open invoice to settle. Resolve collection through dunning first; see [Troubleshooting failed payments](/docs/troubleshooting/declines-and-failures).
 </Accordion>
 <Accordion title="You need to preview the cost before committing">
 Call the invoice preview endpoint with the proposed `items` to see exact proration amounts without mutating the subscription. See [Invoice items](/docs/api-reference/invoice-items).
@@ -141,6 +141,6 @@ Call the invoice preview endpoint with the proposed `items` to see exact prorati
 
 <Cards>
   <Card title="Trials & proration" href="/docs/billing/trials-and-proration" description="How mid-cycle changes are calculated." />
-  <Card title="Canceling subscriptions" href="/docs/billing/subscriptions/canceling-subscriptions" description="End billing and handle final invoices." />
+  <Card title="Canceling subscriptions" href="/docs/billing/subscriptions/cancellations" description="End billing and handle final invoices." />
   <Card title="Subscriptions" href="/docs/billing/subscriptions" description="The full subscription lifecycle." />
 </Cards>

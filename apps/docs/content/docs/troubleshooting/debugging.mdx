@@ -105,7 +105,7 @@ export async function POST(req: Request) {
 
 ## Idempotency replays
 
-When you send an [idempotency key](/docs/integration/idempotency), VINR returns the original stored response for any retry with the same key. That makes debugging deterministic: replay the exact request and compare. A response carrying `x-vinr-idempotent-replay: true` means you hit the cache, not a fresh execution.
+When you send an [idempotency key](/docs/api-reference/idempotency), VINR returns the original stored response for any retry with the same key. That makes debugging deterministic: replay the exact request and compare. A response carrying `x-vinr-idempotent-replay: true` means you hit the cache, not a fresh execution.
 
 ```bash
 curl https://sandbox.api.vinr.com/v1/payments \
@@ -143,7 +143,7 @@ Frameworks that auto-parse JSON destroy the byte-exact payload the signature was
 
 ## Reproducing in sandbox
 
-The sandbox mirrors live behavior with deterministic [test cards](/docs/getting-started/test-data), so you can trigger any branch on demand.
+The sandbox mirrors live behavior with deterministic [test cards](/docs/getting-started/test-mode), so you can trigger any branch on demand.
 
 | Card number | Outcome |
 |---|---|
@@ -165,6 +165,6 @@ The CLI prints the signing secret for the forwarding session and logs every even
 
 <Cards>
   <Card title="Webhooks" href="/docs/integration/webhooks" description="Receive, verify, and retry events reliably." />
-  <Card title="Idempotency" href="/docs/integration/idempotency" description="Make every request safe to retry." />
+  <Card title="Idempotency" href="/docs/api-reference/idempotency" description="Make every request safe to retry." />
   <Card title="Error reference" href="/docs/api-reference/errors" description="Every error code and how to handle it." />
 </Cards>

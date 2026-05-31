@@ -17,6 +17,28 @@ function categoryTag(filePath: string, frontmatter?: Category): string {
   return parsed.success ? parsed.data : "";
 }
 
+// Build-time guard: every top-level content folder must be a known category,
+// otherwise its docs silently get an empty search tag (the bug that hid the
+// `guides`/`changelog` folders). Throws during `next build` if they drift.
+const KNOWN_CATEGORIES = new Set<string>(CategoryEnum.options);
+const untaggedFolders = Array.from(
+  new Set(
+    source
+      .getPages(i18n.defaultLanguage)
+      .map((page) => page.file.path.split("/")[0])
+      // Top-level docs (e.g. index.mdx) have no folder segment — skip them.
+      .filter((segment) => segment.endsWith(".mdx") === false)
+  )
+).filter((folder) => !KNOWN_CATEGORIES.has(folder));
+
+if (untaggedFolders.length > 0) {
+  throw new Error(
+    `Content folders missing from CategoryEnum (lib/schema.ts): ${untaggedFolders.join(
+      ", "
+    )}. Add them so their docs are searchable by category.`
+  );
+}
+
 export const { GET } = createI18nSearchAPI("advanced", {
   tag: true,
   indexes: i18n.languages.map((locale) => ({

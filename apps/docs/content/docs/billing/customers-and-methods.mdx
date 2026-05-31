@@ -66,7 +66,7 @@ await vinr.subscriptions.update('sub_4Qe1...', {
 ```
 
 <Callout type="info">
-Stored methods are created and tokenized entirely in Payments. Billing never sees raw card data — it only references the `pm_` token. See [Saving payment methods](/docs/payments/saved-methods).
+Stored methods are created and tokenized entirely in Payments. Billing never sees raw card data — it only references the `pm_` token. See [Saving payment methods](/docs/billing/customers-and-methods).
 </Callout>
 
 ## Billing details & addresses
@@ -121,7 +121,7 @@ if (event.type === 'invoice.payment_failed') {
 ```
 
 <Callout type="warn">
-In sandbox, use `4000 0000 0000 0002` to simulate a decline and exercise your failed-method path before going live. See the [sandbox test cards](/docs/payments/testing).
+In sandbox, use `4000 0000 0000 0002` to simulate a decline and exercise your failed-method path before going live. See the [sandbox test cards](/docs/integration/testing).
 </Callout>
 
 ## Next steps
@@ -129,5 +129,5 @@ In sandbox, use `4000 0000 0000 0002` to simulate a decline and exercise your fa
 <Cards>
   <Card title="How billing works" href="/docs/billing/how-billing-works" description="The objects and flow behind recurring revenue." />
   <Card title="Dunning & recovery" href="/docs/billing/dunning-and-recovery" description="What happens after a method fails." />
-  <Card title="Saving payment methods" href="/docs/payments/saved-methods" description="Tokenize and store cards in Payments." />
+  <Card title="Saving payment methods" href="/docs/billing/customers-and-methods" description="Tokenize and store cards in Payments." />
 </Cards>

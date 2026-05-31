@@ -29,7 +29,7 @@ subscription.trial_end;     // 1749600000 — first invoice finalizes here
 During the trial VINR generates a draft `invoice` for €0.00 and emits no `invoice.paid`. The billing cycle anchor is set to `trial_end`, so the first real period begins exactly when the trial closes.
 
 <Callout type="info">
-You do **not** need a payment method to start a trial. Collect one before `trial_end` (for example via a [setup flow](/docs/payments/save-a-payment-method)) so the first charge succeeds. Listen for `subscription.trial_will_end`, emitted three days out, to nudge customers.
+You do **not** need a payment method to start a trial. Collect one before `trial_end` (for example via a [setup flow](/docs/guides/save-and-reuse-cards)) so the first charge succeeds. Listen for `subscription.trial_will_end`, emitted three days out, to nudge customers.
 </Callout>
 
 ## Trial-end behavior

@@ -41,6 +41,8 @@
   data, canonical URLs, hreflang alternates, fix `metadataBase`.
 - [ ] **12. i18n at scale** — AI-assisted translation pipeline (machine-translate + human review)
   instead of hand-written `.bg.mdx`; harden the Edge middleware; decide locale routing strategy.
+  Consider versioning **per country, not per language** — payment methods, regulations, and supported
+  flows differ by market, so route/variant on country (e.g. `/de`, `/bg`) rather than language alone.
 - [ ] **13. Frontmatter taxonomy** — Populate `category`/`persona`/`lastUpdated` on all docs; use for
   persona-filtered nav and freshness badges; reconcile dead `lib/schema.ts` with `source.config.ts`.
 
@@ -58,3 +60,8 @@
 - [ ] **19. Engineering hygiene** — `.github` CI pipeline (type-check, lint, build), Markdown link
   checker, spell-check, deliberate Fumadocs upgrade cadence.
 - [ ] **20. Docs / API versioning** — Add once the API stabilizes (pin API versions like Stripe).
+- [ ] **21. Mobile & responsive** — Make sure the docs work well on mobile and across breakpoints (nav,
+  code samples, tables, "Try it" panels); test responsive behavior as part of CI/QA.
+- [ ] **22. Standard vs. Advanced modes** — Offer two integration modes: *Standard* follows Stripe's
+  opinionated, batteries-included approach; *Advanced* leans toward Adyen's lower-level, more
+  configurable approach. Let users toggle and surface the right depth of content per mode.

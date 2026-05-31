@@ -4,25 +4,33 @@ import type { getTranslations } from "@/lib/translations";
 import { localeHref } from "@/lib/locale-href";
 import { CategoryMenu } from "./category-menu";
 import { SearchTrigger } from "./search-trigger";
+import { SidebarToggle } from "./sidebar-toggle";
 
 interface SiteNavProps {
   t: ReturnType<typeof getTranslations>;
   locale: string;
   activeKey?: "docs" | "api" | "ask" | null;
+  /** Span full width (for the docs layout) instead of the 1200px marketing width. */
+  fluid?: boolean;
 }
 
-export function SiteNav({ t, locale, activeKey }: SiteNavProps) {
-  const altLocale = locale === "en" ? "bg" : "en";
-  const altLabel = locale === "en" ? "BG" : "EN";
-
+export function SiteNav({ t, locale, activeKey, fluid }: SiteNavProps) {
   return (
     <nav
-      className="sticky top-0 z-40 h-14 border-b border-white/[0.07] bg-[#05191d] px-10"
+      className="sticky top-0 z-40 h-14 border-b border-white/[0.07] bg-vinr-900 px-6 md:px-10"
       style={{ height: 56 }}
     >
-      <div className="grid h-full w-full max-w-[1200px] mx-auto grid-cols-[auto_1fr_auto] items-center gap-3 md:gap-5">
+      <div
+        className={[
+          "grid h-full grid-cols-[auto_1fr_auto] items-center gap-3 md:gap-5",
+          fluid ? "w-full" : "w-full max-w-[1200px] mx-auto",
+        ].join(" ")}
+      >
         {/* Left: logo + categories */}
         <div className="flex items-center">
+          {/* Docs-only: reopen the fumadocs page-tree sidebar on mobile */}
+          {fluid && <SidebarToggle label={t.navMenu} />}
+
           <Link href={localeHref(locale, "/")} className="flex items-center">
             <VinrWordmark height={18} fill="#F7FDFC" />
           </Link>
@@ -42,10 +50,10 @@ export function SiteNav({ t, locale, activeKey }: SiteNavProps) {
         <Link
           href={localeHref(locale, "/ask")}
           className={[
-            "flex h-8 items-center gap-1.5 rounded-md border border-[rgba(42,157,144,0.4)] px-3.5 text-[13px] font-medium text-[#f7fdfc] transition-colors duration-[120ms]",
+            "flex h-8 items-center gap-1.5 rounded-md border border-vinr-500/40 px-3.5 text-[13px] font-medium text-vinr-50 transition-colors duration-[120ms]",
             activeKey === "ask"
-              ? "bg-[rgba(42,157,144,0.38)]"
-              : "bg-[rgba(42,157,144,0.25)] hover:bg-[rgba(42,157,144,0.38)]",
+              ? "bg-vinr-500/[0.38]"
+              : "bg-vinr-500/25 hover:bg-vinr-500/[0.38]",
           ].join(" ")}
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -56,13 +64,6 @@ export function SiteNav({ t, locale, activeKey }: SiteNavProps) {
             />
           </svg>
           {t.askAi}
-        </Link>
-
-        <Link
-          href={localeHref(altLocale, "/")}
-          className="ml-3 hidden h-8 items-center gap-1 rounded-md border border-white/[0.12] px-2.5 text-[12px] text-[rgba(247,253,252,0.55)] transition-colors hover:text-[#f7fdfc] sm:flex"
-        >
-          {altLabel} ▾
         </Link>
         </div>
       </div>

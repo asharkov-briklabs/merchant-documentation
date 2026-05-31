@@ -1,104 +1,96 @@
 /**
  * Source of truth for the marketing-nav mega-menu (Stripe/Adyen-style):
  * descriptive top-level categories, each opening a dropdown of that area's
- * key sub-pages. Labels are stored inline per-locale here (rather than in
- * lib/translations.ts) to keep the large page list self-contained.
+ * key sub-pages.
+ *
+ * NOTE: this list is maintained by hand alongside the sidebar `ROOTS`
+ * (app/[locale]/docs/layout.tsx) and `CategoryEnum` (lib/schema.ts). See the
+ * taxonomy-consolidation work in the remediation plan for folding these into a
+ * single registry.
  */
 export interface NavLink {
   path: string;
-  en: string;
-  bg: string;
+  label: string;
 }
 
 export interface NavGroup {
   /** Section overview the category links to. */
   path: string;
-  en: string;
-  bg: string;
+  label: string;
   items: NavLink[];
 }
 
 export const NAV_GROUPS: NavGroup[] = [
   {
     path: "/docs/getting-started",
-    en: "Get started",
-    bg: "Първи стъпки",
+    label: "Get started",
     items: [
-      { path: "/docs/getting-started", en: "Overview", bg: "Преглед" },
-      { path: "/docs/getting-started/quick-start", en: "Quick start", bg: "Бърз старт" },
-      { path: "/docs/getting-started/authentication", en: "Authentication", bg: "Автентикация" },
-      { path: "/docs/getting-started/test-mode", en: "Test mode", bg: "Тестов режим" },
-      { path: "/docs/getting-started/sdks", en: "SDKs", bg: "SDK-та" },
-      { path: "/docs/getting-started/go-live-checklist", en: "Go-live checklist", bg: "Чеклист за старт" },
+      { path: "/docs/getting-started", label: "Overview" },
+      { path: "/docs/getting-started/quick-start", label: "Quick start" },
+      { path: "/docs/getting-started/authentication", label: "Authentication" },
+      { path: "/docs/getting-started/test-mode", label: "Test mode" },
+      { path: "/docs/getting-started/sdks", label: "SDKs" },
+      { path: "/docs/getting-started/go-live-checklist", label: "Go-live checklist" },
     ],
   },
   {
     path: "/docs/payments",
-    en: "Payments",
-    bg: "Плащания",
+    label: "Payments",
     items: [
-      { path: "/docs/payments", en: "Overview", bg: "Преглед" },
-      { path: "/docs/payments/payment-methods", en: "Payment methods", bg: "Методи за плащане" },
-      { path: "/docs/payments/payment-lifecycle", en: "Payment lifecycle", bg: "Жизнен цикъл" },
-      { path: "/docs/payments/refunds", en: "Refunds", bg: "Възстановявания" },
-      { path: "/docs/payments/disputes", en: "Disputes", bg: "Спорове" },
-      { path: "/docs/payments/recurring-payments", en: "Recurring payments", bg: "Повтарящи се плащания" },
+      { path: "/docs/payments", label: "Overview" },
+      { path: "/docs/payments/payment-methods", label: "Payment methods" },
+      { path: "/docs/payments/payment-lifecycle", label: "Payment lifecycle" },
+      { path: "/docs/payments/refunds", label: "Refunds" },
+      { path: "/docs/payments/disputes", label: "Disputes" },
+      { path: "/docs/payments/recurring-payments", label: "Recurring payments" },
     ],
   },
   {
     path: "/docs/billing",
-    en: "Billing",
-    bg: "Фактуриране",
+    label: "Billing",
     items: [
-      { path: "/docs/billing", en: "Overview", bg: "Преглед" },
-      { path: "/docs/billing/subscriptions", en: "Subscriptions", bg: "Абонаменти" },
-      { path: "/docs/billing/invoices", en: "Invoices", bg: "Фактури" },
-      { path: "/docs/billing/usage-based-billing", en: "Usage-based billing", bg: "Фактуриране по потребление" },
-      { path: "/docs/billing/quotes", en: "Quotes", bg: "Оферти" },
-      { path: "/docs/billing/tax", en: "Tax", bg: "Данъци" },
+      { path: "/docs/billing", label: "Overview" },
+      { path: "/docs/billing/subscriptions", label: "Subscriptions" },
+      { path: "/docs/billing/invoices", label: "Invoices" },
+      { path: "/docs/billing/usage-based-billing", label: "Usage-based billing" },
+      { path: "/docs/billing/quotes", label: "Quotes" },
+      { path: "/docs/billing/tax", label: "Tax" },
     ],
   },
   {
     path: "/docs/engagement",
-    en: "Engagement",
-    bg: "Ангажиране",
+    label: "Engagement",
     items: [
-      { path: "/docs/engagement", en: "Overview", bg: "Преглед" },
-      { path: "/docs/engagement/loyalty-accounts", en: "Loyalty accounts", bg: "Лоялни акаунти" },
-      { path: "/docs/engagement/earning-rules", en: "Earning rules", bg: "Правила за начисляване" },
-      { path: "/docs/engagement/rewards-catalog", en: "Rewards catalog", bg: "Каталог с награди" },
-      { path: "/docs/engagement/campaigns", en: "Campaigns", bg: "Кампании" },
-      { path: "/docs/engagement/referrals", en: "Referrals", bg: "Препоръки" },
+      { path: "/docs/engagement", label: "Overview" },
+      { path: "/docs/engagement/loyalty-accounts", label: "Loyalty accounts" },
+      { path: "/docs/engagement/earning-rules", label: "Earning rules" },
+      { path: "/docs/engagement/rewards-catalog", label: "Rewards catalog" },
+      { path: "/docs/engagement/campaigns", label: "Campaigns" },
+      { path: "/docs/engagement/referrals", label: "Referrals" },
     ],
   },
   {
     path: "/docs/operations",
-    en: "Operations",
-    bg: "Операции",
+    label: "Operations",
     items: [
-      { path: "/docs/operations", en: "Overview", bg: "Преглед" },
-      { path: "/docs/operations/settlement", en: "Settlement", bg: "Сетълмент" },
-      { path: "/docs/operations/payouts", en: "Payouts", bg: "Изплащания" },
-      { path: "/docs/operations/reconciliation", en: "Reconciliation", bg: "Рекончилиация" },
-      { path: "/docs/operations/reporting", en: "Reporting", bg: "Отчети" },
-      { path: "/docs/compliance", en: "Compliance", bg: "Съответствие" },
+      { path: "/docs/operations", label: "Overview" },
+      { path: "/docs/operations/settlement", label: "Settlement" },
+      { path: "/docs/operations/payouts", label: "Payouts" },
+      { path: "/docs/operations/reconciliation", label: "Reconciliation" },
+      { path: "/docs/operations/reporting", label: "Reporting" },
+      { path: "/docs/compliance", label: "Compliance" },
     ],
   },
   {
     path: "/docs/api-reference",
-    en: "Developer resources",
-    bg: "Ресурси за разработчици",
+    label: "Developer resources",
     items: [
-      { path: "/docs/api-reference", en: "API reference", bg: "API справка" },
-      { path: "/docs/integration", en: "Integration", bg: "Интеграция" },
-      { path: "/docs/integration/webhooks", en: "Webhooks", bg: "Уебхукове" },
-      { path: "/docs/guides", en: "Guides", bg: "Ръководства" },
-      { path: "/docs/changelog", en: "Changelog", bg: "Промени" },
-      { path: "/docs/troubleshooting", en: "Troubleshooting", bg: "Отстраняване на проблеми" },
+      { path: "/docs/api-reference", label: "API reference" },
+      { path: "/docs/integration", label: "Integration" },
+      { path: "/docs/integration/webhooks", label: "Webhooks" },
+      { path: "/docs/guides", label: "Guides" },
+      { path: "/docs/changelog", label: "Changelog" },
+      { path: "/docs/troubleshooting", label: "Troubleshooting" },
     ],
   },
 ];
-
-export function navLabel(item: { en: string; bg: string }, locale: string): string {
-  return locale === "bg" ? item.bg : item.en;
-}

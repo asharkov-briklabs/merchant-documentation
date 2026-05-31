@@ -69,7 +69,7 @@ The distinction matters because not all data is equal. The table below shows wha
 | Operational logs | Request traces, error logs (no PAN) | Global, 30-day retention | In-region, 30-day retention |
 
 <Callout type="warn">
-Card primary account numbers (PANs) are never stored in your VINR region in plaintext under any tier — they are tokenized inside a PCI-DSS Level 1 HSM boundary. Your records hold only `pay_` tokens. See [PCI compliance](/docs/compliance/pci-compliance).
+Card primary account numbers (PANs) are never stored in your VINR region in plaintext under any tier — they are tokenized inside a PCI-DSS Level 1 HSM boundary. Your records hold only `pay_` tokens. See [PCI compliance](/docs/compliance/pci-dss).
 </Callout>
 
 ## Cross-border transfers
@@ -84,7 +84,7 @@ When a card is charged, the authorization request is routed to the card network'
 
 ### Standard contractual clauses
 
-Transfers of personal data out of the EEA or UK are covered by EU SCCs and the UK International Data Transfer Addendum, executed as part of the VINR [Data Processing Addendum](/docs/compliance/dpa). You do not sign these per-transfer.
+Transfers of personal data out of the EEA or UK are covered by EU SCCs and the UK International Data Transfer Addendum, executed as part of the VINR [Data Processing Addendum](/docs/compliance/gdpr). You do not sign these per-transfer.
 
 ### Sub-processor flow-down
 
@@ -124,7 +124,7 @@ Certification scope is per region. If you operate in multiple regions through se
 ## Next steps
 
 <Cards>
-  <Card title="PCI compliance" href="/docs/compliance/pci-compliance" description="How VINR tokenizes card data and reduces your scope." />
-  <Card title="Data Processing Addendum" href="/docs/compliance/dpa" description="Transfer terms, SCCs, and the sub-processor list." />
+  <Card title="PCI compliance" href="/docs/compliance/pci-dss" description="How VINR tokenizes card data and reduces your scope." />
+  <Card title="Data Processing Addendum" href="/docs/compliance/gdpr" description="Transfer terms, SCCs, and the sub-processor list." />
   <Card title="Compliance overview" href="/docs/compliance" description="All certifications and regulatory programs." />
 </Cards>

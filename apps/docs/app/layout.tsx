@@ -1,7 +1,7 @@
 import "./globals.css";
 import "fumadocs-ui/style.css";
 import { RootProvider } from "fumadocs-ui/provider";
-import { CATEGORY_TAGS } from "@/lib/schema";
+import { CATEGORY_TAGS } from "@/lib/taxonomy";
 import { Inter, Roboto_Mono } from "next/font/google";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";

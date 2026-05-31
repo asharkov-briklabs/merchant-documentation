@@ -154,7 +154,7 @@ switch (event.type) {
 Pass several entries in `items` to bill a base plan plus add-ons on the same invoice. Each item can carry its own `quantity` and is summed into the period's invoice.
 </Accordion>
 <Accordion title="Idempotent retries">
-Network failures mid-create can double-bill. Pass an idempotency key so a retried request returns the original subscription instead of creating a second one. See [Idempotency](/docs/integration/idempotency).
+Network failures mid-create can double-bill. Pass an idempotency key so a retried request returns the original subscription instead of creating a second one. See [Idempotency](/docs/api-reference/idempotency).
 </Accordion>
 <Accordion title="Declined first payment">
 If the initial invoice cannot be collected, the subscription is `incomplete` (or `past_due` after the grace window). Test the path with sandbox card `4000 0000 0000 0002`, and `4000 0000 0000 3220` to exercise the 3DS flow.

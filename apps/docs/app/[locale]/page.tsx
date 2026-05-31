@@ -1,13 +1,13 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { localeHref } from "@/lib/locale-href";
 import { SiteNav } from "./components/site-nav";
 import { SiteFooter } from "./components/site-footer";
 import { HeroMeshBg } from "./components/hero-mesh-bg";
-import { LiveTicker } from "./components/live-ticker";
 import { CodeCard } from "./components/code-card";
 import { SearchTrigger } from "./components/search-trigger";
 import { SectionHeading } from "./components/section-heading";
-import { AnnouncementBanner } from "./components/announcement-banner";
+import { AnnouncementBanner, BANNER_COOKIE } from "./components/announcement-banner";
 import { getTranslations } from "@/lib/translations";
 
 export default function HomePage({
@@ -16,35 +16,45 @@ export default function HomePage({
   params: { locale: string };
 }) {
   const t = getTranslations(params.locale);
+  const bannerDismissed =
+    cookies().get(BANNER_COOKIE)?.value === "dismissed";
 
   return (
     <main>
-      <AnnouncementBanner t={t} locale={params.locale} />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Organization",
+            name: "VINR",
+            description:
+              "Multi-rail payment infrastructure for modern businesses.",
+            url: process.env.NEXT_PUBLIC_SITE_URL || "https://docs.vinr.com",
+          }),
+        }}
+      />
+      <AnnouncementBanner t={t} locale={params.locale} initiallyDismissed={bannerDismissed} />
       <SiteNav t={t} locale={params.locale} activeKey="docs" />
 
       {/* Hero */}
-      <section className="relative overflow-hidden border-b border-white/[0.06] bg-[#05191d] px-10 pb-20 pt-[72px]">
+      <section className="relative overflow-hidden border-b border-white/[0.06] bg-vinr-900 px-10 pb-20 pt-[72px]">
         <HeroMeshBg />
         <div className="relative z-[2] mx-auto grid max-w-[1200px] grid-cols-1 items-center gap-16 md:grid-cols-2">
-          {/* Ticker */}
-          <div className="col-span-full">
-            <LiveTicker label={t.tickerLabel} />
-          </div>
-
           {/* Left column */}
           <div>
             {/* Eyebrow pill */}
-            <div className="mb-5 inline-flex items-center gap-[7px] rounded-full border border-[rgba(42,157,144,0.3)] bg-[rgba(42,157,144,0.15)] px-2.5 py-1">
-              <span className="h-[6px] w-[6px] rounded-full bg-[#2a9d90] shadow-[0_0_8px_rgba(42,157,144,0.7)]" />
-              <span className="text-[11px] font-medium tracking-[0.02em] text-[#97d1d1]">
+            <div className="mb-5 inline-flex items-center gap-[7px] rounded-full border border-vinr-500/30 bg-vinr-500/15 px-2.5 py-1">
+              <span className="h-[6px] w-[6px] rounded-full bg-vinr-500 shadow-[0_0_8px_rgba(42,157,144,0.7)]" />
+              <span className="text-[11px] font-medium tracking-[0.02em] text-vinr-300">
                 {t.heroEyebrow}
               </span>
             </div>
 
-            <h1 className="mb-[18px] text-[52px] font-bold leading-[1.06] tracking-[-0.025em] text-[#f7fdfc]">
+            <h1 className="mb-[18px] text-[52px] font-bold leading-[1.06] tracking-[-0.025em] text-vinr-50">
               {t.heroTitleLine1}
               <br />
-              {t.heroTitleLine2} <span className="text-[#97d1d1]">{t.heroTitleAccent}</span>
+              {t.heroTitleLine2} <span className="text-vinr-300">{t.heroTitleAccent}</span>
             </h1>
 
             <p className="mb-8 max-w-[460px] text-[17px] leading-[1.6] text-white/60">
@@ -58,20 +68,20 @@ export default function HomePage({
             <div className="flex items-center gap-5">
               <Link
                 href={localeHref(params.locale, "/docs/getting-started/quick-start")}
-                className="flex h-10 items-center gap-1.5 rounded-lg bg-[#2a9d90] px-5 text-sm font-medium text-white transition-colors hover:bg-[#22857a]"
+                className="flex h-10 items-center gap-1.5 rounded-lg bg-vinr-500 px-5 text-sm font-medium text-white transition-colors hover:bg-vinr-600"
               >
                 {t.getStartedCta}
               </Link>
               <Link
                 href={localeHref(params.locale, "/docs/api-reference")}
-                className="text-sm font-medium text-white/50 transition-colors hover:text-[#f7fdfc]"
+                className="text-sm font-medium text-white/50 transition-colors hover:text-vinr-50"
               >
                 {t.apiReference}
               </Link>
               <span className="text-xs text-white/20">·</span>
               <Link
                 href={localeHref(params.locale, "/docs/payments")}
-                className="text-sm font-medium text-white/50 transition-colors hover:text-[#f7fdfc]"
+                className="text-sm font-medium text-white/50 transition-colors hover:text-vinr-50"
               >
                 {t.payments}
               </Link>
@@ -84,29 +94,6 @@ export default function HomePage({
           </div>
         </div>
       </section>
-
-      {/* Metrics strip */}
-      <div className="border-b border-white/[0.06] bg-[#082d35] px-10">
-        <div className="mx-auto flex max-w-[1200px]">
-          {getMetrics(t).map((m, i) => (
-            <div
-              key={i}
-              className={[
-                "flex flex-1 items-center gap-3.5 px-7 py-5",
-                i < 3 ? "border-r border-white/[0.07]" : "",
-              ].join(" ")}
-            >
-              <div className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg border border-[rgba(42,157,144,0.25)] bg-[rgba(42,157,144,0.15)] text-[#97d1d1]">
-                <m.icon />
-              </div>
-              <div>
-                <div className="text-[22px] font-semibold leading-none text-[#f7fdfc]">{m.val}</div>
-                <div className="mt-[3px] text-[11px] text-white/45">{m.lbl}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
 
       {/* Use Cases */}
       <section className="border-b border-zinc-200 bg-zinc-50 px-10 py-14">
@@ -177,7 +164,7 @@ export default function HomePage({
                 href={r.href}
                 className="group rounded-xl border border-zinc-200 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-all hover:border-vinr-200 hover:shadow-[0_4px_12px_rgba(11,59,69,0.06)]"
               >
-                <div className="mb-3 grid h-8 w-8 place-items-center rounded-[7px] bg-vinr-100 text-vinr-700 transition-colors group-hover:bg-vinr-700 group-hover:text-[#f7fdfc]">
+                <div className="mb-3 grid h-8 w-8 place-items-center rounded-[7px] bg-vinr-100 text-vinr-700 transition-colors group-hover:bg-vinr-700 group-hover:text-vinr-50">
                   <r.icon />
                 </div>
                 <div className="text-[13px] font-semibold text-vinr-700">{r.label}</div>
@@ -195,15 +182,6 @@ export default function HomePage({
 
 /* --- Helpers --- */
 type T = ReturnType<typeof getTranslations>;
-
-function getMetrics(t: T) {
-  return [
-    { icon: IconStack, val: t.metric1Val, lbl: t.metric1Lbl },
-    { icon: IconClock, val: t.metric2Val, lbl: t.metric2Lbl },
-    { icon: IconShield, val: t.metric3Val, lbl: t.metric3Lbl },
-    { icon: IconBolt, val: t.metric4Val, lbl: t.metric4Lbl },
-  ];
-}
 
 function getUseCases(t: T, locale: string) {
   const h = (p: string) => localeHref(locale, p);
@@ -261,23 +239,6 @@ function getDevResources(t: T, locale: string) {
 }
 
 /* --- Icons --- */
-function IconStack() {
-  return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7l9 6 9-6M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7m-18 0l9-4 9 4" />
-    </svg>
-  );
-}
-
-function IconClock() {
-  return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <circle cx="12" cy="12" r="9" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 7v5l3 2" />
-    </svg>
-  );
-}
-
 function IconRocket() {
   return (
     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

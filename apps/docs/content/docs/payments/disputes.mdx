@@ -154,7 +154,7 @@ Refunding a payment that is already disputed does **not** resolve the dispute an
 Most disputes are avoidable. The highest-leverage controls:
 
 - **Clear billing descriptors** — set a recognizable statement descriptor so customers recognize the charge. "Unrecognized" disputes are the most common and the most preventable.
-- **3D Secure** — authenticating cardholders shifts fraud liability to the issuer for many disputes. See [3D Secure](/docs/payments/3d-secure).
+- **3D Secure** — authenticating cardholders shifts fraud liability to the issuer for many disputes. See [3D Secure](/docs/payments/strong-customer-authentication).
 - **Respond to fraud warnings** — `warning_needs_response` events arrive before a formal chargeback. Refunding then avoids the fee and the dispute-rate hit entirely.
 - **Prompt fulfillment + tracking** — capture shipping and delivery data so "product not received" claims are easy to rebut.
 - **Easy cancellation** — for [subscriptions](/docs/billing), make cancelling self-serve; friction drives `subscription_canceled` disputes.
@@ -164,7 +164,7 @@ A dispute rate above roughly **0.9%** risks card-network monitoring programs. Tr
 ## Next steps
 
 <Cards>
-  <Card title="3D Secure" href="/docs/payments/3d-secure" description="Authenticate cardholders and shift fraud liability." />
+  <Card title="3D Secure" href="/docs/payments/strong-customer-authentication" description="Authenticate cardholders and shift fraud liability." />
   <Card title="Refunds" href="/docs/payments/refunds" description="Return funds before a dispute is ever opened." />
   <Card title="Reconciliation" href="/docs/operations/reconciliation" description="Match dispute adjustments to your settlements." />
 </Cards>

@@ -140,7 +140,7 @@ export function CodeCard({ t }: { t: T }) {
             className={[
               "rounded-t-md px-3 py-2 text-[12px] font-medium transition-colors",
               i === active
-                ? "bg-white/[0.06] text-[#f7fdfc]"
+                ? "bg-white/[0.06] text-vinr-50"
                 : "text-white/40 hover:text-white/70",
             ].join(" ")}
           >
@@ -158,7 +158,7 @@ export function CodeCard({ t }: { t: T }) {
         <button
           type="button"
           onClick={copy}
-          className="ml-auto flex items-center gap-1.5 rounded-md border border-white/[0.1] px-2 py-1 text-[11px] text-white/45 transition-colors hover:border-[rgba(42,157,144,0.5)] hover:text-white/80"
+          className="ml-auto flex items-center gap-1.5 rounded-md border border-white/[0.1] px-2 py-1 text-[11px] text-white/45 transition-colors hover:border-vinr-500/50 hover:text-white/80"
         >
           <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
             <rect x="5" y="5" width="8" height="8" rx="1.5" />
@@ -177,9 +177,9 @@ export function CodeCard({ t }: { t: T }) {
 
       {/* Status footer */}
       <div className="flex items-center justify-between border-t border-white/[0.07] px-4 py-2.5">
-        <div className="flex items-center gap-1.5 font-mono text-[11px] text-[#6da544]">
+        <div className="flex items-center gap-1.5 font-mono text-[11px] text-lime-500">
           <span
-            className="h-[6px] w-[6px] rounded-full bg-[#6da544]"
+            className="h-[6px] w-[6px] rounded-full bg-lime-500"
             style={{
               boxShadow: "0 0 6px rgba(109,165,68,0.7)",
               animation: "pulseDot 2s infinite",

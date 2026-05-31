@@ -28,7 +28,7 @@ your server            VINR                customer
 Points are *redeemed before* the charge (they reduce the amount) and *earned after* the charge (so a failed payment never mints points). Both steps key off the same order, so a single `orderId` ties the payment, the redemption, and the points transaction together.
 
 <Callout type="info">
-You need a loyalty program (`prog_…`) before you start. Create one in the [Dashboard](/docs/engagement/programs) or via the API, and note its earn rate (here: 1 point per €1, i.e. 1 point per 100 minor units).
+You need a loyalty program (`prog_…`) before you start. Create one in the [Dashboard](/docs/guides/launch-a-loyalty-program) or via the API, and note its earn rate (here: 1 point per €1, i.e. 1 point per 100 minor units).
 </Callout>
 
 ## Resolve the loyalty account
@@ -196,6 +196,6 @@ curl https://sandbox.api.vinr.com/v1/loyalty/accounts/loy_123 \
 
 <Cards>
   <Card title="Engagement overview" href="/docs/engagement" description="Programs, tiers, points, and rewards." />
-  <Card title="Loyalty webhook events" href="/docs/engagement/loyalty-events" description="Every loyalty.points.* event and its payload." />
+  <Card title="Loyalty webhook events" href="/docs/engagement/earning-rules" description="Every loyalty.points.* event and its payload." />
   <Card title="Accept a one-time payment" href="/docs/guides/accept-a-payment" description="The checkout flow this guide extends." />
 </Cards>
