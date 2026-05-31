@@ -1,12 +1,14 @@
-// fumadocs ships a prebuilt Tailwind stylesheet (its own `.hidden`, preflight,
-// and `--fd-*` defaults). Import it FIRST so our globals.css wins the cascade —
-// otherwise fumadocs' `.hidden{display:none}` overrides our responsive
-// `md:flex`/`md:block` utilities (hiding the nav categories + hero code card)
-// and its `--fd-*` defaults clobber our theme overrides.
-import "fumadocs-ui/style.css";
+// fumadocs styles come from the Tailwind preset (createPreset) in
+// tailwind.config.ts, which injects fumadocs' base/components into our single
+// Tailwind build alongside globals.css. We deliberately do NOT import
+// `fumadocs-ui/style.css` — that prebuilt stylesheet is for projects without
+// their own Tailwind setup, and importing it here ran a second, parallel
+// Tailwind build (duplicate preflight, duplicate `.hidden`/utilities, duplicate
+// `--fd-*` defaults) that fought our globals.css for cascade order.
 import "./globals.css";
 import { RootProvider } from "fumadocs-ui/provider";
 import { CATEGORY_TAGS } from "@/lib/taxonomy";
+import { SITE_URL } from "@/lib/site-url";
 import { Inter, Roboto_Mono } from "next/font/google";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
@@ -30,9 +32,7 @@ export const metadata: Metadata = {
   },
   description:
     "Self-service documentation for merchants integrating with and operating on the VINR payment platform.",
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
-  ),
+  metadataBase: new URL(SITE_URL),
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

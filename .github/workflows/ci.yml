@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: type-check · lint · links · build
+    runs-on: ubuntu-latest
+    env:
+      # Dummy value so lib/site-url.ts's production fail-fast doesn't trip the
+      # build in CI (VERCEL_ENV is unset here, but be explicit and safe).
+      NEXT_PUBLIC_SITE_URL: https://docs.vinr.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.1.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm type-check
+
+      - name: Lint
+        run: pnpm lint
+
+      # Asserts hand-maintained nav/homepage /docs links resolve to real content
+      # pages (the content tree doesn't generate them, so nothing else catches
+      # a renamed page silently 404-ing the nav). Cheap, dependency-free.
+      - name: Check internal links
+        run: pnpm check-links
+
+      - name: Build
+        run: pnpm build

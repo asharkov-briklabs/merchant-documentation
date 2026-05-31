@@ -15,3 +15,7 @@ node_modules/
 # Package manager lockfiles (using pnpm only)
 package-lock.json
 yarn.lock
+
+# Sentry
+.env.sentry-build-plugin
+.sentryclirc

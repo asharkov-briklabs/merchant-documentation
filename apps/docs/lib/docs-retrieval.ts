@@ -50,7 +50,9 @@ let indexCache: DocChunk[] | null = null;
 function getIndex(): DocChunk[] {
   if (indexCache) return indexCache;
   const chunks: DocChunk[] = [];
-  for (const page of source.getPages(i18n.defaultLanguage)) {
+  const failedPaths: string[] = [];
+  const pages = source.getPages(i18n.defaultLanguage);
+  for (const page of pages) {
     try {
       const raw = readFileSync(join(CONTENT_DIR, page.file.path), "utf8");
       chunks.push({
@@ -62,8 +64,31 @@ function getIndex(): DocChunk[] {
     } catch {
       // A page without a readable source file just isn't retrievable; skip it
       // rather than failing the whole assistant.
+      failedPaths.push(page.file.path);
     }
   }
+
+  // Loud failure, NOT silent: if pages exist but NONE of their source files
+  // could be read, the `content/` tree almost certainly wasn't bundled into the
+  // serverless function (Vercel file-tracing gap — see `outputFileTracingIncludes`
+  // in next.config.mjs). Without this signal the assistant degrades to an
+  // ungrounded, hallucination-prone model with no visible error. Log to stderr
+  // (surfaces in Vercel logs + Sentry's console integration) so it's caught in
+  // a preview deploy rather than in front of users.
+  if (pages.length > 0 && chunks.length === 0) {
+    console.error(
+      `[docs-retrieval] Built an EMPTY index: ${pages.length} pages known but 0 source files readable from ${CONTENT_DIR}. ` +
+        `The docs content was likely not bundled into this function — Ask-AI is now ungrounded. ` +
+        `Check outputFileTracingIncludes/outputFileTracingRoot in next.config.mjs.`
+    );
+  } else if (failedPaths.length > 0) {
+    console.warn(
+      `[docs-retrieval] ${failedPaths.length}/${pages.length} doc source files were unreadable and excluded from retrieval: ` +
+        failedPaths.slice(0, 10).join(", ") +
+        (failedPaths.length > 10 ? ", …" : "")
+    );
+  }
+
   indexCache = chunks;
   return chunks;
 }
