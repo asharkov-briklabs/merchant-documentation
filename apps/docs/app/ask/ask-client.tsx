@@ -10,7 +10,7 @@ import brandmarkLight from "../assets/Brandmark_Vinr_light.svg";
 import { SiteNav } from "../components/site-nav";
 import type { getTranslations } from "@/lib/translations";
 
-export function AskClient({ t, locale }: { t: ReturnType<typeof getTranslations>; locale: string }) {
+export function AskClient({ t }: { t: ReturnType<typeof getTranslations> }) {
   const suggestions = [
     t.askSuggestion1,
     t.askSuggestion2,
@@ -18,7 +18,7 @@ export function AskClient({ t, locale }: { t: ReturnType<typeof getTranslations>
     t.askSuggestion4,
   ];
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, error, reload, stop } =
+  const { messages, input, handleInputChange, handleSubmit, append, isLoading, error, reload, stop } =
     useChat({
       api: "/api/ask",
     });
@@ -26,6 +26,21 @@ export function AskClient({ t, locale }: { t: ReturnType<typeof getTranslations>
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [hasSentMessage, setHasSentMessage] = useState(false);
+  const autoAskedRef = useRef(false);
+
+  // Deep-link entry point for the "Ask AI" page action: /ask?q=… auto-sends the
+  // prefilled question once, then strips `q` so a refresh doesn't re-ask.
+  useEffect(() => {
+    if (autoAskedRef.current) return;
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (!q?.trim()) return;
+    autoAskedRef.current = true;
+    setHasSentMessage(true);
+    append({ role: "user", content: q });
+    const url = new URL(window.location.href);
+    url.searchParams.delete("q");
+    window.history.replaceState(null, "", url);
+  }, [append]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -75,7 +90,7 @@ export function AskClient({ t, locale }: { t: ReturnType<typeof getTranslations>
   return (
     <main className="flex h-screen flex-col bg-fd-background">
       {/* Dark Nav */}
-      <SiteNav t={t} locale={locale} activeKey="ask" />
+      <SiteNav t={t} activeKey="ask" />
 
       {/* Conversation Area */}
       <div className="flex-1 overflow-y-auto">

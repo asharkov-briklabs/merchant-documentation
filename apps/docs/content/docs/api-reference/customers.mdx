@@ -3,37 +3,217 @@ title: Customers
 description: Create and manage customers shared across products.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+Customers store a buyer's identity and default payment details. A single customer record is shared
+across payments, subscriptions, invoices, and loyalty — attach a payment method once and reference
+the customer everywhere.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Create and manage customers shared across products.
+## The customer object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the customer, e.g. `cust_8aZ2`.
+  </Attribute>
+  <Attribute name="email" type="string">
+    The customer's email address.
+  </Attribute>
+  <Attribute name="name" type="string">
+    The customer's full name.
+  </Attribute>
+  <Attribute name="phone" type="string">
+    The customer's phone number in E.164 format, e.g. `+14155552671`.
+  </Attribute>
+  <Attribute name="default_payment_method" type="object" expandable>
+    The default payment method for this customer. Expand to retrieve the full object.
+    <Attributes>
+      <Attribute name="id" type="string">Payment method identifier, e.g. `pm_9bR3`.</Attribute>
+      <Attribute name="type" type="string">Instrument type, e.g. `card`.</Attribute>
+      <Attribute name="card" type="object">Card details snapshot (brand, last4, exp_month, exp_year).</Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="created" type="integer">
+    Unix timestamp when the customer was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create a customer
 
-_To be written._
+Pass an email and optional name and phone. VINR returns a customer object you can attach payment
+methods to and reference on future payments and subscriptions.
 
-## Endpoints
+<ApiExample
+  id="create-customer"
+  title="Create a customer"
+  method="POST"
+  path="/v1/customers"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/customers \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d email=jenny@example.com \\
+  -d name="Jenny Rosen" \\
+  -d phone=+14155552671`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const customer = await vinr.customers.create({
+  email: 'jenny@example.com',
+  name: 'Jenny Rosen',
+  phone: '+14155552671',
+});`,
+    python: `import vinr
 
-_To be written._
+customer = vinr.Customer.create(
+    email="jenny@example.com",
+    name="Jenny Rosen",
+    phone="+14155552671",
+)`,
+    ruby: `customer = Vinr::Customer.create(
+  email: 'jenny@example.com',
+  name: 'Jenny Rosen',
+  phone: '+14155552671',
+)`,
+  }}
+  response={`{
+  "id": "cust_8aZ2",
+  "email": "jenny@example.com",
+  "name": "Jenny Rosen",
+  "phone": "+14155552671",
+  "default_payment_method": null,
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve a customer
 
-_To be written._
+<ApiExample
+  id="retrieve-customer"
+  title="Retrieve a customer"
+  method="GET"
+  path="/v1/customers/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/customers/cust_8aZ2 \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `const customer = await vinr.customers.retrieve('cust_8aZ2');`,
+    python: `customer = vinr.Customer.retrieve("cust_8aZ2")`,
+    ruby: `customer = Vinr::Customer.retrieve("cust_8aZ2")`,
+  }}
+  response={`{
+  "id": "cust_8aZ2",
+  "email": "jenny@example.com",
+  "name": "Jenny Rosen",
+  "phone": "+14155552671",
+  "default_payment_method": "pm_9bR3",
+  "created": 1716300000
+}`}
+/>
 
-## Example request & response
+## Update a customer
 
-_To be written._
+Send any subset of fields — only the fields you pass are changed.
+
+<ApiExample
+  id="update-customer"
+  title="Update a customer"
+  method="POST"
+  path="/v1/customers/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/customers/cust_8aZ2 \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d email=jenny.rosen@example.com`,
+    node: `const customer = await vinr.customers.update('cust_8aZ2', {
+  email: 'jenny.rosen@example.com',
+});`,
+    python: `customer = vinr.Customer.modify(
+    "cust_8aZ2",
+    email="jenny.rosen@example.com",
+)`,
+    ruby: `customer = Vinr::Customer.update(
+  "cust_8aZ2",
+  email: 'jenny.rosen@example.com',
+)`,
+  }}
+  response={`{
+  "id": "cust_8aZ2",
+  "email": "jenny.rosen@example.com",
+  "name": "Jenny Rosen",
+  "phone": "+14155552671",
+  "default_payment_method": "pm_9bR3",
+  "created": 1716300000
+}`}
+/>
+
+## Delete a customer
+
+Deletes the customer and unlinks them from future charges. Active subscriptions must be canceled
+first.
+
+<ApiExample
+  id="delete-customer"
+  title="Delete a customer"
+  method="DELETE"
+  path="/v1/customers/{id}"
+  request={{
+    curl: `curl -X DELETE https://api.vinr.com/v1/customers/cust_8aZ2 \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `const deleted = await vinr.customers.delete('cust_8aZ2');`,
+    python: `deleted = vinr.Customer.delete("cust_8aZ2")`,
+    ruby: `deleted = Vinr::Customer.delete("cust_8aZ2")`,
+  }}
+  response={`{
+  "id": "cust_8aZ2",
+  "deleted": true
+}`}
+/>
+
+## List customers
+
+Returns a paginated list of customers. Filter by `email` to look up a specific buyer.
+
+<ApiExample
+  id="list-customers"
+  title="List customers"
+  method="GET"
+  path="/v1/customers"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/customers?email=jenny%40example.com&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `const customers = await vinr.customers.list({
+  email: 'jenny@example.com',
+  limit: 10,
+});`,
+    python: `customers = vinr.Customer.list(
+    email="jenny@example.com",
+    limit=10,
+)`,
+    ruby: `customers = Vinr::Customer.list(
+  email: 'jenny@example.com',
+  limit: 10,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "cust_8aZ2",
+      "email": "jenny@example.com",
+      "name": "Jenny Rosen",
+      "phone": "+14155552671",
+      "default_payment_method": "pm_9bR3",
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`customer.created`, `customer.updated`, `customer.deleted`. See [Events](/docs/api-reference/events).

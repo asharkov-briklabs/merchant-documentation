@@ -10,9 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Content Security Policy. Pragmatic baseline — not yet nonce-based:
 //  - `'unsafe-inline'` is required for scripts because Next.js emits inline
 //    hydration/bootstrap scripts and the homepage renders an inline JSON-LD
-//    <script>. Upgrading to a nonce-based script-src needs middleware changes,
-//    and middleware.ts is Edge-bundle-sensitive (see its comment) — tracked as
-//    a follow-up.
+//    <script>. Upgrading to nonce-based script-src is a tracked follow-up.
 //  - `'unsafe-inline'` for styles covers Fumadocs/Tailwind/next-font inline
 //    style injection.
 //  - Sentry ingest is allowed in connect-src; everything else is same-origin.
@@ -49,11 +47,9 @@ const securityHeaders = [
 const config = {
   reactStrictMode: true,
 
-  // NOTE: `output: "standalone"` is intentionally NOT used. The fumadocs i18n
-  // middleware (default-locale hiding) redirect-loops the root URL under the
-  // standalone `node server.js` server. The app is run with `next start`
-  // instead (see Dockerfile / DEPLOYMENT.md) — equally platform-agnostic, no
-  // Vercel coupling, and behaves identically to production.
+  // NOTE: `output: "standalone"` is intentionally NOT used. The app is run
+  // with `next start` (see Dockerfile / DEPLOYMENT.md) — equally
+  // platform-agnostic, no Vercel coupling, and behaves identically to production.
 
   experimental: {
     // Enables instrumentation.ts (Sentry server/edge init) — stable in Next 15,
@@ -68,11 +64,24 @@ const config = {
     outputFileTracingRoot: join(__dirname, "../.."),
     outputFileTracingIncludes: {
       "/api/ask": ["./content/**/*"],
+      // The /api/md/* raw-Markdown endpoint reads .mdx from disk too.
+      "/api/md/[[...slug]]": ["./content/**/*"],
     },
   },
 
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
+  },
+
+  async redirects() {
+    // The API reference moved out of the docs tree onto its own dedicated
+    // screen at /api-reference (the docs.stripe.com/api equivalent — the literal
+    // /api path is reserved for route handlers like /api/ask). Keep the old
+    // /docs/api-reference URLs (inbound links / SEO) working.
+    return [
+      { source: "/docs/api-reference", destination: "/api-reference", permanent: false },
+      { source: "/docs/api-reference/:path*", destination: "/api-reference/:path*", permanent: false },
+    ];
   },
 };
 

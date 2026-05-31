@@ -1,39 +1,296 @@
 ---
 title: Offers
-description: Create targeted offers and promotions.
+description: Create, retrieve, update, delete, and list targeted promotional offers.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+An offer is a targeted promotion — such as buy-one-get-one, free shipping, or a fixed discount —
+that activates when a customer's order meets defined qualifying criteria. Unlike coupons, offers are
+applied automatically when criteria are satisfied rather than requiring a code.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Create targeted offers and promotions.
+## The offer object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the offer, e.g. `ofr_3Fj7tN`.
+  </Attribute>
+  <Attribute name="name" type="string">
+    Human-readable name for the offer, e.g. `Free Shipping on Orders Over $50`.
+  </Attribute>
+  <Attribute name="type" type="enum">
+    One of `bogo` (buy-one-get-one), `free_shipping`, or `fixed_discount`.
+  </Attribute>
+  <Attribute name="value" type="integer">
+    The value of the promotion in the smallest currency unit — the discount amount for
+    `fixed_discount`, the shipping credit for `free_shipping`, or `null` for `bogo`.
+  </Attribute>
+  <Attribute name="criteria" type="object">
+    Qualifying conditions that must be met for the offer to apply.
+    <Attributes>
+      <Attribute name="min_order_amount" type="integer">Minimum order subtotal in the smallest currency unit.</Attribute>
+      <Attribute name="eligible_products" type="array">List of product IDs (`prod_`) that must be in the cart.</Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="active" type="boolean">
+    `true` if the offer is currently live and will be evaluated at checkout.
+  </Attribute>
+  <Attribute name="starts_at" type="integer">
+    Unix timestamp when the offer becomes active.
+  </Attribute>
+  <Attribute name="ends_at" type="integer">
+    Unix timestamp when the offer expires. `null` if open-ended.
+  </Attribute>
+  <Attribute name="created" type="integer">
+    Unix timestamp when this offer was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create an offer
 
-_To be written._
+Define the offer type, value, and qualifying criteria. Offers become active immediately unless a
+future `starts_at` is provided.
 
-## Endpoints
+<ApiExample
+  id="create-offer"
+  title="Create an offer"
+  method="POST"
+  path="/v1/offers"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/offers \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d name="Free Shipping on Orders Over \\$50" \\
+  -d type=free_shipping \\
+  -d value=0 \\
+  -d "criteria[min_order_amount]=5000" \\
+  -d ends_at=1751328000`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const offer = await vinr.offers.create({
+  name: 'Free Shipping on Orders Over $50',
+  type: 'free_shipping',
+  value: 0,
+  criteria: { min_order_amount: 5000 },
+  ends_at: 1751328000,
+});`,
+    python: `import vinr
 
-_To be written._
+offer = vinr.Offer.create(
+    name="Free Shipping on Orders Over $50",
+    type="free_shipping",
+    value=0,
+    criteria={"min_order_amount": 5000},
+    ends_at=1751328000,
+)`,
+    ruby: `offer = Vinr::Offer.create(
+  name: 'Free Shipping on Orders Over $50',
+  type: 'free_shipping',
+  value: 0,
+  criteria: { min_order_amount: 5000 },
+  ends_at: 1751328000,
+)`,
+  }}
+  response={`{
+  "id": "ofr_3Fj7tN",
+  "name": "Free Shipping on Orders Over $50",
+  "type": "free_shipping",
+  "value": 0,
+  "criteria": {
+    "min_order_amount": 5000,
+    "eligible_products": []
+  },
+  "active": true,
+  "starts_at": 1716300000,
+  "ends_at": 1751328000,
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve an offer
 
-_To be written._
+Fetch an offer by its ID.
 
-## Example request & response
+<ApiExample
+  id="retrieve-offer"
+  title="Retrieve an offer"
+  method="GET"
+  path="/v1/offers/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/offers/ofr_3Fj7tN \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const offer = await vinr.offers.retrieve('ofr_3Fj7tN');`,
+    python: `import vinr
+
+offer = vinr.Offer.retrieve("ofr_3Fj7tN")`,
+    ruby: `offer = Vinr::Offer.retrieve('ofr_3Fj7tN')`,
+  }}
+  response={`{
+  "id": "ofr_3Fj7tN",
+  "name": "Free Shipping on Orders Over $50",
+  "type": "free_shipping",
+  "value": 0,
+  "criteria": {
+    "min_order_amount": 5000,
+    "eligible_products": []
+  },
+  "active": true,
+  "starts_at": 1716300000,
+  "ends_at": 1751328000,
+  "created": 1716300000
+}`}
+/>
+
+## Update an offer
+
+Toggle the offer active state or extend the end date. `type`, `value`, and `criteria` are immutable
+after creation.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `active` | boolean | Set to `false` to immediately deactivate the offer. |
+| `ends_at` | integer | New Unix timestamp for the offer expiry. |
+
+<ApiExample
+  id="update-offer"
+  title="Update an offer"
+  method="POST"
+  path="/v1/offers/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/offers/ofr_3Fj7tN \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d ends_at=1753920000`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const offer = await vinr.offers.update('ofr_3Fj7tN', {
+  ends_at: 1753920000,
+});`,
+    python: `import vinr
+
+offer = vinr.Offer.modify(
+    "ofr_3Fj7tN",
+    ends_at=1753920000,
+)`,
+    ruby: `offer = Vinr::Offer.update(
+  'ofr_3Fj7tN',
+  ends_at: 1753920000,
+)`,
+  }}
+  response={`{
+  "id": "ofr_3Fj7tN",
+  "name": "Free Shipping on Orders Over $50",
+  "type": "free_shipping",
+  "value": 0,
+  "criteria": {
+    "min_order_amount": 5000,
+    "eligible_products": []
+  },
+  "active": true,
+  "starts_at": 1716300000,
+  "ends_at": 1753920000,
+  "created": 1716300000
+}`}
+/>
+
+## Delete an offer
+
+Permanently deletes an offer. It will no longer be evaluated at checkout.
+
+<ApiExample
+  id="delete-offer"
+  title="Delete an offer"
+  method="DELETE"
+  path="/v1/offers/{id}"
+  request={{
+    curl: `curl -X DELETE https://api.vinr.com/v1/offers/ofr_3Fj7tN \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const deleted = await vinr.offers.delete('ofr_3Fj7tN');`,
+    python: `import vinr
+
+deleted = vinr.Offer.delete("ofr_3Fj7tN")`,
+    ruby: `deleted = Vinr::Offer.delete('ofr_3Fj7tN')`,
+  }}
+  response={`{
+  "id": "ofr_3Fj7tN",
+  "deleted": true
+}`}
+/>
+
+## List offers
+
+Returns a paginated list of offers. Filter by `active` to show only live promotions.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `active` | boolean | Return only active (`true`) or inactive (`false`) offers. |
+| `limit` | integer | Number of results to return. Default `10`, max `100`. |
+
+<ApiExample
+  id="list-offers"
+  title="List offers"
+  method="GET"
+  path="/v1/offers"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/offers?active=true&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const offers = await vinr.offers.list({
+  active: true,
+  limit: 10,
+});`,
+    python: `import vinr
+
+offers = vinr.Offer.list(
+    active=True,
+    limit=10,
+)`,
+    ruby: `offers = Vinr::Offer.list(
+  active: true,
+  limit: 10,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "ofr_3Fj7tN",
+      "name": "Free Shipping on Orders Over $50",
+      "type": "free_shipping",
+      "value": 0,
+      "criteria": {
+        "min_order_amount": 5000,
+        "eligible_products": []
+      },
+      "active": true,
+      "starts_at": 1716300000,
+      "ends_at": 1753920000,
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`offer.created`, `offer.updated`, and `offer.ended`. See [Events](/docs/api-reference/events).

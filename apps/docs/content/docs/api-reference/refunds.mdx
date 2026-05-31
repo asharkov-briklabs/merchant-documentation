@@ -1,39 +1,213 @@
 ---
 title: Refunds
-description: Create, retrieve, and list refunds.
+description: Create, retrieve, update, and list refunds.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A refund reverses all or part of a previously succeeded payment. Funds are returned to the
+customer's original payment method, typically within 5–10 business days depending on the card
+network.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Create, retrieve, and list refunds.
+## The refund object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique identifier for the refund, e.g. `re_7Kp1mQ`. |
+| `payment` | string | ID of the payment being refunded. |
+| `amount` | integer | Amount refunded, in the smallest currency unit (e.g. cents). |
+| `currency` | string | Three-letter ISO currency code matching the original payment. |
+| `status` | enum | One of `pending`, `succeeded`, or `failed`. |
+| `reason` | enum | One of `duplicate`, `fraudulent`, or `requested_by_customer`. |
+| `created` | integer | Unix timestamp when the refund was created. |
 
-## The object
+## Create a refund
 
-_To be written._
+Pass the payment ID and an optional amount. If `amount` is omitted, the full uncaptured amount is
+refunded.
 
-## Endpoints
+<ApiExample
+  id="create-refund"
+  title="Create a refund"
+  method="POST"
+  path="/v1/refunds"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/refunds \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d payment=pay_3Nx8a2Lk \\
+  -d amount=2500 \\
+  -d reason=requested_by_customer`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const refund = await vinr.refunds.create({
+  payment: 'pay_3Nx8a2Lk',
+  amount: 2500,
+  reason: 'requested_by_customer',
+});`,
+    python: `import vinr
 
-_To be written._
+refund = vinr.Refund.create(
+    payment="pay_3Nx8a2Lk",
+    amount=2500,
+    reason="requested_by_customer",
+)`,
+    ruby: `refund = Vinr::Refund.create(
+  payment: 'pay_3Nx8a2Lk',
+  amount: 2500,
+  reason: 'requested_by_customer',
+)`,
+  }}
+  response={`{
+  "id": "re_7Kp1mQ",
+  "payment": "pay_3Nx8a2Lk",
+  "amount": 2500,
+  "currency": "EUR",
+  "status": "pending",
+  "reason": "requested_by_customer",
+  "created": 1716303600
+}`}
+/>
 
-## Response fields
+## Retrieve a refund
 
-_To be written._
+Fetch a refund by its ID to check its current status.
 
-## Example request & response
+<ApiExample
+  id="retrieve-refund"
+  title="Retrieve a refund"
+  method="GET"
+  path="/v1/refunds/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/refunds/re_7Kp1mQ \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const refund = await vinr.refunds.retrieve('re_7Kp1mQ');`,
+    python: `import vinr
+
+refund = vinr.Refund.retrieve("re_7Kp1mQ")`,
+    ruby: `refund = Vinr::Refund.retrieve('re_7Kp1mQ')`,
+  }}
+  response={`{
+  "id": "re_7Kp1mQ",
+  "payment": "pay_3Nx8a2Lk",
+  "amount": 2500,
+  "currency": "EUR",
+  "status": "succeeded",
+  "reason": "requested_by_customer",
+  "created": 1716303600
+}`}
+/>
+
+## Update a refund
+
+Update the metadata on a refund. Only the `metadata` field is editable after creation.
+
+<ApiExample
+  id="update-refund"
+  title="Update a refund"
+  method="POST"
+  path="/v1/refunds/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/refunds/re_7Kp1mQ \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d "metadata[order_id]=ord_99"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const refund = await vinr.refunds.update('re_7Kp1mQ', {
+  metadata: { order_id: 'ord_99' },
+});`,
+    python: `import vinr
+
+refund = vinr.Refund.modify(
+    "re_7Kp1mQ",
+    metadata={"order_id": "ord_99"},
+)`,
+    ruby: `refund = Vinr::Refund.update(
+  're_7Kp1mQ',
+  metadata: { order_id: 'ord_99' },
+)`,
+  }}
+  response={`{
+  "id": "re_7Kp1mQ",
+  "payment": "pay_3Nx8a2Lk",
+  "amount": 2500,
+  "currency": "EUR",
+  "status": "succeeded",
+  "reason": "requested_by_customer",
+  "metadata": {
+    "order_id": "ord_99"
+  },
+  "created": 1716303600
+}`}
+/>
+
+## List refunds
+
+Returns a paginated list of refunds, newest first. Use the `payment` filter to scope results to a
+single payment.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `payment` | string | Filter refunds by payment ID. |
+| `limit` | integer | Number of results to return. Default `10`, max `100`. |
+
+<ApiExample
+  id="list-refunds"
+  title="List refunds"
+  method="GET"
+  path="/v1/refunds"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/refunds?payment=pay_3Nx8a2Lk&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const refunds = await vinr.refunds.list({
+  payment: 'pay_3Nx8a2Lk',
+  limit: 10,
+});`,
+    python: `import vinr
+
+refunds = vinr.Refund.list(
+    payment="pay_3Nx8a2Lk",
+    limit=10,
+)`,
+    ruby: `refunds = Vinr::Refund.list(
+  payment: 'pay_3Nx8a2Lk',
+  limit: 10,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "re_7Kp1mQ",
+      "payment": "pay_3Nx8a2Lk",
+      "amount": 2500,
+      "currency": "EUR",
+      "status": "succeeded",
+      "reason": "requested_by_customer",
+      "created": 1716303600
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`refund.created`, `refund.updated`. See [Events](/docs/api-reference/events).

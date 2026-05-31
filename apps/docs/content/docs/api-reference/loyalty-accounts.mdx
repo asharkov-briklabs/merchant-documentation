@@ -1,39 +1,234 @@
 ---
-title: Loyalty accounts
-description: Enroll and manage loyalty members.
+title: Loyalty Accounts
+description: Create, retrieve, update, and list loyalty accounts that link customers to the VINR loyalty programme.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A loyalty account links a customer to the loyalty programme and tracks their current points balance
+and tier membership. One account is created per customer per programme.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Enroll and manage loyalty members.
+## The loyalty account object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the loyalty account, e.g. `la_4Kp9bQ`.
+  </Attribute>
+  <Attribute name="customer" type="object" expandable>
+    The customer this loyalty account belongs to. Expand to retrieve the full object.
+    <Attributes>
+      <Attribute name="id" type="string">Customer identifier, e.g. `cust_8aZ2`.</Attribute>
+      <Attribute name="email" type="string">Email address on the customer record.</Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="points_balance" type="integer">
+    Current points balance. Never goes below zero.
+  </Attribute>
+  <Attribute name="tier" type="object" expandable>
+    The tier this account currently qualifies for. Expand to retrieve the full tier object.
+    <Attributes>
+      <Attribute name="id" type="string">Tier identifier, e.g. `tier_silver`.</Attribute>
+      <Attribute name="name" type="string">Human-readable tier name, e.g. `Silver`.</Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="programme_id" type="string">
+    The loyalty programme this account belongs to.
+  </Attribute>
+  <Attribute name="created" type="integer">
+    Unix timestamp of when the account was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create a loyalty account
 
-_To be written._
+Enrolls a customer in the loyalty programme. Pass the customer ID and an optional programme ID (the
+default programme is used when omitted).
 
-## Endpoints
+<ApiExample
+  id="create-loyalty-account"
+  title="Create a loyalty account"
+  method="POST"
+  path="/v1/loyalty-accounts"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/loyalty-accounts \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d customer=cust_8aZ2 \\
+  -d programme_id=prog_default`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const loyaltyAccount = await vinr.loyaltyAccounts.create({
+  customer: 'cust_8aZ2',
+  programme_id: 'prog_default',
+});`,
+    python: `import vinr
 
-_To be written._
+loyalty_account = vinr.LoyaltyAccount.create(
+    customer="cust_8aZ2",
+    programme_id="prog_default",
+)`,
+    ruby: `loyalty_account = Vinr::LoyaltyAccount.create(
+  customer: 'cust_8aZ2',
+  programme_id: 'prog_default',
+)`,
+  }}
+  response={`{
+  "id": "la_4Kp9bQ",
+  "customer": "cust_8aZ2",
+  "points_balance": 0,
+  "tier": "tier_bronze",
+  "programme_id": "prog_default",
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve a loyalty account
 
-_To be written._
+Fetch a loyalty account by its ID. Pass `expand[]=customer` or `expand[]=tier` to inline the full
+linked objects.
 
-## Example request & response
+<ApiExample
+  id="retrieve-loyalty-account"
+  title="Retrieve a loyalty account"
+  method="GET"
+  path="/v1/loyalty-accounts/{id}"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/loyalty-accounts/la_4Kp9bQ?expand[]=tier" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const loyaltyAccount = await vinr.loyaltyAccounts.retrieve('la_4Kp9bQ', {
+  expand: ['tier'],
+});`,
+    python: `import vinr
+
+loyalty_account = vinr.LoyaltyAccount.retrieve(
+    "la_4Kp9bQ",
+    expand=["tier"],
+)`,
+    ruby: `loyalty_account = Vinr::LoyaltyAccount.retrieve(
+  'la_4Kp9bQ',
+  expand: ['tier'],
+)`,
+  }}
+  response={`{
+  "id": "la_4Kp9bQ",
+  "customer": "cust_8aZ2",
+  "points_balance": 1250,
+  "tier": {
+    "id": "tier_silver",
+    "name": "Silver",
+    "min_points": 1000
+  },
+  "programme_id": "prog_default",
+  "created": 1716300000
+}`}
+/>
+
+## Update a loyalty account
+
+Update mutable fields on a loyalty account. Currently supports overriding the `tier` for manual
+tier assignments outside the automatic promotion rules.
+
+<ApiExample
+  id="update-loyalty-account"
+  title="Update a loyalty account"
+  method="POST"
+  path="/v1/loyalty-accounts/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/loyalty-accounts/la_4Kp9bQ \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d tier=tier_gold`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const loyaltyAccount = await vinr.loyaltyAccounts.update('la_4Kp9bQ', {
+  tier: 'tier_gold',
+});`,
+    python: `import vinr
+
+loyalty_account = vinr.LoyaltyAccount.modify(
+    "la_4Kp9bQ",
+    tier="tier_gold",
+)`,
+    ruby: `loyalty_account = Vinr::LoyaltyAccount.update(
+  'la_4Kp9bQ',
+  tier: 'tier_gold',
+)`,
+  }}
+  response={`{
+  "id": "la_4Kp9bQ",
+  "customer": "cust_8aZ2",
+  "points_balance": 1250,
+  "tier": "tier_gold",
+  "programme_id": "prog_default",
+  "created": 1716300000
+}`}
+/>
+
+## List loyalty accounts
+
+Returns a paginated list of loyalty accounts, newest first. Use `customer` to scope results to a
+single customer.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `customer` | string | Filter accounts by customer ID. |
+| `limit` | integer | Number of results to return. Default `10`, max `100`. |
+
+<ApiExample
+  id="list-loyalty-accounts"
+  title="List loyalty accounts"
+  method="GET"
+  path="/v1/loyalty-accounts"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/loyalty-accounts?customer=cust_8aZ2&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const accounts = await vinr.loyaltyAccounts.list({
+  customer: 'cust_8aZ2',
+  limit: 10,
+});`,
+    python: `import vinr
+
+accounts = vinr.LoyaltyAccount.list(
+    customer="cust_8aZ2",
+    limit=10,
+)`,
+    ruby: `accounts = Vinr::LoyaltyAccount.list(
+  customer: 'cust_8aZ2',
+  limit: 10,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "la_4Kp9bQ",
+      "customer": "cust_8aZ2",
+      "points_balance": 1250,
+      "tier": "tier_silver",
+      "programme_id": "prog_default",
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`loyalty_account.created` and `loyalty_account.updated`. See [Events](/docs/api-reference/events).

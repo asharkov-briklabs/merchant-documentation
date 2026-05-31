@@ -1,39 +1,207 @@
 ---
-title: Subscription items
-description: Manage the priced items on a subscription.
+title: Subscription Items
+description: Create, retrieve, update, delete, and list the price/quantity pairs within a subscription.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A subscription item represents a single price and quantity pair within a subscription. Multi-item
+subscriptions use one item per price, letting you mix flat fees, per-seat charges, and metered usage
+on a single billing cycle.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Manage the priced items on a subscription.
+## The subscription item object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique identifier, e.g. `si_7Bm3qR`. |
+| `subscription` | string | The `sub_` this item belongs to. Expandable. |
+| `price` | string | The `price_` charged for this line. Expandable. |
+| `quantity` | integer | Number of units (omitted for metered prices). |
+| `created` | timestamp | Unix timestamp when the item was created. |
 
-## The object
+## Create a subscription item
 
-_To be written._
+Add a new price to an existing subscription. VINR prorates the charge for the remainder of the
+current period by default.
 
-## Endpoints
+<ApiExample
+  id="create-subscription-item"
+  title="Create a subscription item"
+  method="POST"
+  path="/v1/subscription-items"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/subscription-items \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d subscription=sub_9Kpw1Vd \\
+  -d price=price_per_seat \\
+  -d quantity=5`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const item = await vinr.subscriptionItems.create({
+  subscription: 'sub_9Kpw1Vd',
+  price: 'price_per_seat',
+  quantity: 5,
+});`,
+    python: `import vinr
 
-_To be written._
+item = vinr.SubscriptionItem.create(
+    subscription="sub_9Kpw1Vd",
+    price="price_per_seat",
+    quantity=5,
+)`,
+    ruby: `item = Vinr::SubscriptionItem.create(
+  subscription: 'sub_9Kpw1Vd',
+  price: 'price_per_seat',
+  quantity: 5,
+)`,
+  }}
+  response={`{
+  "id": "si_7Bm3qR",
+  "subscription": "sub_9Kpw1Vd",
+  "price": "price_per_seat",
+  "quantity": 5,
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve a subscription item
 
-_To be written._
+<ApiExample
+  id="retrieve-subscription-item"
+  title="Retrieve a subscription item"
+  method="GET"
+  path="/v1/subscription-items/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/subscription-items/si_7Bm3qR \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `const item = await vinr.subscriptionItems.retrieve('si_7Bm3qR');`,
+    python: `item = vinr.SubscriptionItem.retrieve("si_7Bm3qR")`,
+    ruby: `item = Vinr::SubscriptionItem.retrieve('si_7Bm3qR')`,
+  }}
+  response={`{
+  "id": "si_7Bm3qR",
+  "subscription": "sub_9Kpw1Vd",
+  "price": "price_per_seat",
+  "quantity": 5,
+  "created": 1716300000
+}`}
+/>
 
-## Example request & response
+## Update a subscription item
 
-_To be written._
+Change the quantity or swap the price. VINR prorates the difference for the current period unless
+you pass `proration_behavior: 'none'`.
+
+<ApiExample
+  id="update-subscription-item"
+  title="Update a subscription item"
+  method="POST"
+  path="/v1/subscription-items/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/subscription-items/si_7Bm3qR \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d quantity=10`,
+    node: `const item = await vinr.subscriptionItems.update('si_7Bm3qR', {
+  quantity: 10,
+});`,
+    python: `item = vinr.SubscriptionItem.modify(
+    "si_7Bm3qR",
+    quantity=10,
+)`,
+    ruby: `item = Vinr::SubscriptionItem.update(
+  'si_7Bm3qR',
+  { quantity: 10 },
+)`,
+  }}
+  response={`{
+  "id": "si_7Bm3qR",
+  "subscription": "sub_9Kpw1Vd",
+  "price": "price_per_seat",
+  "quantity": 10,
+  "created": 1716300000
+}`}
+/>
+
+## Delete a subscription item
+
+Removes the item from the subscription. VINR generates a prorated credit for any unused time by
+default; pass `proration_behavior=none` to skip the credit.
+
+<ApiExample
+  id="delete-subscription-item"
+  title="Delete a subscription item"
+  method="DELETE"
+  path="/v1/subscription-items/{id}"
+  request={{
+    curl: `curl -X DELETE "https://api.vinr.com/v1/subscription-items/si_7Bm3qR?proration_behavior=create_prorations" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `await vinr.subscriptionItems.delete('si_7Bm3qR', {
+  proration_behavior: 'create_prorations',
+});`,
+    python: `vinr.SubscriptionItem.delete(
+    "si_7Bm3qR",
+    proration_behavior="create_prorations",
+)`,
+    ruby: `Vinr::SubscriptionItem.delete(
+  'si_7Bm3qR',
+  { proration_behavior: 'create_prorations' },
+)`,
+  }}
+  response={`{
+  "id": "si_7Bm3qR",
+  "deleted": true
+}`}
+/>
+
+## List subscription items
+
+Returns all items for a given subscription.
+
+<ApiExample
+  id="list-subscription-items"
+  title="List subscription items"
+  method="GET"
+  path="/v1/subscription-items"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/subscription-items?subscription=sub_9Kpw1Vd&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `const items = await vinr.subscriptionItems.list({
+  subscription: 'sub_9Kpw1Vd',
+  limit: 10,
+});`,
+    python: `items = vinr.SubscriptionItem.list(
+    subscription="sub_9Kpw1Vd",
+    limit=10,
+)`,
+    ruby: `items = Vinr::SubscriptionItem.list(
+  subscription: 'sub_9Kpw1Vd',
+  limit: 10,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "si_7Bm3qR",
+      "subscription": "sub_9Kpw1Vd",
+      "price": "price_per_seat",
+      "quantity": 10,
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`customer.subscription.updated` is fired whenever items are added, changed, or removed. See
+[Events](/docs/api-reference/events).

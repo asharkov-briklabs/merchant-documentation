@@ -1,39 +1,217 @@
 ---
 title: Credit notes
-description: Issue credits and corrections against invoices.
+description: Create, retrieve, void, and list credit notes that adjust finalized invoices.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A credit note adjusts a finalized [invoice](/docs/api-reference/invoices) — for example when a
+customer was overcharged or a partial refund is due. Credit notes reduce the invoice's amount due
+without modifying the original invoice.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Issue credits and corrections against invoices.
+## The credit note object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the credit note, e.g. `cn_6Dp3fQwH`.
+  </Attribute>
+  <Attribute name="invoice" type="string" expandable>
+    The ID of the invoice this credit note adjusts, e.g. `inv_1Ab5cDe6`. Expand to retrieve the
+    full invoice object.
+  </Attribute>
+  <Attribute name="amount" type="integer">
+    The credit amount in the smallest currency unit, e.g. `1500` for €15.00.
+  </Attribute>
+  <Attribute name="currency" type="string">
+    Three-letter ISO currency code matching the invoice, e.g. `EUR`.
+  </Attribute>
+  <Attribute name="status" type="enum">
+    Current state of the credit note: `issued` or `void`.
+  </Attribute>
+  <Attribute name="reason" type="enum">
+    Why the credit was issued: `duplicate`, `fraudulent`, `order_change`, or `product_unsatisfactory`.
+  </Attribute>
+  <Attribute name="memo" type="string">
+    Optional free-text note shown on the credit note PDF.
+  </Attribute>
+  <Attribute name="created" type="integer">
+    Unix timestamp of when the credit note was created, e.g. `1716300000`.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create a credit note
 
-_To be written._
+Pass the `invoice` ID, the `amount` to credit, and a `reason`. The credit note is immediately
+issued and the invoice's amount due is reduced.
 
-## Endpoints
+<ApiExample
+  id="create-credit-note"
+  title="Create a credit note"
+  method="POST"
+  path="/v1/credit-notes"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/credit-notes \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d invoice=inv_1Ab5cDe6 \\
+  -d amount=1500 \\
+  -d reason=order_change \\
+  -d memo="Partial refund for unused period"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const creditNote = await vinr.creditNotes.create({
+  invoice: 'inv_1Ab5cDe6',
+  amount: 1500,
+  reason: 'order_change',
+  memo: 'Partial refund for unused period',
+});`,
+    python: `import vinr
 
-_To be written._
+credit_note = vinr.CreditNote.create(
+    invoice="inv_1Ab5cDe6",
+    amount=1500,
+    reason="order_change",
+    memo="Partial refund for unused period",
+)`,
+    ruby: `credit_note = Vinr::CreditNote.create(
+  invoice: 'inv_1Ab5cDe6',
+  amount: 1500,
+  reason: 'order_change',
+  memo: 'Partial refund for unused period',
+)`,
+  }}
+  response={`{
+  "id": "cn_6Dp3fQwH",
+  "invoice": "inv_1Ab5cDe6",
+  "amount": 1500,
+  "currency": "EUR",
+  "status": "issued",
+  "reason": "order_change",
+  "memo": "Partial refund for unused period",
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve a credit note
 
-_To be written._
+<ApiExample
+  id="retrieve-credit-note"
+  title="Retrieve a credit note"
+  method="GET"
+  path="/v1/credit-notes/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/credit-notes/cn_6Dp3fQwH \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-## Example request & response
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-_To be written._
+const creditNote = await vinr.creditNotes.retrieve('cn_6Dp3fQwH');`,
+    python: `import vinr
+
+credit_note = vinr.CreditNote.retrieve("cn_6Dp3fQwH")`,
+    ruby: `credit_note = Vinr::CreditNote.retrieve('cn_6Dp3fQwH')`,
+  }}
+  response={`{
+  "id": "cn_6Dp3fQwH",
+  "invoice": "inv_1Ab5cDe6",
+  "amount": 1500,
+  "currency": "EUR",
+  "status": "issued",
+  "reason": "order_change",
+  "memo": "Partial refund for unused period",
+  "created": 1716300000
+}`}
+/>
+
+## Void a credit note
+
+Voiding moves the credit note to `void` status and reverses its effect on the invoice's amount due.
+Only `issued` credit notes can be voided.
+
+<ApiExample
+  id="void-credit-note"
+  title="Void a credit note"
+  method="POST"
+  path="/v1/credit-notes/{id}/void"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/credit-notes/cn_6Dp3fQwH/void \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const creditNote = await vinr.creditNotes.void('cn_6Dp3fQwH');`,
+    python: `import vinr
+
+credit_note = vinr.CreditNote.void("cn_6Dp3fQwH")`,
+    ruby: `credit_note = Vinr::CreditNote.void('cn_6Dp3fQwH')`,
+  }}
+  response={`{
+  "id": "cn_6Dp3fQwH",
+  "invoice": "inv_1Ab5cDe6",
+  "amount": 1500,
+  "currency": "EUR",
+  "status": "void",
+  "reason": "order_change",
+  "memo": "Partial refund for unused period",
+  "created": 1716300000
+}`}
+/>
+
+## List credit notes
+
+<ApiExample
+  id="list-credit-notes"
+  title="List credit notes"
+  method="GET"
+  path="/v1/credit-notes"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/credit-notes?invoice=inv_1Ab5cDe6&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const creditNotes = await vinr.creditNotes.list({
+  invoice: 'inv_1Ab5cDe6',
+  limit: 10,
+});`,
+    python: `import vinr
+
+credit_notes = vinr.CreditNote.list(
+    invoice="inv_1Ab5cDe6",
+    limit=10,
+)`,
+    ruby: `credit_notes = Vinr::CreditNote.list(
+  invoice: 'inv_1Ab5cDe6',
+  limit: 10,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "cn_6Dp3fQwH",
+      "invoice": "inv_1Ab5cDe6",
+      "amount": 1500,
+      "currency": "EUR",
+      "status": "issued",
+      "reason": "order_change",
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`credit_note.created` and `credit_note.voided`. See [Events](/docs/api-reference/events).

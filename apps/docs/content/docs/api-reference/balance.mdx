@@ -1,39 +1,70 @@
 ---
 title: Balance
-description: Retrieve available, pending, and reserved balances.
+description: Retrieve your available and pending VINR account balance.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+The balance object shows the funds currently held in your VINR account, split into what is
+immediately available for payouts and what is still pending settlement. The balance updates
+automatically as payments are captured and payouts are initiated.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Retrieve available, pending, and reserved balances.
+## The balance object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="available" type="array">
+    Funds that can be paid out immediately. Each entry represents a currency bucket.
+    <Attributes>
+      <Attribute name="amount" type="integer">Available amount in the smallest currency unit (e.g. cents).</Attribute>
+      <Attribute name="currency" type="string">Three-letter ISO currency code, e.g. `EUR`.</Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="pending" type="array">
+    Funds that have been received but are not yet available for payout (e.g. awaiting settlement).
+    Each entry represents a currency bucket.
+    <Attributes>
+      <Attribute name="amount" type="integer">Pending amount in the smallest currency unit (e.g. cents).</Attribute>
+      <Attribute name="currency" type="string">Three-letter ISO currency code, e.g. `EUR`.</Attribute>
+    </Attributes>
+  </Attribute>
+</Attributes>
 
-## The object
+## Retrieve the balance
 
-_To be written._
+The balance is a singleton — there is no ID and no list endpoint. A single GET returns the full
+breakdown across all currencies.
 
-## Endpoints
+<ApiExample
+  id="retrieve-balance"
+  title="Retrieve the balance"
+  method="GET"
+  path="/v1/balance"
+  request={{
+    curl: `curl https://api.vinr.com/v1/balance \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const balance = await vinr.balance.retrieve();`,
+    python: `import vinr
 
-_To be written._
-
-## Response fields
-
-_To be written._
-
-## Example request & response
-
-_To be written._
-
-## Related events
-
-_To be written._
+balance = vinr.Balance.retrieve()`,
+    ruby: `balance = Vinr::Balance.retrieve`,
+  }}
+  response={`{
+  "available": [
+    { "amount": 428500, "currency": "EUR" },
+    { "amount": 12000, "currency": "USD" }
+  ],
+  "pending": [
+    { "amount": 95000, "currency": "EUR" }
+  ]
+}`}
+/>

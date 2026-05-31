@@ -1,39 +1,194 @@
 ---
-title: Points transactions
-description: Award, deduct, and list points movements.
+title: Points Transactions
+description: Create, retrieve, and list credits and debits to a loyalty account's points balance.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A points transaction records a credit or debit to a loyalty account's balance. Credits increase the
+balance (e.g. from a qualifying purchase); debits decrease it (e.g. when redeeming a reward).
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Award, deduct, and list points movements.
+## The points transaction object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the transaction, e.g. `pt_7Rm1cW`.
+  </Attribute>
+  <Attribute name="loyalty_account" type="object" expandable>
+    The loyalty account whose balance was affected. Expand to retrieve the full object.
+    <Attributes>
+      <Attribute name="id" type="string">Loyalty account identifier, e.g. `la_4Kp9bQ`.</Attribute>
+      <Attribute name="points_balance" type="integer">Balance after this transaction was applied.</Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="amount" type="integer">
+    Number of points credited or debited. Always positive; direction is indicated by `type`.
+  </Attribute>
+  <Attribute name="type" type="enum">
+    Either `credit` (points added) or `debit` (points removed).
+  </Attribute>
+  <Attribute name="points_after" type="integer">
+    The loyalty account's points balance immediately after this transaction.
+  </Attribute>
+  <Attribute name="reason" type="string">
+    Human-readable description of why the transaction occurred, e.g. `Purchase earn` or `Reward redemption`.
+  </Attribute>
+  <Attribute name="created" type="integer">
+    Unix timestamp of when the transaction was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create a points transaction
 
-_To be written._
+Manually credit or debit a loyalty account. Most credits are created automatically by the engine
+when an [earning rule](/docs/api-reference/earning-rules) fires; use this endpoint for manual
+adjustments or custom integrations.
 
-## Endpoints
+<ApiExample
+  id="create-points-transaction"
+  title="Create a points transaction"
+  method="POST"
+  path="/v1/points-transactions"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/points-transactions \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d loyalty_account=la_4Kp9bQ \\
+  -d amount=200 \\
+  -d type=credit \\
+  -d reason="Bonus promotion"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const transaction = await vinr.pointsTransactions.create({
+  loyalty_account: 'la_4Kp9bQ',
+  amount: 200,
+  type: 'credit',
+  reason: 'Bonus promotion',
+});`,
+    python: `import vinr
 
-_To be written._
+transaction = vinr.PointsTransaction.create(
+    loyalty_account="la_4Kp9bQ",
+    amount=200,
+    type="credit",
+    reason="Bonus promotion",
+)`,
+    ruby: `transaction = Vinr::PointsTransaction.create(
+  loyalty_account: 'la_4Kp9bQ',
+  amount: 200,
+  type: 'credit',
+  reason: 'Bonus promotion',
+)`,
+  }}
+  response={`{
+  "id": "pt_7Rm1cW",
+  "loyalty_account": "la_4Kp9bQ",
+  "amount": 200,
+  "type": "credit",
+  "points_after": 1450,
+  "reason": "Bonus promotion",
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve a points transaction
 
-_To be written._
+Fetch a single points transaction by its ID.
 
-## Example request & response
+<ApiExample
+  id="retrieve-points-transaction"
+  title="Retrieve a points transaction"
+  method="GET"
+  path="/v1/points-transactions/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/points-transactions/pt_7Rm1cW \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const transaction = await vinr.pointsTransactions.retrieve('pt_7Rm1cW');`,
+    python: `import vinr
+
+transaction = vinr.PointsTransaction.retrieve("pt_7Rm1cW")`,
+    ruby: `transaction = Vinr::PointsTransaction.retrieve('pt_7Rm1cW')`,
+  }}
+  response={`{
+  "id": "pt_7Rm1cW",
+  "loyalty_account": "la_4Kp9bQ",
+  "amount": 200,
+  "type": "credit",
+  "points_after": 1450,
+  "reason": "Bonus promotion",
+  "created": 1716300000
+}`}
+/>
+
+## List points transactions
+
+Returns a paginated list of points transactions, newest first. Filter by `loyalty_account` and/or
+`type` to narrow results.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `loyalty_account` | string | Filter to transactions on a specific loyalty account. |
+| `type` | enum | `credit` or `debit`. Omit to return both. |
+| `limit` | integer | Number of results to return. Default `10`, max `100`. |
+
+<ApiExample
+  id="list-points-transactions"
+  title="List points transactions"
+  method="GET"
+  path="/v1/points-transactions"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/points-transactions?loyalty_account=la_4Kp9bQ&type=credit&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const transactions = await vinr.pointsTransactions.list({
+  loyalty_account: 'la_4Kp9bQ',
+  type: 'credit',
+  limit: 10,
+});`,
+    python: `import vinr
+
+transactions = vinr.PointsTransaction.list(
+    loyalty_account="la_4Kp9bQ",
+    type="credit",
+    limit=10,
+)`,
+    ruby: `transactions = Vinr::PointsTransaction.list(
+  loyalty_account: 'la_4Kp9bQ',
+  type: 'credit',
+  limit: 10,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "pt_7Rm1cW",
+      "loyalty_account": "la_4Kp9bQ",
+      "amount": 200,
+      "type": "credit",
+      "points_after": 1450,
+      "reason": "Bonus promotion",
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`points_transaction.created`. See [Events](/docs/api-reference/events).

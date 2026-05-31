@@ -4,7 +4,7 @@
  * key sub-pages.
  *
  * NOTE: this list is maintained by hand alongside the sidebar `ROOTS`
- * (app/[locale]/docs/layout.tsx) and `CategoryEnum` (lib/schema.ts). See the
+ * (app/docs/layout.tsx) and `CategoryEnum` (lib/schema.ts). See the
  * taxonomy-consolidation work in the remediation plan for folding these into a
  * single registry.
  */
@@ -82,10 +82,10 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    path: "/docs/api-reference",
+    path: "/api-reference",
     label: "Developer resources",
     items: [
-      { path: "/docs/api-reference", label: "API reference" },
+      { path: "/api-reference", label: "API reference" },
       { path: "/docs/integration", label: "Integration" },
       { path: "/docs/integration/webhooks", label: "Webhooks" },
       { path: "/docs/guides", label: "Guides" },

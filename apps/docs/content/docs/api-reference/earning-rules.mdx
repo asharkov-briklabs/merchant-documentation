@@ -1,39 +1,260 @@
 ---
-title: Earning rules
-description: Define how events award points.
+title: Earning Rules
+description: Create, retrieve, update, delete, and list the rules that govern how customers earn loyalty points.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+An earning rule defines how customers accumulate points in response to platform events. The most
+common rule awards one point per unit of currency spent when a payment succeeds.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Define how events award points.
+## The earning rule object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the earning rule, e.g. `er_2Gb7wJ`.
+  </Attribute>
+  <Attribute name="name" type="string">
+    Human-readable label for the rule, e.g. `1 point per €1 spent`.
+  </Attribute>
+  <Attribute name="event" type="string">
+    The platform event that triggers point accrual, e.g. `payment.succeeded`.
+  </Attribute>
+  <Attribute name="points_per_unit" type="integer">
+    Number of points awarded for each qualifying unit of the triggering event.
+  </Attribute>
+  <Attribute name="unit_value" type="integer">
+    The size of one unit in the smallest currency denomination (e.g. `100` = 100 cents = €1).
+    Points are awarded in proportion to `amount / unit_value`.
+  </Attribute>
+  <Attribute name="active" type="boolean">
+    Whether the rule is currently applied when the trigger event fires.
+  </Attribute>
+  <Attribute name="created" type="integer">
+    Unix timestamp of when the earning rule was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create an earning rule
 
-_To be written._
+Define a new rule. Rules take effect immediately for subsequent trigger events once `active` is set
+to `true`.
 
-## Endpoints
+<ApiExample
+  id="create-earning-rule"
+  title="Create an earning rule"
+  method="POST"
+  path="/v1/earning-rules"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/earning-rules \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d name="1 point per €1 spent" \\
+  -d event=payment.succeeded \\
+  -d points_per_unit=1 \\
+  -d unit_value=100`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const rule = await vinr.earningRules.create({
+  name: '1 point per €1 spent',
+  event: 'payment.succeeded',
+  points_per_unit: 1,
+  unit_value: 100,
+});`,
+    python: `import vinr
 
-_To be written._
+rule = vinr.EarningRule.create(
+    name="1 point per €1 spent",
+    event="payment.succeeded",
+    points_per_unit=1,
+    unit_value=100,
+)`,
+    ruby: `rule = Vinr::EarningRule.create(
+  name: '1 point per €1 spent',
+  event: 'payment.succeeded',
+  points_per_unit: 1,
+  unit_value: 100,
+)`,
+  }}
+  response={`{
+  "id": "er_2Gb7wJ",
+  "name": "1 point per €1 spent",
+  "event": "payment.succeeded",
+  "points_per_unit": 1,
+  "unit_value": 100,
+  "active": true,
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve an earning rule
 
-_To be written._
+Fetch an earning rule by its ID.
 
-## Example request & response
+<ApiExample
+  id="retrieve-earning-rule"
+  title="Retrieve an earning rule"
+  method="GET"
+  path="/v1/earning-rules/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/earning-rules/er_2Gb7wJ \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const rule = await vinr.earningRules.retrieve('er_2Gb7wJ');`,
+    python: `import vinr
+
+rule = vinr.EarningRule.retrieve("er_2Gb7wJ")`,
+    ruby: `rule = Vinr::EarningRule.retrieve('er_2Gb7wJ')`,
+  }}
+  response={`{
+  "id": "er_2Gb7wJ",
+  "name": "1 point per €1 spent",
+  "event": "payment.succeeded",
+  "points_per_unit": 1,
+  "unit_value": 100,
+  "active": true,
+  "created": 1716300000
+}`}
+/>
+
+## Update an earning rule
+
+Adjust the earning rate or pause a rule by setting `active: false`.
+
+<ApiExample
+  id="update-earning-rule"
+  title="Update an earning rule"
+  method="POST"
+  path="/v1/earning-rules/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/earning-rules/er_2Gb7wJ \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d points_per_unit=2 \\
+  -d active=true`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const rule = await vinr.earningRules.update('er_2Gb7wJ', {
+  points_per_unit: 2,
+  active: true,
+});`,
+    python: `import vinr
+
+rule = vinr.EarningRule.modify(
+    "er_2Gb7wJ",
+    points_per_unit=2,
+    active=True,
+)`,
+    ruby: `rule = Vinr::EarningRule.update(
+  'er_2Gb7wJ',
+  points_per_unit: 2,
+  active: true,
+)`,
+  }}
+  response={`{
+  "id": "er_2Gb7wJ",
+  "name": "1 point per €1 spent",
+  "event": "payment.succeeded",
+  "points_per_unit": 2,
+  "unit_value": 100,
+  "active": true,
+  "created": 1716300000
+}`}
+/>
+
+## Delete an earning rule
+
+Permanently deletes an earning rule. Existing points transactions created by this rule are not
+affected.
+
+<ApiExample
+  id="delete-earning-rule"
+  title="Delete an earning rule"
+  method="DELETE"
+  path="/v1/earning-rules/{id}"
+  request={{
+    curl: `curl -X DELETE https://api.vinr.com/v1/earning-rules/er_2Gb7wJ \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const deleted = await vinr.earningRules.delete('er_2Gb7wJ');`,
+    python: `import vinr
+
+deleted = vinr.EarningRule.delete("er_2Gb7wJ")`,
+    ruby: `deleted = Vinr::EarningRule.delete('er_2Gb7wJ')`,
+  }}
+  response={`{
+  "id": "er_2Gb7wJ",
+  "deleted": true
+}`}
+/>
+
+## List earning rules
+
+Returns a paginated list of earning rules. Pass `active=true` to return only currently live rules.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `active` | boolean | Filter by active status. Omit to return all rules. |
+| `limit` | integer | Number of results to return. Default `10`, max `100`. |
+
+<ApiExample
+  id="list-earning-rules"
+  title="List earning rules"
+  method="GET"
+  path="/v1/earning-rules"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/earning-rules?active=true&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const rules = await vinr.earningRules.list({
+  active: true,
+  limit: 10,
+});`,
+    python: `import vinr
+
+rules = vinr.EarningRule.list(
+    active=True,
+    limit=10,
+)`,
+    ruby: `rules = Vinr::EarningRule.list(
+  active: true,
+  limit: 10,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "er_2Gb7wJ",
+      "name": "1 point per €1 spent",
+      "event": "payment.succeeded",
+      "points_per_unit": 2,
+      "unit_value": 100,
+      "active": true,
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`earning_rule.created`, `earning_rule.updated`, and `earning_rule.deleted`. See [Events](/docs/api-reference/events).

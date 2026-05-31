@@ -1,39 +1,273 @@
 ---
 title: Coupons
-description: Create discounts applied to invoices and subscriptions.
+description: Create, retrieve, update, delete, and list discount coupons.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A coupon is a discount code that customers can redeem at checkout to reduce the amount they are
+charged. Coupons support percentage-based and fixed-amount discounts, and can be configured with
+usage limits and duration rules.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Create discounts applied to invoices and subscriptions.
+## The coupon object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the coupon, e.g. `cpn_5Hx1pR`.
+  </Attribute>
+  <Attribute name="name" type="string">
+    Human-readable name or code that customers enter at checkout, e.g. `SUMMER20`.
+  </Attribute>
+  <Attribute name="percent_off" type="number">
+    Percentage discount applied when this coupon is redeemed. Mutually exclusive with `amount_off`.
+  </Attribute>
+  <Attribute name="amount_off" type="integer">
+    Fixed discount amount in the smallest currency unit. Mutually exclusive with `percent_off`.
+  </Attribute>
+  <Attribute name="currency" type="string">
+    Three-letter [ISO currency code](/docs/payments/payment-methods), required when `amount_off` is
+    set, e.g. `USD`.
+  </Attribute>
+  <Attribute name="duration" type="enum">
+    One of `once` (applied to the first invoice only), `repeating` (applied to recurring invoices
+    for a set number of months), or `forever` (applied to all invoices).
+  </Attribute>
+  <Attribute name="times_redeemed" type="integer">
+    Total number of times this coupon has been redeemed.
+  </Attribute>
+  <Attribute name="max_redemptions" type="integer">
+    Maximum number of times this coupon can be redeemed. `null` means unlimited.
+  </Attribute>
+  <Attribute name="valid" type="boolean">
+    `true` if the coupon can still be redeemed (`times_redeemed` has not reached `max_redemptions`
+    and it has not been deleted).
+  </Attribute>
+  <Attribute name="created" type="integer">
+    Unix timestamp when this coupon was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create a coupon
 
-_To be written._
+Provide either `percent_off` or `amount_off` (with `currency`). Set `max_redemptions` to cap total
+usage.
 
-## Endpoints
+<ApiExample
+  id="create-coupon"
+  title="Create a coupon"
+  method="POST"
+  path="/v1/coupons"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/coupons \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d name=SUMMER20 \\
+  -d percent_off=20 \\
+  -d duration=once \\
+  -d max_redemptions=500`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const coupon = await vinr.coupons.create({
+  name: 'SUMMER20',
+  percent_off: 20,
+  duration: 'once',
+  max_redemptions: 500,
+});`,
+    python: `import vinr
 
-_To be written._
+coupon = vinr.Coupon.create(
+    name="SUMMER20",
+    percent_off=20,
+    duration="once",
+    max_redemptions=500,
+)`,
+    ruby: `coupon = Vinr::Coupon.create(
+  name: 'SUMMER20',
+  percent_off: 20,
+  duration: 'once',
+  max_redemptions: 500,
+)`,
+  }}
+  response={`{
+  "id": "cpn_5Hx1pR",
+  "name": "SUMMER20",
+  "percent_off": 20,
+  "amount_off": null,
+  "currency": null,
+  "duration": "once",
+  "times_redeemed": 0,
+  "max_redemptions": 500,
+  "valid": true,
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve a coupon
 
-_To be written._
+Fetch a coupon by its ID.
 
-## Example request & response
+<ApiExample
+  id="retrieve-coupon"
+  title="Retrieve a coupon"
+  method="GET"
+  path="/v1/coupons/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/coupons/cpn_5Hx1pR \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const coupon = await vinr.coupons.retrieve('cpn_5Hx1pR');`,
+    python: `import vinr
+
+coupon = vinr.Coupon.retrieve("cpn_5Hx1pR")`,
+    ruby: `coupon = Vinr::Coupon.retrieve('cpn_5Hx1pR')`,
+  }}
+  response={`{
+  "id": "cpn_5Hx1pR",
+  "name": "SUMMER20",
+  "percent_off": 20,
+  "amount_off": null,
+  "currency": null,
+  "duration": "once",
+  "times_redeemed": 37,
+  "max_redemptions": 500,
+  "valid": true,
+  "created": 1716300000
+}`}
+/>
+
+## Update a coupon
+
+Update the coupon's display name or raise the redemption cap. Discount values and duration are
+immutable after creation.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `name` | string | New human-readable name or code for the coupon. |
+| `max_redemptions` | integer | Raise (not lower) the maximum redemption limit. |
+
+<ApiExample
+  id="update-coupon"
+  title="Update a coupon"
+  method="POST"
+  path="/v1/coupons/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/coupons/cpn_5Hx1pR \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d max_redemptions=1000`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const coupon = await vinr.coupons.update('cpn_5Hx1pR', {
+  max_redemptions: 1000,
+});`,
+    python: `import vinr
+
+coupon = vinr.Coupon.modify(
+    "cpn_5Hx1pR",
+    max_redemptions=1000,
+)`,
+    ruby: `coupon = Vinr::Coupon.update(
+  'cpn_5Hx1pR',
+  max_redemptions: 1000,
+)`,
+  }}
+  response={`{
+  "id": "cpn_5Hx1pR",
+  "name": "SUMMER20",
+  "percent_off": 20,
+  "amount_off": null,
+  "currency": null,
+  "duration": "once",
+  "times_redeemed": 37,
+  "max_redemptions": 1000,
+  "valid": true,
+  "created": 1716300000
+}`}
+/>
+
+## Delete a coupon
+
+Permanently deletes a coupon. It can no longer be redeemed. Existing redemptions are not affected.
+
+<ApiExample
+  id="delete-coupon"
+  title="Delete a coupon"
+  method="DELETE"
+  path="/v1/coupons/{id}"
+  request={{
+    curl: `curl -X DELETE https://api.vinr.com/v1/coupons/cpn_5Hx1pR \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const deleted = await vinr.coupons.delete('cpn_5Hx1pR');`,
+    python: `import vinr
+
+deleted = vinr.Coupon.delete("cpn_5Hx1pR")`,
+    ruby: `deleted = Vinr::Coupon.delete('cpn_5Hx1pR')`,
+  }}
+  response={`{
+  "id": "cpn_5Hx1pR",
+  "deleted": true
+}`}
+/>
+
+## List coupons
+
+Returns a paginated list of coupons, newest first.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `limit` | integer | Number of results to return. Default `10`, max `100`. |
+
+<ApiExample
+  id="list-coupons"
+  title="List coupons"
+  method="GET"
+  path="/v1/coupons"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/coupons?limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const coupons = await vinr.coupons.list({ limit: 10 });`,
+    python: `import vinr
+
+coupons = vinr.Coupon.list(limit=10)`,
+    ruby: `coupons = Vinr::Coupon.list(limit: 10)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "cpn_5Hx1pR",
+      "name": "SUMMER20",
+      "percent_off": 20,
+      "duration": "once",
+      "times_redeemed": 37,
+      "max_redemptions": 1000,
+      "valid": true,
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`coupon.created`, `coupon.updated`, and `coupon.deleted`. See [Events](/docs/api-reference/events).

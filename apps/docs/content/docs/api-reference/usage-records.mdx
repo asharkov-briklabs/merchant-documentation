@@ -1,39 +1,126 @@
 ---
-title: Usage records
-description: Report metered usage for usage-based prices.
+title: Usage Records
+description: Report metered usage for a subscription item and retrieve period summaries.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A usage record reports the quantity consumed for a metered subscription item. VINR accumulates these
+records throughout the billing cycle and converts the total into a line item on the invoice when the
+period ends.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Report metered usage for usage-based prices.
+## The usage record object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique identifier, e.g. `ur_4Cw9pL`. |
+| `subscription_item` | string | The `si_` this record belongs to. |
+| `quantity` | integer | Units consumed (or set, depending on `action`). |
+| `timestamp` | timestamp | Unix timestamp the usage occurred. |
+| `action` | enum | `increment` (add to running total) or `set` (replace the running total). |
 
-## The object
+## Create a usage record
 
-_To be written._
+Report usage for a metered subscription item. Use `action=increment` (the default) to add to the
+running total, or `action=set` to replace it — useful when reporting a gauge-style metric like
+active seats.
 
-## Endpoints
+<ApiExample
+  id="create-usage-record"
+  title="Create a usage record"
+  method="POST"
+  path="/v1/subscription-items/{id}/usage-records"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/subscription-items/si_7Bm3qR/usage-records \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d quantity=150 \\
+  -d timestamp=1716300000 \\
+  -d action=increment`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const record = await vinr.subscriptionItems.createUsageRecord('si_7Bm3qR', {
+  quantity: 150,
+  timestamp: 1716300000,
+  action: 'increment',
+});`,
+    python: `import vinr
 
-_To be written._
+record = vinr.SubscriptionItem.create_usage_record(
+    "si_7Bm3qR",
+    quantity=150,
+    timestamp=1716300000,
+    action="increment",
+)`,
+    ruby: `record = Vinr::SubscriptionItem.create_usage_record(
+  'si_7Bm3qR',
+  quantity: 150,
+  timestamp: 1716300000,
+  action: 'increment',
+)`,
+  }}
+  response={`{
+  "id": "ur_4Cw9pL",
+  "subscription_item": "si_7Bm3qR",
+  "quantity": 150,
+  "timestamp": 1716300000,
+  "action": "increment"
+}`}
+/>
 
-## Response fields
+## List usage record summaries
 
-_To be written._
+Returns aggregated usage totals for each billing period. Each summary contains the period boundaries
+and the total usage VINR will bill at period end — not the individual records themselves.
 
-## Example request & response
-
-_To be written._
+<ApiExample
+  id="list-usage-record-summaries"
+  title="List usage record summaries"
+  method="GET"
+  path="/v1/subscription-items/{id}/usage-record-summaries"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/subscription-items/si_7Bm3qR/usage-record-summaries?limit=5" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `const summaries = await vinr.subscriptionItems.listUsageRecordSummaries(
+  'si_7Bm3qR',
+  { limit: 5 },
+);`,
+    python: `summaries = vinr.SubscriptionItem.list_usage_record_summaries(
+    "si_7Bm3qR",
+    limit=5,
+)`,
+    ruby: `summaries = Vinr::SubscriptionItem.list_usage_record_summaries(
+  'si_7Bm3qR',
+  { limit: 5 },
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "urs_2Dp1nK",
+      "subscription_item": "si_7Bm3qR",
+      "period": {
+        "start": 1716300000,
+        "end": 1717200000
+      },
+      "total_usage": 4820
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+Usage records do not fire events directly. Usage is consumed when VINR finalizes the invoice at the
+end of the billing period — listen to `invoice.created` and `invoice.payment_succeeded` /
+`invoice.payment_failed` to track metered billing outcomes. See
+[Events](/docs/api-reference/events).

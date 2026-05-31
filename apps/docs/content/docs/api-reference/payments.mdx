@@ -3,37 +3,317 @@ title: Payments
 description: Create, retrieve, capture, cancel, and list payments.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A payment moves money from a customer to your account. For most integrations you create a payment
+with an amount and a payment method and VINR authorizes and captures it in one step. If you need to
+separate authorization from capture, route across acquirers, or handle 3DS yourself, see **Advanced**
+below each section.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Create, retrieve, capture, cancel, and list payments.
+## The payment object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the payment, e.g. `pay_3Nx8a2Lk`.
+  </Attribute>
+  <Attribute name="amount" type="integer">
+    Amount intended to be collected, in the smallest currency unit (e.g. cents).
+  </Attribute>
+  <Attribute name="currency" type="string">
+    Three-letter [ISO currency code](/docs/payments/payment-methods), e.g. `EUR`.
+  </Attribute>
+  <Attribute name="status" type="enum">
+    One of `succeeded`, `requires_action`, `processing`, `failed`, or `canceled`.
+  </Attribute>
+  <Attribute name="customer" type="object" expandable>
+    The customer this payment belongs to, if any. Expand to retrieve the full object.
+    <Attributes>
+      <Attribute name="id" type="string">Customer identifier, e.g. `cust_8aZ2`.</Attribute>
+      <Attribute name="email" type="string">Email address on the customer record.</Attribute>
+      <Attribute name="default_payment_method" type="string">The `pm_` used when none is specified.</Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="latest_charge" type="object" expandable>
+    The most recent charge created by this payment, e.g. `ch_1Pf2`.
+    <Attributes>
+      <Attribute name="id" type="string">Charge identifier.</Attribute>
+      <Attribute name="amount_captured" type="integer">Amount captured so far, in the smallest currency unit.</Attribute>
+      <Attribute name="payment_method_details" type="object">Snapshot of the instrument used (card brand, last4, etc.).</Attribute>
+    </Attributes>
+  </Attribute>
+</Attributes>
 
-## The object
+## Create a payment
 
-_To be written._
+Pass an amount, currency, and payment method. VINR authorizes and captures in one step, returning a
+`succeeded` payment.
 
-## Endpoints
+<ApiExample
+  id="create-payment"
+  title="Create a payment"
+  method="POST"
+  path="/v1/payments"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/payments \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d amount=5000 \\
+  -d currency=EUR \\
+  -d payment_method=pm_card_visa \\
+  -d customer=cust_8aZ2`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const payment = await vinr.payments.create({
+  amount: 5000,
+  currency: 'EUR',
+  payment_method: 'pm_card_visa',
+  customer: 'cust_8aZ2',
+});`,
+    python: `import vinr
 
-_To be written._
+payment = vinr.Payment.create(
+    amount=5000,
+    currency="EUR",
+    payment_method="pm_card_visa",
+    customer="cust_8aZ2",
+)`,
+    ruby: `payment = Vinr::Payment.create(
+  amount: 5000,
+  currency: 'EUR',
+  payment_method: 'pm_card_visa',
+  customer: 'cust_8aZ2',
+)`,
+  }}
+  response={`{
+  "id": "pay_3Nx8a2Lk",
+  "amount": 5000,
+  "currency": "EUR",
+  "status": "succeeded",
+  "customer": "cust_8aZ2",
+  "latest_charge": "ch_1Pf2"
+}`}
+/>
 
-## Response fields
+<Accordions>
+<Accordion title="Advanced (Enterprise) — separate auth & capture, routing, idempotency">
 
-_To be written._
+Enterprise integrations hold an authorization and capture later (e.g. on fulfillment), and control
+how the payment is routed. All parameters below are optional additions to the create call above.
 
-## Example request & response
+| Parameter | Type | Description |
+|---|---|---|
+| `capture_method` | enum | `automatic` (default) or `manual` to authorize now and capture later. |
+| `routing.preferred_acquirer` | string | Pin the payment to a specific acquirer connection. |
+| `on_behalf_of` | string | Settle to a connected sub-merchant account (platforms/marketplaces). |
+| `statement_descriptor` | string | Override the descriptor shown on the customer's statement. |
 
-_To be written._
+```ts
+const auth = await vinr.payments.create(
+  {
+    amount: 5000,
+    currency: 'EUR',
+    payment_method: 'pm_card_visa',
+    capture_method: 'manual',                 // funds held, not captured
+    routing: { preferred_acquirer: 'acq_eu_1' },
+  },
+  { idempotencyKey: `order-${order.id}` },     // retries collapse to one payment
+);
+// auth.status === "requires_capture"
+```
+
+Always send an [idempotency key](/docs/api-reference/idempotency) on enterprise create calls so a
+retried request never double-charges.
+
+</Accordion>
+</Accordions>
+
+## Retrieve a payment
+
+Fetch a payment by its ID. Returns the full payment object including the latest charge.
+
+<ApiExample
+  id="retrieve-payment"
+  title="Retrieve a payment"
+  method="GET"
+  path="/v1/payments/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/payments/pay_3Nx8a2Lk \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.retrieve('pay_3Nx8a2Lk');`,
+    python: `import vinr
+
+payment = vinr.Payment.retrieve("pay_3Nx8a2Lk")`,
+    ruby: `payment = Vinr::Payment.retrieve('pay_3Nx8a2Lk')`,
+  }}
+  response={`{
+  "id": "pay_3Nx8a2Lk",
+  "amount": 5000,
+  "currency": "EUR",
+  "status": "succeeded",
+  "customer": "cust_8aZ2",
+  "latest_charge": "ch_1Pf2",
+  "created": 1716300000
+}`}
+/>
+
+## Capture a payment
+
+A payment created with `capture_method: 'manual'` sits in `requires_capture` until you capture it.
+Capturing transitions the status to `succeeded` and settles the funds.
+
+<ApiExample
+  id="capture-payment"
+  title="Capture a payment"
+  method="POST"
+  path="/v1/payments/{id}/capture"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/payments/pay_3Nx8a2Lk/capture \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.capture('pay_3Nx8a2Lk');`,
+    python: `import vinr
+
+payment = vinr.Payment.capture("pay_3Nx8a2Lk")`,
+    ruby: `payment = Vinr::Payment.capture('pay_3Nx8a2Lk')`,
+  }}
+  response={`{
+  "id": "pay_3Nx8a2Lk",
+  "amount": 5000,
+  "currency": "EUR",
+  "status": "succeeded",
+  "customer": "cust_8aZ2",
+  "latest_charge": "ch_1Pf2",
+  "created": 1716300000
+}`}
+/>
+
+<Accordions>
+<Accordion title="Advanced (Enterprise) — partial capture & 3DS handling">
+
+**Partial capture** — capture less than the authorized amount (e.g. you shipped part of an order);
+the remainder is released.
+
+```ts
+await vinr.payments.capture('pay_3Nx8a2Lk', { amount_to_capture: 3000 });
+```
+
+**3DS / SCA** — when a create returns `status: 'requires_action'`, the customer must complete a
+challenge. Confirm the result with the lower-level details call, then capture as usual.
+
+```ts
+if (payment.status === 'requires_action') {
+  await vinr.payments.confirm('pay_3Nx8a2Lk', { details: challengeResult });
+}
+```
+
+See [Strong Customer Authentication](/docs/payments/strong-customer-authentication) for the full
+challenge flow.
+
+</Accordion>
+</Accordions>
+
+## Cancel a payment
+
+Cancel a payment that has not yet been captured. The status transitions to `canceled` and any
+authorization hold on the customer's payment method is released.
+
+<ApiExample
+  id="cancel-payment"
+  title="Cancel a payment"
+  method="POST"
+  path="/v1/payments/{id}/cancel"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/payments/pay_3Nx8a2Lk/cancel \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.cancel('pay_3Nx8a2Lk');`,
+    python: `import vinr
+
+payment = vinr.Payment.cancel("pay_3Nx8a2Lk")`,
+    ruby: `payment = Vinr::Payment.cancel('pay_3Nx8a2Lk')`,
+  }}
+  response={`{
+  "id": "pay_3Nx8a2Lk",
+  "amount": 5000,
+  "currency": "EUR",
+  "status": "canceled",
+  "customer": "cust_8aZ2",
+  "latest_charge": "ch_1Pf2",
+  "created": 1716300000
+}`}
+/>
+
+## List payments
+
+Returns a paginated list of payments, newest first. Use the `customer` filter to scope results to a
+single customer.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `limit` | integer | Number of results to return. Default `10`, max `100`. |
+| `customer` | string | Filter payments by customer ID. |
+
+<ApiExample
+  id="list-payments"
+  title="List payments"
+  method="GET"
+  path="/v1/payments"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/payments?limit=10&customer=cust_8aZ2" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payments = await vinr.payments.list({
+  limit: 10,
+  customer: 'cust_8aZ2',
+});`,
+    python: `import vinr
+
+payments = vinr.Payment.list(
+    limit=10,
+    customer="cust_8aZ2",
+)`,
+    ruby: `payments = Vinr::Payment.list(
+  limit: 10,
+  customer: 'cust_8aZ2',
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "pay_3Nx8a2Lk",
+      "amount": 5000,
+      "currency": "EUR",
+      "status": "succeeded",
+      "customer": "cust_8aZ2",
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`payment.succeeded`, `payment.requires_action`, `payment.captured`, `payment.failed`, and
+`payment.canceled`. See [Events](/docs/api-reference/events).

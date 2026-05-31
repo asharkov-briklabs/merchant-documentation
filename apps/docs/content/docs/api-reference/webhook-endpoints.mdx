@@ -1,39 +1,224 @@
 ---
 title: Webhook endpoints
-description: Register and manage webhook endpoints.
+description: Register and manage URLs that receive VINR event notifications.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A webhook endpoint registers a URL on your server to receive event notifications from VINR. When a
+notable change occurs — such as a payment succeeding or a subscription renewing — VINR sends an
+HTTP POST to every matching endpoint. VINR signs each delivery using the endpoint's `secret` so you
+can verify the payload before processing it.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Register and manage webhook endpoints.
+## The webhook endpoint object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the webhook endpoint, e.g. `we_4Qm7vDzH`.
+  </Attribute>
+  <Attribute name="url" type="string">
+    The destination URL that receives event payloads, e.g. `https://example.com/webhooks/vinr`.
+  </Attribute>
+  <Attribute name="status" type="enum">
+    One of `enabled` or `disabled`. Disabled endpoints receive no deliveries.
+  </Attribute>
+  <Attribute name="enabled_events" type="array">
+    List of event types this endpoint subscribes to, e.g. `["payment.succeeded", "invoice.paid"]`.
+    Pass `["*"]` to subscribe to all events.
+  </Attribute>
+  <Attribute name="secret" type="string">
+    Signing secret used to verify delivery authenticity. **Shown only on create.** Use it to
+    validate the `X-Vinr-Signature` header on each incoming request.
+  </Attribute>
+  <Attribute name="created" type="timestamp">
+    Unix timestamp of when the endpoint was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create a webhook endpoint
 
-_To be written._
+Register a new URL and specify which event types it should receive.
 
-## Endpoints
+<ApiExample
+  id="create-webhook-endpoint"
+  title="Create a webhook endpoint"
+  method="POST"
+  path="/v1/webhook-endpoints"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/webhook-endpoints \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d url=https://example.com/webhooks/vinr \\
+  -d "enabled_events[]=payment.succeeded" \\
+  -d "enabled_events[]=invoice.paid"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const endpoint = await vinr.webhookEndpoints.create({
+  url: 'https://example.com/webhooks/vinr',
+  enabled_events: ['payment.succeeded', 'invoice.paid'],
+});`,
+    python: `import vinr
 
-_To be written._
+endpoint = vinr.WebhookEndpoint.create(
+    url="https://example.com/webhooks/vinr",
+    enabled_events=["payment.succeeded", "invoice.paid"],
+)`,
+    ruby: `endpoint = Vinr::WebhookEndpoint.create(
+  url: 'https://example.com/webhooks/vinr',
+  enabled_events: ['payment.succeeded', 'invoice.paid'],
+)`,
+  }}
+  response={`{
+  "id": "we_4Qm7vDzH",
+  "url": "https://example.com/webhooks/vinr",
+  "status": "enabled",
+  "enabled_events": ["payment.succeeded", "invoice.paid"],
+  "secret": "whsec_k3Xp9LmR7qNv2TsB",
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve a webhook endpoint
 
-_To be written._
+<ApiExample
+  id="retrieve-webhook-endpoint"
+  title="Retrieve a webhook endpoint"
+  method="GET"
+  path="/v1/webhook-endpoints/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/webhook-endpoints/we_4Qm7vDzH \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-## Example request & response
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-_To be written._
+const endpoint = await vinr.webhookEndpoints.retrieve('we_4Qm7vDzH');`,
+    python: `import vinr
 
-## Related events
+endpoint = vinr.WebhookEndpoint.retrieve("we_4Qm7vDzH")`,
+    ruby: `endpoint = Vinr::WebhookEndpoint.retrieve("we_4Qm7vDzH")`,
+  }}
+  response={`{
+  "id": "we_4Qm7vDzH",
+  "url": "https://example.com/webhooks/vinr",
+  "status": "enabled",
+  "enabled_events": ["payment.succeeded", "invoice.paid"],
+  "created": 1716300000
+}`}
+/>
 
-_To be written._
+## Update a webhook endpoint
+
+Change the subscribed event types or toggle the endpoint active/disabled without deleting it.
+
+<ApiExample
+  id="update-webhook-endpoint"
+  title="Update a webhook endpoint"
+  method="POST"
+  path="/v1/webhook-endpoints/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/webhook-endpoints/we_4Qm7vDzH \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d "enabled_events[]=payment.succeeded" \\
+  -d "enabled_events[]=invoice.paid" \\
+  -d "enabled_events[]=subscription.updated" \\
+  -d active=true`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const endpoint = await vinr.webhookEndpoints.update('we_4Qm7vDzH', {
+  enabled_events: ['payment.succeeded', 'invoice.paid', 'subscription.updated'],
+  active: true,
+});`,
+    python: `import vinr
+
+endpoint = vinr.WebhookEndpoint.modify(
+    "we_4Qm7vDzH",
+    enabled_events=["payment.succeeded", "invoice.paid", "subscription.updated"],
+    active=True,
+)`,
+    ruby: `endpoint = Vinr::WebhookEndpoint.update(
+  "we_4Qm7vDzH",
+  enabled_events: ['payment.succeeded', 'invoice.paid', 'subscription.updated'],
+  active: true,
+)`,
+  }}
+  response={`{
+  "id": "we_4Qm7vDzH",
+  "url": "https://example.com/webhooks/vinr",
+  "status": "enabled",
+  "enabled_events": ["payment.succeeded", "invoice.paid", "subscription.updated"],
+  "created": 1716300000
+}`}
+/>
+
+## Delete a webhook endpoint
+
+Permanently removes the endpoint. VINR will stop sending deliveries immediately.
+
+<ApiExample
+  id="delete-webhook-endpoint"
+  title="Delete a webhook endpoint"
+  method="DELETE"
+  path="/v1/webhook-endpoints/{id}"
+  request={{
+    curl: `curl -X DELETE https://api.vinr.com/v1/webhook-endpoints/we_4Qm7vDzH \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+await vinr.webhookEndpoints.delete('we_4Qm7vDzH');`,
+    python: `import vinr
+
+vinr.WebhookEndpoint.delete("we_4Qm7vDzH")`,
+    ruby: `Vinr::WebhookEndpoint.delete("we_4Qm7vDzH")`,
+  }}
+  response={`{
+  "id": "we_4Qm7vDzH",
+  "deleted": true
+}`}
+/>
+
+## List webhook endpoints
+
+<ApiExample
+  id="list-webhook-endpoints"
+  title="List webhook endpoints"
+  method="GET"
+  path="/v1/webhook-endpoints"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/webhook-endpoints?limit=5" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const endpoints = await vinr.webhookEndpoints.list({ limit: 5 });`,
+    python: `import vinr
+
+endpoints = vinr.WebhookEndpoint.list(limit=5)`,
+    ruby: `endpoints = Vinr::WebhookEndpoint.list(limit: 5)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "we_4Qm7vDzH",
+      "url": "https://example.com/webhooks/vinr",
+      "status": "enabled",
+      "enabled_events": ["payment.succeeded", "invoice.paid"],
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>

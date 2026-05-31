@@ -1,0 +1,144 @@
+---
+title: Accept a payment
+description: Create a payment with VINR — the simple hosted flow, with the enterprise sequence available below.
+category: "integration"
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-05-31"
+---
+
+{/*
+  EXAMPLE — reference only. This file lives in /notes so fumadocs does NOT build it.
+  To make it a live page: move it under apps/docs/content/docs/<section>/ and add its
+  slug to that folder's meta.json. It uses only components already registered in
+  app/[locale]/docs/[[...slug]]/page.tsx (Steps, Callout, Accordions, Tabs), so it
+  renders as-is once promoted.
+
+  Pattern demonstrated: the opinionated SME happy path is the BODY of the page; the
+  lower-level enterprise flow is disclosed BELOW in an Accordion. One URL, everything
+  in the DOM (crawlable, deep-linkable), no mode toggle, no nav reshaping.
+*/}
+
+Most merchants accept payments with a single backend call: create a Checkout session, redirect the
+customer, and verify the result. That's the path below. If you operate at enterprise scale and need
+to orchestrate the payment lifecycle yourself, see **Advanced — enterprise payment flow** at the
+bottom.
+
+## Accept a payment with Checkout
+
+<Steps>
+
+### Create a session from your backend
+
+POST to `/checkout/session` with the amount, currency, and redirect URLs. VINR handles cards,
+wallets, and 3DS on a hosted, PCI-compliant page (SAQ-A scope).
+
+```ts
+const { checkoutUrl } = await fetch(`${INTENT_API_URL}/checkout/session`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-Api-Key': process.env.VINR_API_KEY! },
+  body: JSON.stringify({
+    amount: 5000,
+    currency: 'EUR',
+    successUrl: 'https://yoursite.com/order/success',
+    cancelUrl: 'https://yoursite.com/cart',
+  }),
+}).then(r => r.json());
+```
+
+### Redirect the customer
+
+```ts
+window.location.href = checkoutUrl;
+```
+
+### Verify the result
+
+When the customer returns to `successUrl?sessionId=…`, confirm the status before fulfilling.
+
+```ts
+const result = await fetch(
+  `${INTENT_API_URL}/checkout/session/${sessionId}/result`,
+  { headers: { 'X-Api-Key': process.env.VINR_API_KEY! } },
+).then(r => r.json());
+```
+
+</Steps>
+
+<Callout type="info">
+This is all most integrations need. The enterprise flow below is only required if you must own the
+authorization/capture lifecycle, route across acquirers, or handle 3DS challenges yourself.
+</Callout>
+
+## Advanced — enterprise payment flow
+
+<Accordions>
+
+<Accordion title="Advanced (Enterprise) — orchestrate the lifecycle with /payments">
+
+Enterprise integrations skip the hosted session and drive the lower-level `/payments` API directly.
+This gives you control over authorization, capture, and 3DS, at the cost of higher PCI scope
+(SAQ-D) and more orchestration on your side.
+
+<Steps>
+
+### Authorize the payment
+
+Pass an `Idempotency-Key` so retries never double-charge. The response may come back `authorized`
+or `requires_action` (3DS).
+
+```ts
+const auth = await fetch(`${INTENT_API_URL}/payments`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Api-Key': process.env.VINR_API_KEY!,
+    'Idempotency-Key': crypto.randomUUID(),
+  },
+  body: JSON.stringify({
+    amount: 5000,
+    currency: 'EUR',
+    captureMethod: 'manual',          // separate auth from capture
+    paymentMethod: { type: 'card', token: cardToken },
+    routing: { preferredAcquirer: 'acq_eu_1' },  // acquirer routing is enterprise-only
+  }),
+}).then(r => r.json());
+```
+
+### Resolve any 3DS challenge
+
+If `auth.status === 'requires_action'`, complete the challenge and confirm with the lower-level
+details endpoint.
+
+```ts
+if (auth.status === 'requires_action') {
+  await fetch(`${INTENT_API_URL}/payments/${auth.id}/details`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Api-Key': process.env.VINR_API_KEY! },
+    body: JSON.stringify({ details: challengeResult }),
+  });
+}
+```
+
+### Capture when you fulfill
+
+With `captureMethod: 'manual'`, funds are held until you capture — capture partially or in full.
+
+```ts
+await fetch(`${INTENT_API_URL}/payments/${auth.id}/capture`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-Api-Key': process.env.VINR_API_KEY! },
+  body: JSON.stringify({ amount: 5000 }),
+});
+```
+
+</Steps>
+
+<Callout type="warn">
+The enterprise flow puts card data in scope (SAQ-D) and makes you responsible for 3DS and retry
+safety. Use Checkout above unless you specifically need this control.
+</Callout>
+
+</Accordion>
+
+</Accordions>

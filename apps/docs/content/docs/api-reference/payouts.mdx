@@ -1,39 +1,265 @@
 ---
 title: Payouts
-description: Retrieve and list payouts to your bank account.
+description: Create, retrieve, update, cancel, and list payouts to your bank account.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A payout moves funds from your VINR balance to your connected bank account. VINR calculates the
+available balance from captured payments minus fees, and you can trigger a payout manually or let
+VINR schedule them automatically.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Retrieve and list payouts to your bank account.
+## The payout object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the payout, e.g. `po_7Kx3mBqR`.
+  </Attribute>
+  <Attribute name="amount" type="integer">
+    Amount to be transferred to your bank account, in the smallest currency unit (e.g. cents).
+  </Attribute>
+  <Attribute name="currency" type="string">
+    Three-letter ISO currency code, e.g. `EUR`.
+  </Attribute>
+  <Attribute name="status" type="enum">
+    One of `pending`, `paid`, `failed`, or `canceled`.
+  </Attribute>
+  <Attribute name="arrival_date" type="timestamp">
+    Unix timestamp for the estimated date the payout will arrive in the bank account.
+  </Attribute>
+  <Attribute name="bank_account" type="object">
+    Snapshot of the destination bank account.
+    <Attributes>
+      <Attribute name="last4" type="string">Last four digits of the account number.</Attribute>
+      <Attribute name="bank_name" type="string">Name of the receiving bank, e.g. `Deutsche Bank`.</Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="created" type="timestamp">
+    Unix timestamp of when the payout was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create a payout
 
-_To be written._
+Specify an amount and currency to initiate an immediate transfer from your VINR balance to your bank
+account. The payout starts in `pending` and transitions to `paid` once the bank confirms receipt.
 
-## Endpoints
+<ApiExample
+  id="create-payout"
+  title="Create a payout"
+  method="POST"
+  path="/v1/payouts"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/payouts \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d amount=100000 \\
+  -d currency=EUR`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const payout = await vinr.payouts.create({
+  amount: 100000,
+  currency: 'EUR',
+});`,
+    python: `import vinr
 
-_To be written._
+payout = vinr.Payout.create(
+    amount=100000,
+    currency="EUR",
+)`,
+    ruby: `payout = Vinr::Payout.create(
+  amount: 100000,
+  currency: 'EUR',
+)`,
+  }}
+  response={`{
+  "id": "po_7Kx3mBqR",
+  "amount": 100000,
+  "currency": "EUR",
+  "status": "pending",
+  "arrival_date": 1716556800,
+  "bank_account": {
+    "last4": "4242",
+    "bank_name": "Deutsche Bank"
+  },
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve a payout
 
-_To be written._
+<ApiExample
+  id="retrieve-payout"
+  title="Retrieve a payout"
+  method="GET"
+  path="/v1/payouts/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/payouts/po_7Kx3mBqR \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-## Example request & response
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-_To be written._
+const payout = await vinr.payouts.retrieve('po_7Kx3mBqR');`,
+    python: `import vinr
+
+payout = vinr.Payout.retrieve("po_7Kx3mBqR")`,
+    ruby: `payout = Vinr::Payout.retrieve("po_7Kx3mBqR")`,
+  }}
+  response={`{
+  "id": "po_7Kx3mBqR",
+  "amount": 100000,
+  "currency": "EUR",
+  "status": "paid",
+  "arrival_date": 1716556800,
+  "bank_account": {
+    "last4": "4242",
+    "bank_name": "Deutsche Bank"
+  },
+  "created": 1716300000
+}`}
+/>
+
+## Update a payout
+
+Update mutable metadata on a payout. Only the `metadata` field can be changed after creation.
+
+<ApiExample
+  id="update-payout"
+  title="Update a payout"
+  method="POST"
+  path="/v1/payouts/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/payouts/po_7Kx3mBqR \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d "metadata[order_id]=ord_001"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payout = await vinr.payouts.update('po_7Kx3mBqR', {
+  metadata: { order_id: 'ord_001' },
+});`,
+    python: `import vinr
+
+payout = vinr.Payout.modify(
+    "po_7Kx3mBqR",
+    metadata={"order_id": "ord_001"},
+)`,
+    ruby: `payout = Vinr::Payout.update(
+  "po_7Kx3mBqR",
+  metadata: { order_id: 'ord_001' },
+)`,
+  }}
+  response={`{
+  "id": "po_7Kx3mBqR",
+  "amount": 100000,
+  "currency": "EUR",
+  "status": "pending",
+  "arrival_date": 1716556800,
+  "bank_account": {
+    "last4": "4242",
+    "bank_name": "Deutsche Bank"
+  },
+  "metadata": {
+    "order_id": "ord_001"
+  },
+  "created": 1716300000
+}`}
+/>
+
+## Cancel a payout
+
+A payout can only be canceled while its status is `pending`. Once the bank has begun processing the
+transfer, cancellation is no longer possible.
+
+<ApiExample
+  id="cancel-payout"
+  title="Cancel a payout"
+  method="POST"
+  path="/v1/payouts/{id}/cancel"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/payouts/po_7Kx3mBqR/cancel \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payout = await vinr.payouts.cancel('po_7Kx3mBqR');`,
+    python: `import vinr
+
+payout = vinr.Payout.cancel("po_7Kx3mBqR")`,
+    ruby: `payout = Vinr::Payout.cancel("po_7Kx3mBqR")`,
+  }}
+  response={`{
+  "id": "po_7Kx3mBqR",
+  "amount": 100000,
+  "currency": "EUR",
+  "status": "canceled",
+  "arrival_date": 1716556800,
+  "bank_account": {
+    "last4": "4242",
+    "bank_name": "Deutsche Bank"
+  },
+  "created": 1716300000
+}`}
+/>
+
+## List payouts
+
+Returns a list of payouts, optionally filtered by status. Results are sorted by creation date,
+newest first.
+
+<ApiExample
+  id="list-payouts"
+  title="List payouts"
+  method="GET"
+  path="/v1/payouts"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/payouts?status=paid&limit=3" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payouts = await vinr.payouts.list({
+  status: 'paid',
+  limit: 3,
+});`,
+    python: `import vinr
+
+payouts = vinr.Payout.list(
+    status="paid",
+    limit=3,
+)`,
+    ruby: `payouts = Vinr::Payout.list(
+  status: 'paid',
+  limit: 3,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "po_7Kx3mBqR",
+      "amount": 100000,
+      "currency": "EUR",
+      "status": "paid",
+      "arrival_date": 1716556800,
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`payout.created`, `payout.paid`, `payout.failed`, and `payout.canceled`. See [Events](/docs/api-reference/events).

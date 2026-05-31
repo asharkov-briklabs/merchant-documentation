@@ -1,39 +1,134 @@
 ---
 title: Events
-description: Retrieve the events that power webhooks.
+description: Retrieve events that record every notable change in your VINR account.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+An event is created whenever something notable changes in your VINR account — a payment succeeds, an
+invoice is paid, a subscription renews. Events are read-only; use
+[webhook endpoints](/docs/api-reference/webhook-endpoints) to receive them in real time rather than
+polling this API.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Retrieve the events that power webhooks.
+## The event object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the event, e.g. `evt_9Bz1kWpA`.
+  </Attribute>
+  <Attribute name="type" type="string">
+    The event type, e.g. `payment.succeeded` or `invoice.paid`. Used as the routing key in webhook
+    endpoint subscriptions.
+  </Attribute>
+  <Attribute name="data" type="object">
+    Container for the resource snapshot at the time the event was created.
+    <Attributes>
+      <Attribute name="object" type="object">
+        A full snapshot of the affected resource (e.g. the payment object). The shape matches the
+        resource's normal retrieve response.
+      </Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="created" type="timestamp">
+    Unix timestamp of when the event was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Retrieve an event
 
-_To be written._
+<ApiExample
+  id="retrieve-event"
+  title="Retrieve an event"
+  method="GET"
+  path="/v1/events/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/events/evt_9Bz1kWpA \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-## Endpoints
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-_To be written._
+const event = await vinr.events.retrieve('evt_9Bz1kWpA');`,
+    python: `import vinr
 
-## Request parameters
+event = vinr.Event.retrieve("evt_9Bz1kWpA")`,
+    ruby: `event = Vinr::Event.retrieve("evt_9Bz1kWpA")`,
+  }}
+  response={`{
+  "id": "evt_9Bz1kWpA",
+  "type": "payment.succeeded",
+  "data": {
+    "object": {
+      "id": "pay_3Nx8a2Lk",
+      "amount": 5000,
+      "currency": "EUR",
+      "status": "succeeded",
+      "customer": "cust_8aZ2",
+      "created": 1716300000
+    }
+  },
+  "created": 1716300001
+}`}
+/>
 
-_To be written._
+## List events
 
-## Response fields
+Returns a list of events, optionally filtered by type or creation date. Results are sorted newest
+first. Use `created.gte` to page forward from a known timestamp rather than polling for the latest.
 
-_To be written._
+<ApiExample
+  id="list-events"
+  title="List events"
+  method="GET"
+  path="/v1/events"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/events?type=payment.succeeded&created.gte=1716300000&limit=5" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-## Example request & response
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-_To be written._
+const events = await vinr.events.list({
+  type: 'payment.succeeded',
+  'created.gte': 1716300000,
+  limit: 5,
+});`,
+    python: `import vinr
 
-## Related events
-
-_To be written._
+events = vinr.Event.list(
+    type="payment.succeeded",
+    created={"gte": 1716300000},
+    limit=5,
+)`,
+    ruby: `events = Vinr::Event.list(
+  type: 'payment.succeeded',
+  created: { gte: 1716300000 },
+  limit: 5,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "evt_9Bz1kWpA",
+      "type": "payment.succeeded",
+      "data": {
+        "object": {
+          "id": "pay_3Nx8a2Lk",
+          "amount": 5000,
+          "currency": "EUR",
+          "status": "succeeded"
+        }
+      },
+      "created": 1716300001
+    }
+  ],
+  "has_more": false
+}`}
+/>

@@ -1,39 +1,338 @@
 ---
 title: Quotes
-description: Create quotes that convert into subscriptions or invoices.
+description: Create, finalize, accept, and cancel quotes that convert into subscriptions.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A quote presents a pricing proposal to a prospective customer before they commit to a subscription.
+Once accepted, VINR automatically converts the quote into a live subscription.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Create quotes that convert into subscriptions or invoices.
+## The quote object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the quote, e.g. `qt_5Bw2xNjR`.
+  </Attribute>
+  <Attribute name="customer" type="string" expandable>
+    The ID of the customer this quote is for, e.g. `cust_8aZ2`. Expand to retrieve the full
+    customer object.
+  </Attribute>
+  <Attribute name="status" type="enum">
+    Quote lifecycle state: `draft`, `open`, `accepted`, or `canceled`.
+  </Attribute>
+  <Attribute name="amount_total" type="integer">
+    Total amount across all line items, in the smallest currency unit.
+  </Attribute>
+  <Attribute name="currency" type="string">
+    Three-letter ISO currency code, e.g. `EUR`.
+  </Attribute>
+  <Attribute name="expires_at" type="integer">
+    Unix timestamp after which the quote can no longer be accepted.
+  </Attribute>
+  <Attribute name="line_items" type="array">
+    The list of products and prices included in the quote. Each item has `price`, `quantity`, and
+    `amount_subtotal`.
+  </Attribute>
+  <Attribute name="created" type="integer">
+    Unix timestamp of when the quote was created, e.g. `1716300000`.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create a quote
 
-_To be written._
+Create a quote in `draft` status. Add `line_items` referencing existing prices.
 
-## Endpoints
+<ApiExample
+  id="create-quote"
+  title="Create a quote"
+  method="POST"
+  path="/v1/quotes"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/quotes \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d customer=cust_8aZ2 \\
+  -d "line_items[0][price]=price_9Rz1wBqT" \\
+  -d "line_items[0][quantity]=1"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const quote = await vinr.quotes.create({
+  customer: 'cust_8aZ2',
+  line_items: [{ price: 'price_9Rz1wBqT', quantity: 1 }],
+});`,
+    python: `import vinr
 
-_To be written._
+quote = vinr.Quote.create(
+    customer="cust_8aZ2",
+    line_items=[{"price": "price_9Rz1wBqT", "quantity": 1}],
+)`,
+    ruby: `quote = Vinr::Quote.create(
+  customer: 'cust_8aZ2',
+  line_items: [{ price: 'price_9Rz1wBqT', quantity: 1 }],
+)`,
+  }}
+  response={`{
+  "id": "qt_5Bw2xNjR",
+  "customer": "cust_8aZ2",
+  "status": "draft",
+  "amount_total": 2900,
+  "currency": "EUR",
+  "expires_at": null,
+  "line_items": [
+    {
+      "price": "price_9Rz1wBqT",
+      "quantity": 1,
+      "amount_subtotal": 2900
+    }
+  ],
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve a quote
 
-_To be written._
+<ApiExample
+  id="retrieve-quote"
+  title="Retrieve a quote"
+  method="GET"
+  path="/v1/quotes/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/quotes/qt_5Bw2xNjR \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-## Example request & response
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-_To be written._
+const quote = await vinr.quotes.retrieve('qt_5Bw2xNjR');`,
+    python: `import vinr
+
+quote = vinr.Quote.retrieve("qt_5Bw2xNjR")`,
+    ruby: `quote = Vinr::Quote.retrieve('qt_5Bw2xNjR')`,
+  }}
+  response={`{
+  "id": "qt_5Bw2xNjR",
+  "customer": "cust_8aZ2",
+  "status": "open",
+  "amount_total": 2900,
+  "currency": "EUR",
+  "expires_at": 1718892000,
+  "line_items": [
+    {
+      "price": "price_9Rz1wBqT",
+      "quantity": 1,
+      "amount_subtotal": 2900
+    }
+  ],
+  "created": 1716300000
+}`}
+/>
+
+## Update a quote
+
+Update a `draft` or `open` quote. Only `description` and `expires_at` can be changed.
+
+<ApiExample
+  id="update-quote"
+  title="Update a quote"
+  method="POST"
+  path="/v1/quotes/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/quotes/qt_5Bw2xNjR \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d description="Special pricing for Q3" \\
+  -d expires_at=1718892000`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const quote = await vinr.quotes.update('qt_5Bw2xNjR', {
+  description: 'Special pricing for Q3',
+  expires_at: 1718892000,
+});`,
+    python: `import vinr
+
+quote = vinr.Quote.modify(
+    "qt_5Bw2xNjR",
+    description="Special pricing for Q3",
+    expires_at=1718892000,
+)`,
+    ruby: `quote = Vinr::Quote.update(
+  'qt_5Bw2xNjR',
+  description: 'Special pricing for Q3',
+  expires_at: 1718892000,
+)`,
+  }}
+  response={`{
+  "id": "qt_5Bw2xNjR",
+  "customer": "cust_8aZ2",
+  "status": "draft",
+  "amount_total": 2900,
+  "currency": "EUR",
+  "expires_at": 1718892000,
+  "line_items": [
+    {
+      "price": "price_9Rz1wBqT",
+      "quantity": 1,
+      "amount_subtotal": 2900
+    }
+  ],
+  "created": 1716300000
+}`}
+/>
+
+## Finalize a quote
+
+Finalizing moves the quote from `draft` to `open` and makes it shareable with the customer.
+
+<ApiExample
+  id="finalize-quote"
+  title="Finalize a quote"
+  method="POST"
+  path="/v1/quotes/{id}/finalize"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/quotes/qt_5Bw2xNjR/finalize \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const quote = await vinr.quotes.finalize('qt_5Bw2xNjR');`,
+    python: `import vinr
+
+quote = vinr.Quote.finalize("qt_5Bw2xNjR")`,
+    ruby: `quote = Vinr::Quote.finalize('qt_5Bw2xNjR')`,
+  }}
+  response={`{
+  "id": "qt_5Bw2xNjR",
+  "status": "open",
+  "amount_total": 2900,
+  "currency": "EUR",
+  "expires_at": 1718892000,
+  "created": 1716300000
+}`}
+/>
+
+## Accept a quote
+
+Accepting an `open` quote converts it into a live [subscription](/docs/api-reference/subscriptions)
+and moves the quote to `accepted`.
+
+<ApiExample
+  id="accept-quote"
+  title="Accept a quote"
+  method="POST"
+  path="/v1/quotes/{id}/accept"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/quotes/qt_5Bw2xNjR/accept \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const quote = await vinr.quotes.accept('qt_5Bw2xNjR');`,
+    python: `import vinr
+
+quote = vinr.Quote.accept("qt_5Bw2xNjR")`,
+    ruby: `quote = Vinr::Quote.accept('qt_5Bw2xNjR')`,
+  }}
+  response={`{
+  "id": "qt_5Bw2xNjR",
+  "status": "accepted",
+  "amount_total": 2900,
+  "currency": "EUR",
+  "subscription": "sub_2Lq7dKrM",
+  "created": 1716300000
+}`}
+/>
+
+## Cancel a quote
+
+Canceling a `draft` or `open` quote prevents it from being accepted.
+
+<ApiExample
+  id="cancel-quote"
+  title="Cancel a quote"
+  method="POST"
+  path="/v1/quotes/{id}/cancel"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/quotes/qt_5Bw2xNjR/cancel \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const quote = await vinr.quotes.cancel('qt_5Bw2xNjR');`,
+    python: `import vinr
+
+quote = vinr.Quote.cancel("qt_5Bw2xNjR")`,
+    ruby: `quote = Vinr::Quote.cancel('qt_5Bw2xNjR')`,
+  }}
+  response={`{
+  "id": "qt_5Bw2xNjR",
+  "status": "canceled",
+  "amount_total": 2900,
+  "currency": "EUR",
+  "created": 1716300000
+}`}
+/>
+
+## List quotes
+
+<ApiExample
+  id="list-quotes"
+  title="List quotes"
+  method="GET"
+  path="/v1/quotes"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/quotes?customer=cust_8aZ2&status=open&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const quotes = await vinr.quotes.list({
+  customer: 'cust_8aZ2',
+  status: 'open',
+  limit: 10,
+});`,
+    python: `import vinr
+
+quotes = vinr.Quote.list(
+    customer="cust_8aZ2",
+    status="open",
+    limit=10,
+)`,
+    ruby: `quotes = Vinr::Quote.list(
+  customer: 'cust_8aZ2',
+  status: 'open',
+  limit: 10,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "qt_5Bw2xNjR",
+      "customer": "cust_8aZ2",
+      "status": "open",
+      "amount_total": 2900,
+      "currency": "EUR",
+      "expires_at": 1718892000,
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`quote.created`, `quote.finalized`, `quote.accepted`, and `quote.canceled`. See [Events](/docs/api-reference/events).

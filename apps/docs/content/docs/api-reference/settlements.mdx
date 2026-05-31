@@ -1,39 +1,125 @@
 ---
 title: Settlements
-description: Retrieve settlements and their transactions.
+description: Retrieve and list settlements that group batched payments into a payout.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A settlement groups payments that were batched together and paid out in a single transfer. VINR
+creates a settlement automatically when a payout is initiated; you cannot create them manually.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Retrieve settlements and their transactions.
+## The settlement object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the settlement, e.g. `stl_5Rw9nCpT`.
+  </Attribute>
+  <Attribute name="payout" type="string" expandable>
+    The payout (`po_`) this settlement was included in. Expand to retrieve the full payout object.
+  </Attribute>
+  <Attribute name="amount" type="integer">
+    Gross amount of the batched payments, in the smallest currency unit (e.g. cents).
+  </Attribute>
+  <Attribute name="currency" type="string">
+    Three-letter ISO currency code, e.g. `EUR`.
+  </Attribute>
+  <Attribute name="net" type="integer">
+    Net amount after fees, in the smallest currency unit.
+  </Attribute>
+  <Attribute name="transaction_count" type="integer">
+    Number of individual payment transactions included in this settlement.
+  </Attribute>
+  <Attribute name="created" type="timestamp">
+    Unix timestamp of when the settlement was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Retrieve a settlement
 
-_To be written._
+<ApiExample
+  id="retrieve-settlement"
+  title="Retrieve a settlement"
+  method="GET"
+  path="/v1/settlements/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/settlements/stl_5Rw9nCpT \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-## Endpoints
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-_To be written._
+const settlement = await vinr.settlements.retrieve('stl_5Rw9nCpT');`,
+    python: `import vinr
 
-## Request parameters
+settlement = vinr.Settlement.retrieve("stl_5Rw9nCpT")`,
+    ruby: `settlement = Vinr::Settlement.retrieve("stl_5Rw9nCpT")`,
+  }}
+  response={`{
+  "id": "stl_5Rw9nCpT",
+  "payout": "po_7Kx3mBqR",
+  "amount": 320000,
+  "currency": "EUR",
+  "net": 317600,
+  "transaction_count": 14,
+  "created": 1716300000
+}`}
+/>
 
-_To be written._
+## List settlements
 
-## Response fields
+Returns a list of settlements, optionally filtered by the associated payout. Results are sorted by
+creation date, newest first.
 
-_To be written._
+<ApiExample
+  id="list-settlements"
+  title="List settlements"
+  method="GET"
+  path="/v1/settlements"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/settlements?payout=po_7Kx3mBqR&limit=5" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-## Example request & response
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-_To be written._
+const settlements = await vinr.settlements.list({
+  payout: 'po_7Kx3mBqR',
+  limit: 5,
+});`,
+    python: `import vinr
+
+settlements = vinr.Settlement.list(
+    payout="po_7Kx3mBqR",
+    limit=5,
+)`,
+    ruby: `settlements = Vinr::Settlement.list(
+  payout: 'po_7Kx3mBqR',
+  limit: 5,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "stl_5Rw9nCpT",
+      "payout": "po_7Kx3mBqR",
+      "amount": 320000,
+      "currency": "EUR",
+      "net": 317600,
+      "transaction_count": 14,
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`settlement.created`. See [Events](/docs/api-reference/events).

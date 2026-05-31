@@ -1,39 +1,201 @@
 ---
 title: Tax rates
-description: Define and apply tax rates to line items.
+description: Create, retrieve, update, and list tax rates for invoices and subscriptions.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A tax rate represents a named percentage applied to invoice line items and subscriptions. You can
+attach one or more tax rates to a subscription or invoice item to calculate tax automatically.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Define and apply tax rates to line items.
+## The tax rate object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the tax rate, e.g. `txr_4Hm9eLsV`.
+  </Attribute>
+  <Attribute name="display_name" type="string">
+    The name shown to customers on invoices, e.g. `"VAT"`.
+  </Attribute>
+  <Attribute name="percentage" type="float">
+    The tax rate as a decimal percentage, e.g. `20.0` for 20%.
+  </Attribute>
+  <Attribute name="inclusive" type="boolean">
+    When `true`, the tax is included in the stated price. When `false`, tax is added on top.
+    Defaults to `false`.
+  </Attribute>
+  <Attribute name="active" type="boolean">
+    Whether this tax rate can be applied to new invoices. Defaults to `true`.
+  </Attribute>
+  <Attribute name="country" type="string">
+    Two-letter ISO 3166-1 country code this rate applies to, e.g. `"DE"`. Optional.
+  </Attribute>
+  <Attribute name="created" type="integer">
+    Unix timestamp of when the tax rate was created, e.g. `1716300000`.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create a tax rate
 
-_To be written._
+Pass a `display_name`, `percentage`, and optionally `inclusive` and `country` to create a tax rate.
 
-## Endpoints
+<ApiExample
+  id="create-tax-rate"
+  title="Create a tax rate"
+  method="POST"
+  path="/v1/tax-rates"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/tax-rates \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d display_name=VAT \\
+  -d percentage=20.0 \\
+  -d inclusive=false \\
+  -d country=DE`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const taxRate = await vinr.taxRates.create({
+  display_name: 'VAT',
+  percentage: 20.0,
+  inclusive: false,
+  country: 'DE',
+});`,
+    python: `import vinr
 
-_To be written._
+tax_rate = vinr.TaxRate.create(
+    display_name="VAT",
+    percentage=20.0,
+    inclusive=False,
+    country="DE",
+)`,
+    ruby: `tax_rate = Vinr::TaxRate.create(
+  display_name: 'VAT',
+  percentage: 20.0,
+  inclusive: false,
+  country: 'DE',
+)`,
+  }}
+  response={`{
+  "id": "txr_4Hm9eLsV",
+  "display_name": "VAT",
+  "percentage": 20.0,
+  "inclusive": false,
+  "active": true,
+  "country": "DE",
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve a tax rate
 
-_To be written._
+<ApiExample
+  id="retrieve-tax-rate"
+  title="Retrieve a tax rate"
+  method="GET"
+  path="/v1/tax-rates/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/tax-rates/txr_4Hm9eLsV \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-## Example request & response
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-_To be written._
+const taxRate = await vinr.taxRates.retrieve('txr_4Hm9eLsV');`,
+    python: `import vinr
+
+tax_rate = vinr.TaxRate.retrieve("txr_4Hm9eLsV")`,
+    ruby: `tax_rate = Vinr::TaxRate.retrieve('txr_4Hm9eLsV')`,
+  }}
+  response={`{
+  "id": "txr_4Hm9eLsV",
+  "display_name": "VAT",
+  "percentage": 20.0,
+  "inclusive": false,
+  "active": true,
+  "country": "DE",
+  "created": 1716300000
+}`}
+/>
+
+## Update a tax rate
+
+Only `active` can be changed after creation. To correct the percentage or display name, create a
+new tax rate and archive the old one.
+
+<ApiExample
+  id="update-tax-rate"
+  title="Update a tax rate"
+  method="POST"
+  path="/v1/tax-rates/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/tax-rates/txr_4Hm9eLsV \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d active=false`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const taxRate = await vinr.taxRates.update('txr_4Hm9eLsV', { active: false });`,
+    python: `import vinr
+
+tax_rate = vinr.TaxRate.modify("txr_4Hm9eLsV", active=False)`,
+    ruby: `tax_rate = Vinr::TaxRate.update('txr_4Hm9eLsV', active: false)`,
+  }}
+  response={`{
+  "id": "txr_4Hm9eLsV",
+  "display_name": "VAT",
+  "percentage": 20.0,
+  "inclusive": false,
+  "active": false,
+  "country": "DE",
+  "created": 1716300000
+}`}
+/>
+
+## List tax rates
+
+<ApiExample
+  id="list-tax-rates"
+  title="List tax rates"
+  method="GET"
+  path="/v1/tax-rates"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/tax-rates?active=true&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const taxRates = await vinr.taxRates.list({ active: true, limit: 10 });`,
+    python: `import vinr
+
+tax_rates = vinr.TaxRate.list(active=True, limit=10)`,
+    ruby: `tax_rates = Vinr::TaxRate.list(active: true, limit: 10)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "txr_4Hm9eLsV",
+      "display_name": "VAT",
+      "percentage": 20.0,
+      "inclusive": false,
+      "active": true,
+      "country": "DE",
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`tax_rate.created` and `tax_rate.updated`. See [Events](/docs/api-reference/events).

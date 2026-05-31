@@ -1,39 +1,218 @@
 ---
 title: Disputes
-description: Retrieve disputes and submit evidence.
+description: Retrieve disputes, submit evidence, and manage chargebacks.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A dispute is raised by a card network when a customer challenges a charge. VINR notifies you via
+webhook and gives you a window to submit evidence before the network rules on the case.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Retrieve disputes and submit evidence.
+## The dispute object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique identifier for the dispute, e.g. `dis_4Wr9nT`. |
+| `payment` | string | ID of the disputed payment. |
+| `amount` | integer | Disputed amount, in the smallest currency unit (e.g. cents). |
+| `currency` | string | Three-letter ISO currency code matching the original payment. |
+| `status` | enum | One of `warning_needs_response`, `needs_response`, `under_review`, `won`, or `lost`. |
+| `reason` | string | Reason code from the card network, e.g. `fraudulent` or `product_not_received`. |
+| `evidence_due_by` | integer | Unix timestamp of the evidence submission deadline. |
+| `created` | integer | Unix timestamp when the dispute was opened. |
 
-## The object
+## Retrieve a dispute
 
-_To be written._
+Fetch a dispute by its ID to inspect its current status and evidence deadline.
 
-## Endpoints
+<ApiExample
+  id="retrieve-dispute"
+  title="Retrieve a dispute"
+  method="GET"
+  path="/v1/disputes/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/disputes/dis_4Wr9nT \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const dispute = await vinr.disputes.retrieve('dis_4Wr9nT');`,
+    python: `import vinr
 
-_To be written._
+dispute = vinr.Dispute.retrieve("dis_4Wr9nT")`,
+    ruby: `dispute = Vinr::Dispute.retrieve('dis_4Wr9nT')`,
+  }}
+  response={`{
+  "id": "dis_4Wr9nT",
+  "payment": "pay_3Nx8a2Lk",
+  "amount": 5000,
+  "currency": "EUR",
+  "status": "needs_response",
+  "reason": "fraudulent",
+  "evidence_due_by": 1716908400,
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Update a dispute
 
-_To be written._
+Submit or update evidence for a dispute. Pass an `evidence` object containing the fields relevant
+to your case. Submitting evidence moves the status to `under_review`.
 
-## Example request & response
+| Field | Type | Description |
+|---|---|---|
+| `evidence.customer_email` | string | Email address of the customer at the time of purchase. |
+| `evidence.receipt` | string | ID of an uploaded file containing a purchase receipt. |
+| `evidence.shipping_documentation` | string | ID of an uploaded file containing proof of shipment. |
+| `evidence.customer_signature` | string | ID of an uploaded file containing a signed authorization. |
+| `evidence.uncategorized_text` | string | Free-form explanation to include with your submission. |
 
-_To be written._
+<ApiExample
+  id="update-dispute"
+  title="Update a dispute"
+  method="POST"
+  path="/v1/disputes/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/disputes/dis_4Wr9nT \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d "evidence[customer_email]=jenny@example.com" \\
+  -d "evidence[uncategorized_text]=Customer confirmed purchase via email."`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const dispute = await vinr.disputes.update('dis_4Wr9nT', {
+  evidence: {
+    customer_email: 'jenny@example.com',
+    uncategorized_text: 'Customer confirmed purchase via email.',
+  },
+});`,
+    python: `import vinr
+
+dispute = vinr.Dispute.modify(
+    "dis_4Wr9nT",
+    evidence={
+        "customer_email": "jenny@example.com",
+        "uncategorized_text": "Customer confirmed purchase via email.",
+    },
+)`,
+    ruby: `dispute = Vinr::Dispute.update(
+  'dis_4Wr9nT',
+  evidence: {
+    customer_email: 'jenny@example.com',
+    uncategorized_text: 'Customer confirmed purchase via email.',
+  },
+)`,
+  }}
+  response={`{
+  "id": "dis_4Wr9nT",
+  "payment": "pay_3Nx8a2Lk",
+  "amount": 5000,
+  "currency": "EUR",
+  "status": "under_review",
+  "reason": "fraudulent",
+  "evidence_due_by": 1716908400,
+  "created": 1716300000
+}`}
+/>
+
+## Close a dispute
+
+Withdraw your response and accept the dispute outcome. This is irreversible — use it when you
+decide not to contest a chargeback.
+
+<ApiExample
+  id="close-dispute"
+  title="Close a dispute"
+  method="POST"
+  path="/v1/disputes/{id}/close"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/disputes/dis_4Wr9nT/close \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const dispute = await vinr.disputes.close('dis_4Wr9nT');`,
+    python: `import vinr
+
+dispute = vinr.Dispute.close("dis_4Wr9nT")`,
+    ruby: `dispute = Vinr::Dispute.close('dis_4Wr9nT')`,
+  }}
+  response={`{
+  "id": "dis_4Wr9nT",
+  "payment": "pay_3Nx8a2Lk",
+  "amount": 5000,
+  "currency": "EUR",
+  "status": "lost",
+  "reason": "fraudulent",
+  "evidence_due_by": 1716908400,
+  "created": 1716300000
+}`}
+/>
+
+## List disputes
+
+Returns a paginated list of disputes, newest first. Filter by payment or status to narrow results.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `payment` | string | Filter disputes by payment ID. |
+| `status` | enum | Filter by status: `warning_needs_response`, `needs_response`, `under_review`, `won`, or `lost`. |
+| `limit` | integer | Number of results to return. Default `10`, max `100`. |
+
+<ApiExample
+  id="list-disputes"
+  title="List disputes"
+  method="GET"
+  path="/v1/disputes"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/disputes?status=needs_response&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const disputes = await vinr.disputes.list({
+  status: 'needs_response',
+  limit: 10,
+});`,
+    python: `import vinr
+
+disputes = vinr.Dispute.list(
+    status="needs_response",
+    limit=10,
+)`,
+    ruby: `disputes = Vinr::Dispute.list(
+  status: 'needs_response',
+  limit: 10,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "dis_4Wr9nT",
+      "payment": "pay_3Nx8a2Lk",
+      "amount": 5000,
+      "currency": "EUR",
+      "status": "needs_response",
+      "reason": "fraudulent",
+      "evidence_due_by": 1716908400,
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`dispute.created`, `dispute.updated`, `dispute.closed`, `dispute.won`, `dispute.lost`. See [Events](/docs/api-reference/events).

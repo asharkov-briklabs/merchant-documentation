@@ -1,39 +1,88 @@
 ---
 title: Billing portal sessions
-description: Create authenticated customer-portal sessions.
+description: Create short-lived authenticated sessions for the VINR hosted billing portal.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A billing portal session creates a short-lived, one-time URL that takes a customer to the VINR
+hosted billing portal. From there they can update their subscription plan, change their payment
+method, and view past invoices — without you building any of that UI yourself.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Create authenticated customer-portal sessions.
+## The billing portal session object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the session, e.g. `bps_2Fy6rNxQ`.
+  </Attribute>
+  <Attribute name="customer" type="string" expandable>
+    The customer (`cust_`) this session was created for. Expand to retrieve the full customer
+    object.
+  </Attribute>
+  <Attribute name="url" type="string">
+    The one-time portal URL to redirect the customer to. This URL expires after 24 hours and can
+    only be visited once.
+  </Attribute>
+  <Attribute name="return_url" type="string">
+    The URL the customer is redirected to after they finish in the portal or click the back link.
+  </Attribute>
+  <Attribute name="created" type="timestamp">
+    Unix timestamp of when the session was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create a billing portal session
 
-_To be written._
+Pass the customer ID and a `return_url` where VINR should send the customer when they leave the
+portal. Redirect the customer to the returned `url` immediately — it expires after 24 hours.
 
-## Endpoints
+<ApiExample
+  id="create-billing-portal-session"
+  title="Create a billing portal session"
+  method="POST"
+  path="/v1/billing-portal/sessions"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/billing-portal/sessions \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d customer=cust_8aZ2 \\
+  -d return_url=https://example.com/account`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const session = await vinr.billingPortal.sessions.create({
+  customer: 'cust_8aZ2',
+  return_url: 'https://example.com/account',
+});
 
-_To be written._
+// Redirect the customer
+res.redirect(session.url);`,
+    python: `import vinr
 
-## Response fields
+session = vinr.billing_portal.Session.create(
+    customer="cust_8aZ2",
+    return_url="https://example.com/account",
+)
 
-_To be written._
+# Redirect the customer to session.url`,
+    ruby: `session = Vinr::BillingPortal::Session.create(
+  customer: 'cust_8aZ2',
+  return_url: 'https://example.com/account',
+)
 
-## Example request & response
-
-_To be written._
-
-## Related events
-
-_To be written._
+# Redirect the customer to session.url`,
+  }}
+  response={`{
+  "id": "bps_2Fy6rNxQ",
+  "customer": "cust_8aZ2",
+  "url": "https://billing.vinr.com/session/bps_2Fy6rNxQ/live_tok_abc123",
+  "return_url": "https://example.com/account",
+  "created": 1716300000
+}`}
+/>

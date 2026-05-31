@@ -1,14 +1,12 @@
 import Link from "next/link";
 import { VinrWordmark } from "./vinr-wordmark";
 import type { getTranslations } from "@/lib/translations";
-import { localeHref } from "@/lib/locale-href";
 
 interface SiteFooterProps {
   t: ReturnType<typeof getTranslations>;
-  locale: string;
 }
 
-export function SiteFooter({ t, locale }: SiteFooterProps) {
+export function SiteFooter({ t }: SiteFooterProps) {
   return (
     <footer className="bg-vinr-900 px-10">
       <div className="mx-auto max-w-[1200px]">
@@ -25,16 +23,16 @@ export function SiteFooter({ t, locale }: SiteFooterProps) {
               <h4 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.06em] text-white/45">
                 {t.documentation}
               </h4>
-              <Link href={localeHref(locale, "/docs/getting-started/quick-start")} className="mb-2 block text-[12px] text-white/55 transition-colors hover:text-vinr-50">
+              <Link href="/docs/getting-started/quick-start" className="mb-2 block text-[12px] text-white/55 transition-colors hover:text-vinr-50">
                 {t.quickStart}
               </Link>
-              <Link href={localeHref(locale, "/docs/api-reference")} className="mb-2 block text-[12px] text-white/55 transition-colors hover:text-vinr-50">
+              <Link href="/api-reference" className="mb-2 block text-[12px] text-white/55 transition-colors hover:text-vinr-50">
                 {t.apiReference}
               </Link>
-              <Link href={localeHref(locale, "/docs/integration/webhooks")} className="mb-2 block text-[12px] text-white/55 transition-colors hover:text-vinr-50">
+              <Link href="/docs/integration/webhooks" className="mb-2 block text-[12px] text-white/55 transition-colors hover:text-vinr-50">
                 {t.webhooks}
               </Link>
-              <Link href={localeHref(locale, "/docs/payments")} className="mb-2 block text-[12px] text-white/55 transition-colors hover:text-vinr-50">
+              <Link href="/docs/payments" className="mb-2 block text-[12px] text-white/55 transition-colors hover:text-vinr-50">
                 {t.payments}
               </Link>
             </div>
@@ -43,10 +41,10 @@ export function SiteFooter({ t, locale }: SiteFooterProps) {
               <h4 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.06em] text-white/45">
                 {t.resources}
               </h4>
-              <Link href={localeHref(locale, "/ask")} className="mb-2 block text-[12px] text-white/55 transition-colors hover:text-vinr-50">
+              <Link href="/ask" className="mb-2 block text-[12px] text-white/55 transition-colors hover:text-vinr-50">
                 {t.aiAssistant}
               </Link>
-              <Link href={localeHref(locale, "/docs/troubleshooting")} className="mb-2 block text-[12px] text-white/55 transition-colors hover:text-vinr-50">
+              <Link href="/docs/troubleshooting" className="mb-2 block text-[12px] text-white/55 transition-colors hover:text-vinr-50">
                 {t.troubleshooting}
               </Link>
               <a href="/llms.txt" className="mb-2 block text-[12px] text-white/55 transition-colors hover:text-vinr-50">

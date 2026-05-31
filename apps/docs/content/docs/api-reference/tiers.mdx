@@ -1,39 +1,257 @@
 ---
 title: Tiers
-description: Define and query loyalty tiers and status.
+description: Create, retrieve, update, delete, and list membership tiers in the VINR loyalty programme.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A tier represents a membership level in the loyalty programme (e.g. Bronze, Silver, Gold). Customers
+are automatically promoted or demoted based on their points balance relative to each tier's
+`min_points` threshold.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Define and query loyalty tiers and status.
+## The tier object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the tier, e.g. `tier_gold`.
+  </Attribute>
+  <Attribute name="name" type="string">
+    Human-readable tier name displayed to customers, e.g. `Gold`.
+  </Attribute>
+  <Attribute name="min_points" type="integer">
+    Minimum points balance required to qualify for this tier.
+  </Attribute>
+  <Attribute name="benefits" type="array">
+    List of benefit descriptions shown to customers, e.g. `["Free shipping", "Early access"]`.
+  </Attribute>
+  <Attribute name="created" type="integer">
+    Unix timestamp of when the tier was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create a tier
 
-_To be written._
+Define a new membership tier. Tiers are evaluated in ascending `min_points` order; a customer
+qualifies for the highest tier whose `min_points` does not exceed their current balance.
 
-## Endpoints
+<ApiExample
+  id="create-tier"
+  title="Create a tier"
+  method="POST"
+  path="/v1/tiers"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/tiers \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d name=Gold \\
+  -d min_points=5000 \\
+  -d "benefits[]=Free shipping" \\
+  -d "benefits[]=Early access to sales"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const tier = await vinr.tiers.create({
+  name: 'Gold',
+  min_points: 5000,
+  benefits: ['Free shipping', 'Early access to sales'],
+});`,
+    python: `import vinr
 
-_To be written._
+tier = vinr.Tier.create(
+    name="Gold",
+    min_points=5000,
+    benefits=["Free shipping", "Early access to sales"],
+)`,
+    ruby: `tier = Vinr::Tier.create(
+  name: 'Gold',
+  min_points: 5000,
+  benefits: ['Free shipping', 'Early access to sales'],
+)`,
+  }}
+  response={`{
+  "id": "tier_gold",
+  "name": "Gold",
+  "min_points": 5000,
+  "benefits": [
+    "Free shipping",
+    "Early access to sales"
+  ],
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve a tier
 
-_To be written._
+Fetch a tier by its ID.
 
-## Example request & response
+<ApiExample
+  id="retrieve-tier"
+  title="Retrieve a tier"
+  method="GET"
+  path="/v1/tiers/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/tiers/tier_gold \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const tier = await vinr.tiers.retrieve('tier_gold');`,
+    python: `import vinr
+
+tier = vinr.Tier.retrieve("tier_gold")`,
+    ruby: `tier = Vinr::Tier.retrieve('tier_gold')`,
+  }}
+  response={`{
+  "id": "tier_gold",
+  "name": "Gold",
+  "min_points": 5000,
+  "benefits": [
+    "Free shipping",
+    "Early access to sales"
+  ],
+  "created": 1716300000
+}`}
+/>
+
+## Update a tier
+
+Update the tier's name or points threshold. Changes take effect immediately; affected customers'
+tier assignments are re-evaluated on the next balance change.
+
+<ApiExample
+  id="update-tier"
+  title="Update a tier"
+  method="POST"
+  path="/v1/tiers/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/tiers/tier_gold \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d name=Platinum \\
+  -d min_points=7500`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const tier = await vinr.tiers.update('tier_gold', {
+  name: 'Platinum',
+  min_points: 7500,
+});`,
+    python: `import vinr
+
+tier = vinr.Tier.modify(
+    "tier_gold",
+    name="Platinum",
+    min_points=7500,
+)`,
+    ruby: `tier = Vinr::Tier.update(
+  'tier_gold',
+  name: 'Platinum',
+  min_points: 7500,
+)`,
+  }}
+  response={`{
+  "id": "tier_gold",
+  "name": "Platinum",
+  "min_points": 7500,
+  "benefits": [
+    "Free shipping",
+    "Early access to sales"
+  ],
+  "created": 1716300000
+}`}
+/>
+
+## Delete a tier
+
+Permanently deletes a tier. Loyalty accounts currently assigned to this tier fall back to the next
+qualifying tier automatically.
+
+<ApiExample
+  id="delete-tier"
+  title="Delete a tier"
+  method="DELETE"
+  path="/v1/tiers/{id}"
+  request={{
+    curl: `curl -X DELETE https://api.vinr.com/v1/tiers/tier_gold \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const deleted = await vinr.tiers.delete('tier_gold');`,
+    python: `import vinr
+
+deleted = vinr.Tier.delete("tier_gold")`,
+    ruby: `deleted = Vinr::Tier.delete('tier_gold')`,
+  }}
+  response={`{
+  "id": "tier_gold",
+  "deleted": true
+}`}
+/>
+
+## List tiers
+
+Returns a paginated list of all tiers, ordered by `min_points` ascending.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `limit` | integer | Number of results to return. Default `10`, max `100`. |
+
+<ApiExample
+  id="list-tiers"
+  title="List tiers"
+  method="GET"
+  path="/v1/tiers"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/tiers?limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const tiers = await vinr.tiers.list({ limit: 10 });`,
+    python: `import vinr
+
+tiers = vinr.Tier.list(limit=10)`,
+    ruby: `tiers = Vinr::Tier.list(limit: 10)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "tier_bronze",
+      "name": "Bronze",
+      "min_points": 0,
+      "benefits": ["Member discounts"],
+      "created": 1716200000
+    },
+    {
+      "id": "tier_silver",
+      "name": "Silver",
+      "min_points": 1000,
+      "benefits": ["Member discounts", "Priority support"],
+      "created": 1716200100
+    },
+    {
+      "id": "tier_gold",
+      "name": "Gold",
+      "min_points": 5000,
+      "benefits": ["Free shipping", "Early access to sales"],
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`tier.created` and `tier.updated`. See [Events](/docs/api-reference/events).

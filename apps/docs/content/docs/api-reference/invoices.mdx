@@ -1,39 +1,301 @@
 ---
 title: Invoices
-description: Create, finalize, pay, and void invoices.
+description: Create, finalize, pay, void, and list invoices for customers.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+An invoice collects line items and billing details for a customer, moving through a lifecycle from
+draft to open to paid (or voided). VINR can advance invoices automatically or give you full manual
+control over each transition.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Create, finalize, pay, and void invoices.
+## The invoice object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the invoice, e.g. `inv_4Xk9b3Mw`.
+  </Attribute>
+  <Attribute name="customer" type="object" expandable>
+    The customer this invoice belongs to. Expand to retrieve the full object.
+    <Attributes>
+      <Attribute name="id" type="string">Customer identifier, e.g. `cust_8aZ2`.</Attribute>
+      <Attribute name="email" type="string">Email address on the customer record.</Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="status" type="enum">
+    One of `draft`, `open`, `paid`, `void`, or `uncollectible`.
+  </Attribute>
+  <Attribute name="amount_due" type="integer">
+    Total amount due, in the smallest currency unit (e.g. cents).
+  </Attribute>
+  <Attribute name="amount_paid" type="integer">
+    Amount already collected, in the smallest currency unit.
+  </Attribute>
+  <Attribute name="currency" type="string">
+    Three-letter [ISO currency code](/docs/payments/payment-methods), e.g. `EUR`.
+  </Attribute>
+  <Attribute name="due_date" type="integer">
+    Unix timestamp of when payment is due, if set.
+  </Attribute>
+  <Attribute name="lines" type="array">
+    Array of line items included in the invoice. Each item has `id`, `description`, `amount`, and `quantity`.
+  </Attribute>
+  <Attribute name="created" type="integer">
+    Unix timestamp of when the invoice was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create an invoice
 
-_To be written._
+Creates a draft invoice for a customer. Set `auto_advance: true` to let VINR automatically finalize
+and attempt payment when the invoice is ready.
 
-## Endpoints
+<ApiExample
+  id="create-invoice"
+  title="Create an invoice"
+  method="POST"
+  path="/v1/invoices"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/invoices \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d customer=cust_8aZ2 \\
+  -d auto_advance=true`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const invoice = await vinr.invoices.create({
+  customer: 'cust_8aZ2',
+  auto_advance: true,
+});`,
+    python: `import vinr
 
-_To be written._
+invoice = vinr.Invoice.create(
+    customer="cust_8aZ2",
+    auto_advance=True,
+)`,
+    ruby: `invoice = Vinr::Invoice.create(
+  customer: 'cust_8aZ2',
+  auto_advance: true,
+)`,
+  }}
+  response={`{
+  "id": "inv_4Xk9b3Mw",
+  "customer": "cust_8aZ2",
+  "status": "draft",
+  "amount_due": 0,
+  "amount_paid": 0,
+  "currency": "EUR",
+  "due_date": null,
+  "lines": [],
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve an invoice
 
-_To be written._
+<ApiExample
+  id="retrieve-invoice"
+  title="Retrieve an invoice"
+  method="GET"
+  path="/v1/invoices/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/invoices/inv_4Xk9b3Mw \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `const invoice = await vinr.invoices.retrieve('inv_4Xk9b3Mw');`,
+    python: `invoice = vinr.Invoice.retrieve("inv_4Xk9b3Mw")`,
+    ruby: `invoice = Vinr::Invoice.retrieve('inv_4Xk9b3Mw')`,
+  }}
+  response={`{
+  "id": "inv_4Xk9b3Mw",
+  "customer": "cust_8aZ2",
+  "status": "open",
+  "amount_due": 5000,
+  "amount_paid": 0,
+  "currency": "EUR",
+  "due_date": 1716386400,
+  "lines": [
+    {
+      "id": "ii_7Yz1c4Nq",
+      "description": "Consulting services — May 2026",
+      "amount": 5000,
+      "quantity": 1
+    }
+  ],
+  "created": 1716300000
+}`}
+/>
 
-## Example request & response
+## Update an invoice
 
-_To be written._
+Updates a draft invoice. Only `description` and `footer` may be modified after finalization.
+
+<ApiExample
+  id="update-invoice"
+  title="Update an invoice"
+  method="POST"
+  path="/v1/invoices/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/invoices/inv_4Xk9b3Mw \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d description="May 2026 services" \\
+  -d footer="Thank you for your business."`,
+    node: `const invoice = await vinr.invoices.update('inv_4Xk9b3Mw', {
+  description: 'May 2026 services',
+  footer: 'Thank you for your business.',
+});`,
+    python: `invoice = vinr.Invoice.modify(
+    "inv_4Xk9b3Mw",
+    description="May 2026 services",
+    footer="Thank you for your business.",
+)`,
+    ruby: `invoice = Vinr::Invoice.update(
+  'inv_4Xk9b3Mw',
+  description: 'May 2026 services',
+  footer: 'Thank you for your business.',
+)`,
+  }}
+  response={`{
+  "id": "inv_4Xk9b3Mw",
+  "status": "draft",
+  "description": "May 2026 services",
+  "footer": "Thank you for your business.",
+  "amount_due": 5000,
+  "currency": "EUR",
+  "created": 1716300000
+}`}
+/>
+
+## Finalize an invoice
+
+Moves a draft invoice to `open`, making it ready for payment. Once finalized, line items are locked.
+
+<ApiExample
+  id="finalize-invoice"
+  title="Finalize an invoice"
+  method="POST"
+  path="/v1/invoices/{id}/finalize"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/invoices/inv_4Xk9b3Mw/finalize \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `const invoice = await vinr.invoices.finalize('inv_4Xk9b3Mw');`,
+    python: `invoice = vinr.Invoice.finalize("inv_4Xk9b3Mw")`,
+    ruby: `invoice = Vinr::Invoice.finalize('inv_4Xk9b3Mw')`,
+  }}
+  response={`{
+  "id": "inv_4Xk9b3Mw",
+  "status": "open",
+  "amount_due": 5000,
+  "amount_paid": 0,
+  "currency": "EUR",
+  "created": 1716300000
+}`}
+/>
+
+## Pay an invoice
+
+Charges the customer's default payment method and transitions the invoice to `paid`.
+
+<ApiExample
+  id="pay-invoice"
+  title="Pay an invoice"
+  method="POST"
+  path="/v1/invoices/{id}/pay"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/invoices/inv_4Xk9b3Mw/pay \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `const invoice = await vinr.invoices.pay('inv_4Xk9b3Mw');`,
+    python: `invoice = vinr.Invoice.pay("inv_4Xk9b3Mw")`,
+    ruby: `invoice = Vinr::Invoice.pay('inv_4Xk9b3Mw')`,
+  }}
+  response={`{
+  "id": "inv_4Xk9b3Mw",
+  "status": "paid",
+  "amount_due": 5000,
+  "amount_paid": 5000,
+  "currency": "EUR",
+  "created": 1716300000
+}`}
+/>
+
+## Void an invoice
+
+Cancels an open invoice. A voided invoice cannot be re-opened or paid.
+
+<ApiExample
+  id="void-invoice"
+  title="Void an invoice"
+  method="POST"
+  path="/v1/invoices/{id}/void"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/invoices/inv_4Xk9b3Mw/void \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `const invoice = await vinr.invoices.void('inv_4Xk9b3Mw');`,
+    python: `invoice = vinr.Invoice.void("inv_4Xk9b3Mw")`,
+    ruby: `invoice = Vinr::Invoice.void('inv_4Xk9b3Mw')`,
+  }}
+  response={`{
+  "id": "inv_4Xk9b3Mw",
+  "status": "void",
+  "amount_due": 5000,
+  "amount_paid": 0,
+  "currency": "EUR",
+  "created": 1716300000
+}`}
+/>
+
+## List invoices
+
+Returns invoices for your account, optionally filtered by customer or status.
+
+<ApiExample
+  id="list-invoices"
+  title="List invoices"
+  method="GET"
+  path="/v1/invoices"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/invoices?customer=cust_8aZ2&status=open&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `const invoices = await vinr.invoices.list({
+  customer: 'cust_8aZ2',
+  status: 'open',
+  limit: 10,
+});`,
+    python: `invoices = vinr.Invoice.list(
+    customer="cust_8aZ2",
+    status="open",
+    limit=10,
+)`,
+    ruby: `invoices = Vinr::Invoice.list(
+  customer: 'cust_8aZ2',
+  status: 'open',
+  limit: 10,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "inv_4Xk9b3Mw",
+      "customer": "cust_8aZ2",
+      "status": "open",
+      "amount_due": 5000,
+      "amount_paid": 0,
+      "currency": "EUR",
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`invoice.created`, `invoice.finalized`, `invoice.payment_succeeded`, `invoice.payment_failed`, and
+`invoice.voided`. See [Events](/docs/api-reference/events).

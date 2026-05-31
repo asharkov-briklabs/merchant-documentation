@@ -53,6 +53,13 @@ export const frontmatterExtension = {
   persona: z.array(PersonaEnum).min(1).optional(),
   priority: z.enum(["P0", "P1", "P2"]).default("P1"),
   lastUpdated: z.string().date().optional(),
+  // Wholly-enterprise pages (the second mechanism of the Standard/Advanced
+  // content model — see notes/standard-vs-advanced-modes.md). The page stays in
+  // the sidebar for everyone; it just gets an "Enterprise" badge so SMEs know
+  // it isn't aimed at them. Inline `Advanced` accordions cover the common case
+  // of a shared flow that forks; this flag is only for pages that are entirely
+  // enterprise (whole endpoints/features an SME never touches).
+  enterprise: z.boolean().optional(),
 };
 
 export type Persona = z.infer<typeof PersonaEnum>;

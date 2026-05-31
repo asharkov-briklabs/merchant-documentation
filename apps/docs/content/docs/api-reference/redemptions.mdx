@@ -1,39 +1,189 @@
 ---
 title: Redemptions
-description: Redeem points for rewards and reverse redemptions.
+description: Create, retrieve, and list redemption records for coupons, rewards, and offers.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A redemption records the moment a customer redeems a coupon, reward, or offer. Each redemption is
+immutable once created and serves as an audit trail for discount and loyalty activity.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Redeem points for rewards and reverse redemptions.
+## The redemption object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the redemption, e.g. `rdm_7Cw3nP`.
+  </Attribute>
+  <Attribute name="customer" type="object" expandable>
+    The customer who performed the redemption. Expand to retrieve the full customer object.
+    <Attributes>
+      <Attribute name="id" type="string">Customer identifier, e.g. `cust_8aZ2`.</Attribute>
+      <Attribute name="email" type="string">Email address on the customer record.</Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="redeemable_id" type="string">
+    The ID of the redeemed object — a coupon (`cpn_`), reward (`rwd_`), or offer (`ofr_`).
+  </Attribute>
+  <Attribute name="redeemable_type" type="enum">
+    One of `coupon`, `reward`, or `offer`.
+  </Attribute>
+  <Attribute name="amount_off" type="integer">
+    The discount value applied to the order in the smallest currency unit, if the redeemable was a
+    discount coupon or offer. `null` for non-discount redeemables such as loyalty rewards.
+  </Attribute>
+  <Attribute name="redeemed_at" type="integer">
+    Unix timestamp when the customer completed the redemption.
+  </Attribute>
+  <Attribute name="created" type="integer">
+    Unix timestamp when this redemption record was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create a redemption
 
-_To be written._
+Record a customer redeeming a coupon, reward, or offer. Set `redeemable_type` to indicate which kind
+of redeemable is being applied.
 
-## Endpoints
+<ApiExample
+  id="create-redemption"
+  title="Create a redemption"
+  method="POST"
+  path="/v1/redemptions"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/redemptions \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d customer=cust_8aZ2 \\
+  -d redeemable_id=cpn_5Hx1pR \\
+  -d redeemable_type=coupon`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const redemption = await vinr.redemptions.create({
+  customer: 'cust_8aZ2',
+  redeemable_id: 'cpn_5Hx1pR',
+  redeemable_type: 'coupon',
+});`,
+    python: `import vinr
 
-_To be written._
+redemption = vinr.Redemption.create(
+    customer="cust_8aZ2",
+    redeemable_id="cpn_5Hx1pR",
+    redeemable_type="coupon",
+)`,
+    ruby: `redemption = Vinr::Redemption.create(
+  customer: 'cust_8aZ2',
+  redeemable_id: 'cpn_5Hx1pR',
+  redeemable_type: 'coupon',
+)`,
+  }}
+  response={`{
+  "id": "rdm_7Cw3nP",
+  "customer": "cust_8aZ2",
+  "redeemable_id": "cpn_5Hx1pR",
+  "redeemable_type": "coupon",
+  "amount_off": 500,
+  "redeemed_at": 1716300000,
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve a redemption
 
-_To be written._
+Fetch a redemption record by its ID.
 
-## Example request & response
+<ApiExample
+  id="retrieve-redemption"
+  title="Retrieve a redemption"
+  method="GET"
+  path="/v1/redemptions/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/redemptions/rdm_7Cw3nP \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const redemption = await vinr.redemptions.retrieve('rdm_7Cw3nP');`,
+    python: `import vinr
+
+redemption = vinr.Redemption.retrieve("rdm_7Cw3nP")`,
+    ruby: `redemption = Vinr::Redemption.retrieve('rdm_7Cw3nP')`,
+  }}
+  response={`{
+  "id": "rdm_7Cw3nP",
+  "customer": "cust_8aZ2",
+  "redeemable_id": "cpn_5Hx1pR",
+  "redeemable_type": "coupon",
+  "amount_off": 500,
+  "redeemed_at": 1716300000,
+  "created": 1716300000
+}`}
+/>
+
+## List redemptions
+
+Returns a paginated list of redemptions. Filter by customer or redeemable type to narrow results.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `customer` | string | Filter by customer ID. |
+| `redeemable_type` | enum | Filter by type: `coupon`, `reward`, or `offer`. |
+| `limit` | integer | Number of results to return. Default `10`, max `100`. |
+
+<ApiExample
+  id="list-redemptions"
+  title="List redemptions"
+  method="GET"
+  path="/v1/redemptions"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/redemptions?customer=cust_8aZ2&redeemable_type=coupon&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const redemptions = await vinr.redemptions.list({
+  customer: 'cust_8aZ2',
+  redeemable_type: 'coupon',
+  limit: 10,
+});`,
+    python: `import vinr
+
+redemptions = vinr.Redemption.list(
+    customer="cust_8aZ2",
+    redeemable_type="coupon",
+    limit=10,
+)`,
+    ruby: `redemptions = Vinr::Redemption.list(
+  customer: 'cust_8aZ2',
+  redeemable_type: 'coupon',
+  limit: 10,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "rdm_7Cw3nP",
+      "customer": "cust_8aZ2",
+      "redeemable_id": "cpn_5Hx1pR",
+      "redeemable_type": "coupon",
+      "amount_off": 500,
+      "redeemed_at": 1716300000,
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`redemption.created`. See [Events](/docs/api-reference/events).

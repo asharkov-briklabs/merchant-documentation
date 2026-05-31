@@ -3,37 +3,315 @@ title: Payment methods
 description: Save, retrieve, and detach reusable payment methods.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A payment method stores reusable card or bank details attached to a customer. Save a payment method
+once and reference its `pm_` ID on any future payment or subscription — no need to re-collect card
+details.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Save, retrieve, and detach reusable payment methods.
+## The payment method object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the payment method, e.g. `pm_9bR3`.
+  </Attribute>
+  <Attribute name="type" type="string">
+    The instrument type. Currently `card`; additional types (e.g. `sepa_debit`) are roadmap items.
+  </Attribute>
+  <Attribute name="card" type="object">
+    Present when `type` is `card`.
+    <Attributes>
+      <Attribute name="brand" type="string">Card network, e.g. `visa`, `mastercard`.</Attribute>
+      <Attribute name="last4" type="string">Last four digits of the card number.</Attribute>
+      <Attribute name="exp_month" type="integer">Two-digit expiry month.</Attribute>
+      <Attribute name="exp_year" type="integer">Four-digit expiry year.</Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="billing_details" type="object">
+    Billing contact associated with this payment method.
+    <Attributes>
+      <Attribute name="email" type="string">Billing email address.</Attribute>
+      <Attribute name="name" type="string">Cardholder name as it appears on the card.</Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="customer" type="object" expandable>
+    The customer this payment method is attached to, if any. Expand to retrieve the full object.
+    <Attributes>
+      <Attribute name="id" type="string">Customer identifier, e.g. `cust_8aZ2`.</Attribute>
+      <Attribute name="email" type="string">Email address on the customer record.</Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="created" type="integer">
+    Unix timestamp when the payment method was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create a payment method
 
-_To be written._
+Pass `type` and the card credentials. After creating, attach the method to a customer by updating
+the customer's `default_payment_method` or referencing the `pm_` ID directly on a payment.
 
-## Endpoints
+<ApiExample
+  id="create-payment-method"
+  title="Create a payment method"
+  method="POST"
+  path="/v1/payment-methods"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/payment-methods \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d type=card \\
+  -d "card[number]=4242424242424242" \\
+  -d "card[exp_month]=12" \\
+  -d "card[exp_year]=2027" \\
+  -d "card[cvc]=314"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const paymentMethod = await vinr.paymentMethods.create({
+  type: 'card',
+  card: {
+    number: '4242424242424242',
+    exp_month: 12,
+    exp_year: 2027,
+    cvc: '314',
+  },
+});`,
+    python: `import vinr
 
-_To be written._
+payment_method = vinr.PaymentMethod.create(
+    type="card",
+    card={
+        "number": "4242424242424242",
+        "exp_month": 12,
+        "exp_year": 2027,
+        "cvc": "314",
+    },
+)`,
+    ruby: `payment_method = Vinr::PaymentMethod.create(
+  type: 'card',
+  card: {
+    number: '4242424242424242',
+    exp_month: 12,
+    exp_year: 2027,
+    cvc: '314',
+  },
+)`,
+  }}
+  response={`{
+  "id": "pm_9bR3",
+  "type": "card",
+  "card": {
+    "brand": "visa",
+    "last4": "4242",
+    "exp_month": 12,
+    "exp_year": 2027
+  },
+  "billing_details": {
+    "email": null,
+    "name": null
+  },
+  "customer": null,
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+<Accordions>
+<Accordion title="Advanced (Enterprise) — tokenization and PCI scope reduction">
 
-_To be written._
+In production, card numbers should never pass through your server. Use the VINR.js client-side
+library to tokenize the card in the browser and receive a single-use `pm_token_*` reference.
+Exchange it for a reusable `pm_` on your server with a single API call — your server never sees
+raw card data.
 
-## Example request & response
+```ts
+// Client (browser) — VINR.js
+const { token } = await vinr.createToken({
+  type: 'card',
+  card: cardElement,          // VINR.js UI component
+});
 
-_To be written._
+// Server — exchange token for reusable payment method
+const paymentMethod = await vinr.paymentMethods.createFromToken({
+  token: token.id,
+  customer: 'cust_8aZ2',
+});
+```
+
+This keeps your integration out of PCI DSS scope (SAQ A rather than SAQ D).
+
+</Accordion>
+</Accordions>
+
+## Retrieve a payment method
+
+<ApiExample
+  id="retrieve-payment-method"
+  title="Retrieve a payment method"
+  method="GET"
+  path="/v1/payment-methods/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/payment-methods/pm_9bR3 \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `const paymentMethod = await vinr.paymentMethods.retrieve('pm_9bR3');`,
+    python: `payment_method = vinr.PaymentMethod.retrieve("pm_9bR3")`,
+    ruby: `payment_method = Vinr::PaymentMethod.retrieve("pm_9bR3")`,
+  }}
+  response={`{
+  "id": "pm_9bR3",
+  "type": "card",
+  "card": {
+    "brand": "visa",
+    "last4": "4242",
+    "exp_month": 12,
+    "exp_year": 2027
+  },
+  "billing_details": {
+    "email": "jenny@example.com",
+    "name": "Jenny Rosen"
+  },
+  "customer": "cust_8aZ2",
+  "created": 1716300000
+}`}
+/>
+
+## Update a payment method
+
+Only `billing_details` fields can be updated on an existing payment method. Card credentials are
+immutable — create a new payment method to change the card.
+
+<ApiExample
+  id="update-payment-method"
+  title="Update a payment method"
+  method="POST"
+  path="/v1/payment-methods/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/payment-methods/pm_9bR3 \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d "billing_details[email]=jenny.rosen@example.com"`,
+    node: `const paymentMethod = await vinr.paymentMethods.update('pm_9bR3', {
+  billing_details: { email: 'jenny.rosen@example.com' },
+});`,
+    python: `payment_method = vinr.PaymentMethod.modify(
+    "pm_9bR3",
+    billing_details={"email": "jenny.rosen@example.com"},
+)`,
+    ruby: `payment_method = Vinr::PaymentMethod.update(
+  "pm_9bR3",
+  billing_details: { email: 'jenny.rosen@example.com' },
+)`,
+  }}
+  response={`{
+  "id": "pm_9bR3",
+  "type": "card",
+  "card": {
+    "brand": "visa",
+    "last4": "4242",
+    "exp_month": 12,
+    "exp_year": 2027
+  },
+  "billing_details": {
+    "email": "jenny.rosen@example.com",
+    "name": "Jenny Rosen"
+  },
+  "customer": "cust_8aZ2",
+  "created": 1716300000
+}`}
+/>
+
+## Detach a payment method
+
+Removes the payment method from its customer. The object is retained but can no longer be used for
+new charges.
+
+<ApiExample
+  id="detach-payment-method"
+  title="Detach a payment method"
+  method="POST"
+  path="/v1/payment-methods/{id}/detach"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/payment-methods/pm_9bR3/detach \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `const paymentMethod = await vinr.paymentMethods.detach('pm_9bR3');`,
+    python: `payment_method = vinr.PaymentMethod.detach("pm_9bR3")`,
+    ruby: `payment_method = Vinr::PaymentMethod.detach("pm_9bR3")`,
+  }}
+  response={`{
+  "id": "pm_9bR3",
+  "type": "card",
+  "card": {
+    "brand": "visa",
+    "last4": "4242",
+    "exp_month": 12,
+    "exp_year": 2027
+  },
+  "billing_details": {
+    "email": "jenny.rosen@example.com",
+    "name": "Jenny Rosen"
+  },
+  "customer": null,
+  "created": 1716300000
+}`}
+/>
+
+## List payment methods
+
+Returns all payment methods attached to a customer. Filter by `type` to narrow results.
+
+<ApiExample
+  id="list-payment-methods"
+  title="List payment methods"
+  method="GET"
+  path="/v1/payment-methods"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/payment-methods?customer=cust_8aZ2&type=card&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `const paymentMethods = await vinr.paymentMethods.list({
+  customer: 'cust_8aZ2',
+  type: 'card',
+  limit: 10,
+});`,
+    python: `payment_methods = vinr.PaymentMethod.list(
+    customer="cust_8aZ2",
+    type="card",
+    limit=10,
+)`,
+    ruby: `payment_methods = Vinr::PaymentMethod.list(
+  customer: 'cust_8aZ2',
+  type: 'card',
+  limit: 10,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "pm_9bR3",
+      "type": "card",
+      "card": {
+        "brand": "visa",
+        "last4": "4242",
+        "exp_month": 12,
+        "exp_year": 2027
+      },
+      "billing_details": {
+        "email": "jenny.rosen@example.com",
+        "name": "Jenny Rosen"
+      },
+      "customer": "cust_8aZ2",
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`payment_method.created`, `payment_method.updated`, `payment_method.detached`. See [Events](/docs/api-reference/events).

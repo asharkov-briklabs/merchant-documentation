@@ -1,39 +1,225 @@
 ---
 title: Products
-description: Create and manage the products you sell.
+description: Create, retrieve, update, delete, and list products.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A product describes a good or service you sell. Products are the top-level catalog object; pricing
+information is attached separately via [Prices](/docs/api-reference/prices).
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Create and manage the products you sell.
+## The product object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the product, e.g. `prod_7Kc4mNpQ`.
+  </Attribute>
+  <Attribute name="name" type="string">
+    The product's display name, shown on invoices and the customer portal.
+  </Attribute>
+  <Attribute name="description" type="string">
+    An optional description of the product. Shown on invoices.
+  </Attribute>
+  <Attribute name="active" type="boolean">
+    Whether the product is currently available for purchase. Defaults to `true`.
+  </Attribute>
+  <Attribute name="images" type="array">
+    A list of up to 8 URLs of images for this product.
+  </Attribute>
+  <Attribute name="created" type="integer">
+    Unix timestamp of when the product was created, e.g. `1716300000`.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create a product
 
-_To be written._
+Pass a `name` and optional `description` to create a new product in your catalog.
 
-## Endpoints
+<ApiExample
+  id="create-product"
+  title="Create a product"
+  method="POST"
+  path="/v1/products"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/products \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d name="Pro Plan" \\
+  -d description="Full access to all VINR features"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const product = await vinr.products.create({
+  name: 'Pro Plan',
+  description: 'Full access to all VINR features',
+});`,
+    python: `import vinr
 
-_To be written._
+product = vinr.Product.create(
+    name="Pro Plan",
+    description="Full access to all VINR features",
+)`,
+    ruby: `product = Vinr::Product.create(
+  name: 'Pro Plan',
+  description: 'Full access to all VINR features',
+)`,
+  }}
+  response={`{
+  "id": "prod_7Kc4mNpQ",
+  "name": "Pro Plan",
+  "description": "Full access to all VINR features",
+  "active": true,
+  "images": [],
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve a product
 
-_To be written._
+<ApiExample
+  id="retrieve-product"
+  title="Retrieve a product"
+  method="GET"
+  path="/v1/products/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/products/prod_7Kc4mNpQ \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-## Example request & response
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-_To be written._
+const product = await vinr.products.retrieve('prod_7Kc4mNpQ');`,
+    python: `import vinr
+
+product = vinr.Product.retrieve("prod_7Kc4mNpQ")`,
+    ruby: `product = Vinr::Product.retrieve('prod_7Kc4mNpQ')`,
+  }}
+  response={`{
+  "id": "prod_7Kc4mNpQ",
+  "name": "Pro Plan",
+  "description": "Full access to all VINR features",
+  "active": true,
+  "images": [],
+  "created": 1716300000
+}`}
+/>
+
+## Update a product
+
+<ApiExample
+  id="update-product"
+  title="Update a product"
+  method="POST"
+  path="/v1/products/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/products/prod_7Kc4mNpQ \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d name="Pro Plan (Updated)" \\
+  -d active=true`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const product = await vinr.products.update('prod_7Kc4mNpQ', {
+  name: 'Pro Plan (Updated)',
+  active: true,
+});`,
+    python: `import vinr
+
+product = vinr.Product.modify(
+    "prod_7Kc4mNpQ",
+    name="Pro Plan (Updated)",
+    active=True,
+)`,
+    ruby: `product = Vinr::Product.update(
+  'prod_7Kc4mNpQ',
+  name: 'Pro Plan (Updated)',
+  active: true,
+)`,
+  }}
+  response={`{
+  "id": "prod_7Kc4mNpQ",
+  "name": "Pro Plan (Updated)",
+  "description": "Full access to all VINR features",
+  "active": true,
+  "images": [],
+  "created": 1716300000
+}`}
+/>
+
+## Delete a product
+
+Deleting a product removes it from the catalog. Products with active prices cannot be deleted;
+archive them by setting `active: false` instead.
+
+<ApiExample
+  id="delete-product"
+  title="Delete a product"
+  method="DELETE"
+  path="/v1/products/{id}"
+  request={{
+    curl: `curl -X DELETE https://api.vinr.com/v1/products/prod_7Kc4mNpQ \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+await vinr.products.delete('prod_7Kc4mNpQ');`,
+    python: `import vinr
+
+vinr.Product.delete("prod_7Kc4mNpQ")`,
+    ruby: `Vinr::Product.delete('prod_7Kc4mNpQ')`,
+  }}
+  response={`{
+  "id": "prod_7Kc4mNpQ",
+  "deleted": true
+}`}
+/>
+
+## List products
+
+Returns a paginated list of products. Pass `active=true` to show only purchasable products.
+
+<ApiExample
+  id="list-products"
+  title="List products"
+  method="GET"
+  path="/v1/products"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/products?active=true&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const products = await vinr.products.list({ active: true, limit: 10 });`,
+    python: `import vinr
+
+products = vinr.Product.list(active=True, limit=10)`,
+    ruby: `products = Vinr::Product.list(active: true, limit: 10)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "prod_7Kc4mNpQ",
+      "name": "Pro Plan",
+      "description": "Full access to all VINR features",
+      "active": true,
+      "images": [],
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`product.created`, `product.updated`, and `product.deleted`. See [Events](/docs/api-reference/events).

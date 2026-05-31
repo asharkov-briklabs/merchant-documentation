@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { source } from "@/lib/source";
 import { PersonaEnum, type Persona, type Priority } from "@/lib/schema";
 import { getTranslations } from "@/lib/translations";
-import { localeHref } from "@/lib/locale-href";
 import { SiteNav } from "../../components/site-nav";
 import { SiteFooter } from "../../components/site-footer";
 
@@ -46,17 +45,17 @@ const personaMeta: Record<Persona, { title: string; description: string }> = {
 const PRIORITY_ORDER: Record<Priority, number> = { P0: 0, P1: 1, P2: 2 };
 
 export default async function PersonaPage(props: {
-  params: Promise<{ persona: string; locale: string }>;
+  params: Promise<{ persona: string }>;
 }) {
   const params = await props.params;
   const parsed = PersonaEnum.safeParse(params.persona);
   if (!parsed.success) notFound();
   const persona = parsed.data;
   const data = personaMeta[persona];
-  const t = getTranslations(params.locale);
+  const t = getTranslations();
 
   const pages = source
-    .getPages(params.locale)
+    .getPages()
     .filter((page) => page.data.persona?.includes(persona))
     .sort((a, b) => {
       const byPriority =
@@ -68,7 +67,7 @@ export default async function PersonaPage(props: {
 
   return (
     <main className="flex min-h-screen flex-col">
-      <SiteNav t={t} locale={params.locale} activeKey="docs" />
+      <SiteNav t={t} activeKey="docs" />
 
       {/* Header */}
       <section className="border-b border-border">
@@ -117,14 +116,14 @@ export default async function PersonaPage(props: {
           <p className="text-sm text-muted-foreground">
             Need help?{" "}
             <Link
-              href={localeHref(params.locale, "/ask")}
+              href="/ask"
               className="font-medium text-vinr-700 hover:text-vinr-900 dark:text-vinr-300 dark:hover:text-vinr-200"
             >
               Ask our AI assistant
             </Link>{" "}
             or{" "}
             <Link
-              href={localeHref(params.locale, "/docs")}
+              href="/docs"
               className="font-medium text-vinr-700 hover:text-vinr-900 dark:text-vinr-300 dark:hover:text-vinr-200"
             >
               browse all documentation
@@ -134,7 +133,7 @@ export default async function PersonaPage(props: {
         </div>
       </section>
 
-      <SiteFooter t={t} locale={params.locale} />
+      <SiteFooter t={t} />
     </main>
   );
 }

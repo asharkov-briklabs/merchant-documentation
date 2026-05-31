@@ -1,39 +1,237 @@
 ---
-title: Store credit
-description: Issue and spend cash-like member balances.
+title: Store Credit
+description: Create, retrieve, update, and list store credit balances for customers.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+Store credit is a balance of credit applied to a customer's future purchases. When a customer has
+available store credit, it can be automatically applied at checkout to reduce the amount charged to
+their payment method.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Issue and spend cash-like member balances.
+## The store credit object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the store credit record, e.g. `sc_4Bk9mQ`.
+  </Attribute>
+  <Attribute name="customer" type="object" expandable>
+    The customer this store credit belongs to. Expand to retrieve the full customer object.
+    <Attributes>
+      <Attribute name="id" type="string">Customer identifier, e.g. `cust_8aZ2`.</Attribute>
+      <Attribute name="email" type="string">Email address on the customer record.</Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="amount" type="integer">
+    Original credit amount issued, in the smallest currency unit (e.g. cents).
+  </Attribute>
+  <Attribute name="currency" type="string">
+    Three-letter [ISO currency code](/docs/payments/payment-methods), e.g. `USD`.
+  </Attribute>
+  <Attribute name="balance_remaining" type="integer">
+    Amount of credit still available to redeem, in the smallest currency unit.
+  </Attribute>
+  <Attribute name="expires_at" type="integer">
+    Unix timestamp at which this credit expires and can no longer be redeemed, or `null` if it does
+    not expire.
+  </Attribute>
+  <Attribute name="created" type="integer">
+    Unix timestamp when this store credit record was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create store credit
 
-_To be written._
+Issue store credit to a customer. Specify an amount, currency, and optionally an expiry date.
 
-## Endpoints
+<ApiExample
+  id="create-store-credit"
+  title="Create store credit"
+  method="POST"
+  path="/v1/store-credit"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/store-credit \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d customer=cust_8aZ2 \\
+  -d amount=1000 \\
+  -d currency=USD \\
+  -d expires_at=1748736000`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const credit = await vinr.storeCredit.create({
+  customer: 'cust_8aZ2',
+  amount: 1000,
+  currency: 'USD',
+  expires_at: 1748736000,
+});`,
+    python: `import vinr
 
-_To be written._
+credit = vinr.StoreCredit.create(
+    customer="cust_8aZ2",
+    amount=1000,
+    currency="USD",
+    expires_at=1748736000,
+)`,
+    ruby: `credit = Vinr::StoreCredit.create(
+  customer: 'cust_8aZ2',
+  amount: 1000,
+  currency: 'USD',
+  expires_at: 1748736000,
+)`,
+  }}
+  response={`{
+  "id": "sc_4Bk9mQ",
+  "customer": "cust_8aZ2",
+  "amount": 1000,
+  "currency": "USD",
+  "balance_remaining": 1000,
+  "expires_at": 1748736000,
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve store credit
 
-_To be written._
+Fetch a store credit record by its ID.
 
-## Example request & response
+<ApiExample
+  id="retrieve-store-credit"
+  title="Retrieve store credit"
+  method="GET"
+  path="/v1/store-credit/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/store-credit/sc_4Bk9mQ \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const credit = await vinr.storeCredit.retrieve('sc_4Bk9mQ');`,
+    python: `import vinr
+
+credit = vinr.StoreCredit.retrieve("sc_4Bk9mQ")`,
+    ruby: `credit = Vinr::StoreCredit.retrieve('sc_4Bk9mQ')`,
+  }}
+  response={`{
+  "id": "sc_4Bk9mQ",
+  "customer": "cust_8aZ2",
+  "amount": 1000,
+  "currency": "USD",
+  "balance_remaining": 750,
+  "expires_at": 1748736000,
+  "created": 1716300000
+}`}
+/>
+
+## Update store credit
+
+Update the expiry date on an existing store credit record. The `balance_remaining` is read-only and
+adjusted automatically as the credit is applied to purchases.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `expires_at` | integer | New Unix timestamp for expiry. Set to `null` to remove expiry. |
+
+<ApiExample
+  id="update-store-credit"
+  title="Update store credit"
+  method="POST"
+  path="/v1/store-credit/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/store-credit/sc_4Bk9mQ \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d expires_at=1751328000`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const credit = await vinr.storeCredit.update('sc_4Bk9mQ', {
+  expires_at: 1751328000,
+});`,
+    python: `import vinr
+
+credit = vinr.StoreCredit.modify(
+    "sc_4Bk9mQ",
+    expires_at=1751328000,
+)`,
+    ruby: `credit = Vinr::StoreCredit.update(
+  'sc_4Bk9mQ',
+  expires_at: 1751328000,
+)`,
+  }}
+  response={`{
+  "id": "sc_4Bk9mQ",
+  "customer": "cust_8aZ2",
+  "amount": 1000,
+  "currency": "USD",
+  "balance_remaining": 750,
+  "expires_at": 1751328000,
+  "created": 1716300000
+}`}
+/>
+
+## List store credit
+
+Returns a paginated list of store credit records. Use the `customer` filter to scope results to a
+single customer.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `customer` | string | Filter records by customer ID. |
+| `limit` | integer | Number of results to return. Default `10`, max `100`. |
+
+<ApiExample
+  id="list-store-credit"
+  title="List store credit"
+  method="GET"
+  path="/v1/store-credit"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/store-credit?customer=cust_8aZ2&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const credits = await vinr.storeCredit.list({
+  customer: 'cust_8aZ2',
+  limit: 10,
+});`,
+    python: `import vinr
+
+credits = vinr.StoreCredit.list(
+    customer="cust_8aZ2",
+    limit=10,
+)`,
+    ruby: `credits = Vinr::StoreCredit.list(
+  customer: 'cust_8aZ2',
+  limit: 10,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "sc_4Bk9mQ",
+      "customer": "cust_8aZ2",
+      "amount": 1000,
+      "currency": "USD",
+      "balance_remaining": 750,
+      "expires_at": 1748736000,
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`store_credit.created` and `store_credit.updated`. See [Events](/docs/api-reference/events).

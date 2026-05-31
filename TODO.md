@@ -32,6 +32,10 @@
   conversation context.
 - [ ] **9. Diátaxis content architecture** — Explicitly separate tutorials / how-to / reference /
   explanation across the information architecture.
+- [ ] **9a. Standard vs. Advanced (SME/enterprise) content depth** — Opinionated SME happy path as the
+  page body; enterprise depth disclosed below via a consistent `Advanced` block (in-DOM, SEO-safe);
+  wholly-enterprise features get badged standalone pages. Design + worked example in
+  `notes/standard-vs-advanced-modes.md`.
 
 ## Content & Parity
 
@@ -65,6 +69,36 @@
 - [ ] **22. Standard vs. Advanced modes** — Offer two integration modes: *Standard* follows Stripe's
   opinionated, batteries-included approach; *Advanced* leans toward Adyen's lower-level, more
   configurable approach. Let users toggle and surface the right depth of content per mode.
+
+## Migration & Integration Agents (idea)
+
+- [ ] **25. Stripe → VINR migration agent** — An AI-assisted tool that helps merchants migrate from
+  Stripe to VINR with minimal friction. Shape is TBD, but possible directions:
+  - Analyze an existing Stripe integration (codebase scan or API key introspection) and produce a
+    VINR-equivalent configuration / code diff.
+  - Interactive CLI or chat agent that walks through each Stripe concept (customers, subscriptions,
+    webhooks, etc.) and maps it to the VINR equivalent, generating ready-to-use code snippets.
+  - A hosted "migration wizard" embedded in the docs that ingests Stripe export data and outputs
+    VINR import-ready payloads.
+  - Auto-generate a gap report: what Stripe features the merchant uses that VINR covers vs. what
+    is not yet supported, so they can plan the delta.
+
+## E-commerce Platform Plugins
+
+- [ ] **25. E-commerce platform plugins** — Build and publish checkout plugins for the most popular platforms.
+  - **Built by Viva**
+    - [ ] Shopify — Smart Checkout plugin
+    - [ ] WooCommerce — Standard Checkout plugin
+    - [ ] WooCommerce — Smart Checkout plugin
+    - [ ] PrestaShop — Smart Checkout plugin
+    - [ ] OpenCart — Smart Checkout plugin
+    - [ ] Magento — Smart Checkout plugin
+    - [ ] Shopware 6 — Smart Checkout plugin
+  - **Built by Affiliates**
+    - [ ] FoxyCart — Viva plugin
+    - [ ] Wizishop — Viva plugin
+    - [ ] JTL Shop — Viva plugin
+    - [ ] Oxatis — Viva plugin
 
 ## Production hardening — deferred follow-ups
 

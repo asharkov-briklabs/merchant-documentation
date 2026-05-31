@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { VinrWordmark } from "./vinr-wordmark";
 import type { getTranslations } from "@/lib/translations";
-import { localeHref } from "@/lib/locale-href";
 import { CategoryMenu } from "./category-menu";
 import { SearchTrigger } from "./search-trigger";
 import { SidebarToggle } from "./sidebar-toggle";
@@ -9,7 +8,6 @@ import { ChatBubbleIcon } from "./chat-bubble-icon";
 
 interface SiteNavProps {
   t: ReturnType<typeof getTranslations>;
-  locale: string;
   activeKey?: "docs" | "api" | "ask" | null;
   /** Span full width (for the docs layout) instead of the 1200px marketing width. */
   fluid?: boolean;
@@ -20,7 +18,7 @@ interface SiteNavProps {
 //   Row 2 (44px): category dropdowns · API Reference + Help
 // Total sticky height is 100px — the docs layout shifts fumadocs' sidebar/TOC
 // sticky offsets to match (see #nd-sidebar/#nd-toc overrides in globals.css).
-export function SiteNav({ t, locale, activeKey, fluid }: SiteNavProps) {
+export function SiteNav({ t, activeKey, fluid }: SiteNavProps) {
   const rowWidth = fluid ? "w-full" : "w-full max-w-[1200px] mx-auto";
 
   return (
@@ -31,7 +29,7 @@ export function SiteNav({ t, locale, activeKey, fluid }: SiteNavProps) {
           {/* Left: (docs mobile sidebar toggle) + logo */}
           <div className="flex items-center">
             {fluid && <SidebarToggle label={t.navMenu} />}
-            <Link href={localeHref(locale, "/")} className="flex items-center">
+            <Link href="/" className="flex items-center">
               <VinrWordmark height={18} fill="#F7FDFC" />
             </Link>
           </div>
@@ -46,7 +44,7 @@ export function SiteNav({ t, locale, activeKey, fluid }: SiteNavProps) {
               <SearchTrigger placeholder={t.searchPlaceholder} variant="nav" />
             </div>
             <Link
-              href={localeHref(locale, "/ask")}
+              href="/ask"
               className={[
                 "flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-vinr-500/40 px-3.5 text-[13px] font-medium text-vinr-50 transition-colors duration-[120ms]",
                 activeKey === "ask"
@@ -76,12 +74,12 @@ export function SiteNav({ t, locale, activeKey, fluid }: SiteNavProps) {
       {/* Row 2 — category dropdowns / API Reference + Help */}
       <div className="h-11 border-t border-white/[0.05] px-6 md:px-10">
         <div className={["flex h-full items-center justify-between gap-3", rowWidth].join(" ")}>
-          <CategoryMenu t={t} locale={locale} />
+          <CategoryMenu t={t} />
 
           {/* Right utilities */}
           <div className="hidden items-center gap-1 md:flex">
             <Link
-              href={localeHref(locale, "/docs/api-reference")}
+              href="/api-reference"
               className={[
                 "flex h-8 items-center rounded-md px-2.5 text-[13px] font-medium transition-colors duration-[120ms]",
                 activeKey === "api"
@@ -92,7 +90,7 @@ export function SiteNav({ t, locale, activeKey, fluid }: SiteNavProps) {
               {t.apiReference}
             </Link>
             <Link
-              href={localeHref(locale, "/docs/troubleshooting/support")}
+              href="/docs/troubleshooting/support"
               className="flex h-8 items-center rounded-md px-2.5 text-[13px] font-medium text-vinr-50/[0.72] transition-colors duration-[120ms] hover:bg-white/[0.08] hover:text-vinr-50"
             >
               {t.help}

@@ -1,39 +1,186 @@
 ---
 title: Rewards
-description: Manage the rewards catalog.
+description: Create, retrieve, and list rewards that customers can redeem with their loyalty points.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A reward is a redemption option within the loyalty programme. Rewards have a points cost and can
+represent a discount percentage, a free item, or any other benefit you define.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Manage the rewards catalog.
+## The reward object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the reward, e.g. `rwd_5Hx2nP`.
+  </Attribute>
+  <Attribute name="name" type="string">
+    Human-readable name shown to customers, e.g. `10% Off Next Order`.
+  </Attribute>
+  <Attribute name="points_cost" type="integer">
+    Number of points a customer must spend to redeem this reward.
+  </Attribute>
+  <Attribute name="type" type="enum">
+    Either `discount` (a percentage off) or `item` (a free product or service).
+  </Attribute>
+  <Attribute name="value" type="string">
+    For `discount` rewards: the percentage as a string, e.g. `"10"`. For `item` rewards: a
+    description of what is granted, e.g. `"Free coffee"`.
+  </Attribute>
+  <Attribute name="active" type="boolean">
+    Whether the reward is currently available for redemption. Inactive rewards are hidden from
+    customers but their historical redemptions are preserved.
+  </Attribute>
+  <Attribute name="created" type="integer">
+    Unix timestamp of when the reward was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create a reward
 
-_To be written._
+Define a new redemption option. Set `active: true` (the default) to make it immediately available
+to customers with sufficient points.
 
-## Endpoints
+<ApiExample
+  id="create-reward"
+  title="Create a reward"
+  method="POST"
+  path="/v1/rewards"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/rewards \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d name="10% Off Next Order" \\
+  -d points_cost=500 \\
+  -d type=discount \\
+  -d value=10`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const reward = await vinr.rewards.create({
+  name: '10% Off Next Order',
+  points_cost: 500,
+  type: 'discount',
+  value: '10',
+});`,
+    python: `import vinr
 
-_To be written._
+reward = vinr.Reward.create(
+    name="10% Off Next Order",
+    points_cost=500,
+    type="discount",
+    value="10",
+)`,
+    ruby: `reward = Vinr::Reward.create(
+  name: '10% Off Next Order',
+  points_cost: 500,
+  type: 'discount',
+  value: '10',
+)`,
+  }}
+  response={`{
+  "id": "rwd_5Hx2nP",
+  "name": "10% Off Next Order",
+  "points_cost": 500,
+  "type": "discount",
+  "value": "10",
+  "active": true,
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve a reward
 
-_To be written._
+Fetch a reward by its ID.
 
-## Example request & response
+<ApiExample
+  id="retrieve-reward"
+  title="Retrieve a reward"
+  method="GET"
+  path="/v1/rewards/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/rewards/rwd_5Hx2nP \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const reward = await vinr.rewards.retrieve('rwd_5Hx2nP');`,
+    python: `import vinr
+
+reward = vinr.Reward.retrieve("rwd_5Hx2nP")`,
+    ruby: `reward = Vinr::Reward.retrieve('rwd_5Hx2nP')`,
+  }}
+  response={`{
+  "id": "rwd_5Hx2nP",
+  "name": "10% Off Next Order",
+  "points_cost": 500,
+  "type": "discount",
+  "value": "10",
+  "active": true,
+  "created": 1716300000
+}`}
+/>
+
+## List rewards
+
+Returns a paginated list of rewards. Pass `active=true` to show only currently redeemable rewards.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `active` | boolean | Filter by active status. Omit to return all rewards. |
+| `limit` | integer | Number of results to return. Default `10`, max `100`. |
+
+<ApiExample
+  id="list-rewards"
+  title="List rewards"
+  method="GET"
+  path="/v1/rewards"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/rewards?active=true&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const rewards = await vinr.rewards.list({
+  active: true,
+  limit: 10,
+});`,
+    python: `import vinr
+
+rewards = vinr.Reward.list(
+    active=True,
+    limit=10,
+)`,
+    ruby: `rewards = Vinr::Reward.list(
+  active: true,
+  limit: 10,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "rwd_5Hx2nP",
+      "name": "10% Off Next Order",
+      "points_cost": 500,
+      "type": "discount",
+      "value": "10",
+      "active": true,
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`reward.created`. See [Events](/docs/api-reference/events).

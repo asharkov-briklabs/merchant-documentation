@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { localeHref } from "@/lib/locale-href";
 import { SiteNav } from "./components/site-nav";
 import { SiteFooter } from "./components/site-footer";
 import { HeroMeshBg } from "./components/hero-mesh-bg";
@@ -11,14 +10,10 @@ import { AnnouncementBanner, BANNER_COOKIE } from "./components/announcement-ban
 import { getTranslations } from "@/lib/translations";
 import { CATEGORY_BY_SLUG } from "@/lib/taxonomy";
 import type { Category } from "@/lib/schema";
+import { SITE_URL } from "@/lib/site-url";
 
-export default function HomePage({
-  params,
-}: {
-  params: { locale: string };
-}) {
-  const t = getTranslations(params.locale);
-  const h = (p: string) => localeHref(params.locale, p);
+export default function HomePage() {
+  const t = getTranslations();
   const bannerDismissed =
     cookies().get(BANNER_COOKIE)?.value === "dismissed";
 
@@ -33,12 +28,12 @@ export default function HomePage({
             name: "VINR",
             description:
               "Multi-rail payment infrastructure for modern businesses.",
-            url: process.env.NEXT_PUBLIC_SITE_URL || "https://docs.vinr.com",
+            url: SITE_URL,
           }),
         }}
       />
-      <AnnouncementBanner t={t} locale={params.locale} initiallyDismissed={bannerDismissed} />
-      <SiteNav t={t} locale={params.locale} activeKey="docs" />
+      <AnnouncementBanner t={t} initiallyDismissed={bannerDismissed} />
+      <SiteNav t={t} activeKey="docs" />
 
       {/* Hero */}
       <section className="relative overflow-hidden border-b border-white/[0.06] bg-vinr-900 px-10 pb-20 pt-[72px]">
@@ -70,20 +65,20 @@ export default function HomePage({
 
             <div className="flex items-center gap-5">
               <Link
-                href={h("/docs/getting-started/quick-start")}
+                href="/docs/getting-started/quick-start"
                 className="flex h-10 items-center gap-1.5 rounded-lg bg-vinr-500 px-5 text-sm font-medium text-white transition-colors hover:bg-vinr-600"
               >
                 {t.getStartedCta}
               </Link>
               <Link
-                href={h("/docs/api-reference")}
+                href="/api-reference"
                 className="text-sm font-medium text-white/50 transition-colors hover:text-vinr-50"
               >
                 {t.apiReference}
               </Link>
               <span className="text-xs text-white/20">·</span>
               <Link
-                href={h("/docs/payments")}
+                href="/docs/payments"
                 className="text-sm font-medium text-white/50 transition-colors hover:text-vinr-50"
               >
                 {t.payments}
@@ -107,7 +102,7 @@ export default function HomePage({
           </p>
           <div className="mt-6 flex items-center gap-5">
             <Link
-              href={h("/docs/getting-started/quick-start")}
+              href="/docs/getting-started/quick-start"
               className="flex h-10 items-center gap-1.5 rounded-lg bg-vinr-700 px-5 text-sm font-medium text-white transition-colors hover:bg-vinr-800"
             >
               {t.getStartedCta}
@@ -126,7 +121,7 @@ export default function HomePage({
                   {col.links.map((link) => (
                     <li key={link.label}>
                       <Link
-                        href={h(link.href)}
+                        href={link.href}
                         className="text-[14px] text-vinr-600 transition-colors hover:text-vinr-800 hover:underline"
                       >
                         {link.label}
@@ -150,7 +145,7 @@ export default function HomePage({
               {TRY_TASKS.map((task, i) => (
                 <li key={task.label}>
                   <Link
-                    href={h(task.href)}
+                    href={task.href}
                     className={[
                       "flex items-center justify-between rounded-lg px-3.5 py-2.5 text-[14px] transition-colors",
                       i === 0
@@ -186,7 +181,7 @@ export default function HomePage({
                   {bucket.slugs.map((slug) => {
                     const c = CATEGORY_BY_SLUG[slug];
                     return (
-                      <Link key={slug} href={h(`/docs/${slug}`)} className="group block">
+                      <Link key={slug} href={`/docs/${slug}`} className="group block">
                         <div className="text-[15px] font-semibold text-vinr-600 transition-colors group-hover:text-vinr-800 group-hover:underline">
                           {c.label}
                         </div>
@@ -208,7 +203,7 @@ export default function HomePage({
             <div key={item.text} className="flex items-center gap-2.5 text-[14px] text-zinc-600">
               <span className="text-vinr-400">{item.icon}</span>
               {item.text}{" "}
-              <Link href={h(item.href)} className="font-medium text-vinr-600 transition-colors hover:text-vinr-800 hover:underline">
+              <Link href={item.href} className="font-medium text-vinr-600 transition-colors hover:text-vinr-800 hover:underline">
                 {item.linkText}
               </Link>
               .
@@ -217,13 +212,12 @@ export default function HomePage({
         </div>
       </section>
 
-      <SiteFooter t={t} locale={params.locale} />
+      <SiteFooter t={t} />
     </main>
   );
 }
 
-/* --- Home content (curated marketing views; English-only like the rest of the
-   page — see lib/translations.ts) --- */
+/* --- Home content (curated marketing views) --- */
 
 const QUICK_LINKS: { title: string; links: { label: string; href: string }[] }[] = [
   {
@@ -246,7 +240,7 @@ const QUICK_LINKS: { title: string; links: { label: string; href: string }[] }[]
     title: "Developers",
     links: [
       { label: "Set up your environment", href: "/docs/getting-started/quick-start" },
-      { label: "Full API reference", href: "/docs/api-reference" },
+      { label: "Full API reference", href: "/api-reference" },
       { label: "Webhooks & events", href: "/docs/integration/webhooks" },
     ],
   },
@@ -272,7 +266,7 @@ const HELP_LINKS: { icon: JSX.Element; text: string; linkText: string; href: str
   { icon: <IconLifebuoy />, text: "Need help?", linkText: "Contact support", href: "/docs/troubleshooting/support" },
   { icon: <ChatBubbleIcon className="h-[18px] w-[18px]" />, text: "Have a question?", linkText: "Ask the AI assistant", href: "/ask" },
   { icon: <IconHistory />, text: "Check out our", linkText: "changelog", href: "/docs/changelog" },
-  { icon: <IconBook />, text: "Dive into the", linkText: "API reference", href: "/docs/api-reference" },
+  { icon: <IconBook />, text: "Dive into the", linkText: "API reference", href: "/api-reference" },
 ];
 
 /* --- Icons --- */

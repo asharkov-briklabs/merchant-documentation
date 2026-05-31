@@ -4,17 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_GROUPS } from "@/lib/nav-taxonomy";
-import { localeHref } from "@/lib/locale-href";
 import type { getTranslations } from "@/lib/translations";
 
 type T = ReturnType<typeof getTranslations>;
 
 interface CategoryMenuProps {
   t: T;
-  locale: string;
 }
 
-export function CategoryMenu({ t, locale }: CategoryMenuProps) {
+export function CategoryMenu({ t }: CategoryMenuProps) {
   const [open, setOpen] = useState<number | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -47,8 +45,6 @@ export function CategoryMenu({ t, locale }: CategoryMenuProps) {
       document.removeEventListener("mousedown", onClick);
     };
   }, []);
-
-  const h = (p: string) => localeHref(locale, p);
 
   return (
     <div ref={rootRef} className="flex items-center">
@@ -93,7 +89,7 @@ export function CategoryMenu({ t, locale }: CategoryMenuProps) {
                     {group.items.map((item) => (
                       <Link
                         key={item.path}
-                        href={h(item.path)}
+                        href={item.path}
                         className="block rounded-lg px-3 py-2 text-[13px] text-vinr-50/[0.78] transition-colors hover:bg-white/[0.06] hover:text-vinr-50"
                       >
                         {item.label}
@@ -133,7 +129,7 @@ export function CategoryMenu({ t, locale }: CategoryMenuProps) {
                   {group.items.map((item) => (
                     <Link
                       key={item.path}
-                      href={h(item.path)}
+                      href={item.path}
                       className="rounded-md py-2 text-[14px] text-vinr-50/[0.78] transition-colors hover:text-vinr-50"
                     >
                       {item.label}
@@ -143,7 +139,7 @@ export function CategoryMenu({ t, locale }: CategoryMenuProps) {
               </div>
             ))}
             <Link
-              href={h("/docs")}
+              href="/docs"
               className="text-[13px] font-medium text-vinr-300 transition-colors hover:text-vinr-50"
             >
               {t.navViewAll} →

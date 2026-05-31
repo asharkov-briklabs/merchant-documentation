@@ -1,39 +1,257 @@
 ---
 title: Invoice items
-description: Add one-off charges and credits to invoices.
+description: Create, retrieve, update, delete, and list line items on draft invoices.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+An invoice item is a single line item added to a draft invoice. You can attach items to an existing
+draft or create them without an invoice to be auto-collected on the customer's next invoice.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Add one-off charges and credits to invoices.
+## The invoice item object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the invoice item, e.g. `ii_7Yz1c4Nq`.
+  </Attribute>
+  <Attribute name="invoice" type="object" expandable>
+    The invoice this item belongs to, if assigned. Expand to retrieve the full object.
+    <Attributes>
+      <Attribute name="id" type="string">Invoice identifier, e.g. `inv_4Xk9b3Mw`.</Attribute>
+      <Attribute name="status" type="string">Current status of the invoice.</Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="customer" type="object" expandable>
+    The customer this item is billed to. Expand to retrieve the full object.
+    <Attributes>
+      <Attribute name="id" type="string">Customer identifier, e.g. `cust_8aZ2`.</Attribute>
+      <Attribute name="email" type="string">Email address on the customer record.</Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="amount" type="integer">
+    Total amount for this line item, in the smallest currency unit (e.g. cents).
+  </Attribute>
+  <Attribute name="currency" type="string">
+    Three-letter [ISO currency code](/docs/payments/payment-methods), e.g. `EUR`.
+  </Attribute>
+  <Attribute name="description" type="string">
+    Human-readable description of the item, shown on the invoice.
+  </Attribute>
+  <Attribute name="quantity" type="integer">
+    Number of units. Defaults to `1`.
+  </Attribute>
+  <Attribute name="unit_amount" type="integer">
+    Per-unit amount in the smallest currency unit. `amount` equals `unit_amount * quantity`.
+  </Attribute>
+  <Attribute name="created" type="integer">
+    Unix timestamp of when the item was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create an invoice item
 
-_To be written._
+Adds a line item to a draft invoice. Omit `invoice` to create a pending item that will be included
+on the customer's next automatically generated invoice.
 
-## Endpoints
+<ApiExample
+  id="create-invoice-item"
+  title="Create an invoice item"
+  method="POST"
+  path="/v1/invoice-items"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/invoice-items \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d customer=cust_8aZ2 \\
+  -d amount=2500 \\
+  -d currency=EUR \\
+  -d description="Consulting services — May 2026" \\
+  -d invoice=inv_4Xk9b3Mw`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const item = await vinr.invoiceItems.create({
+  customer: 'cust_8aZ2',
+  amount: 2500,
+  currency: 'EUR',
+  description: 'Consulting services — May 2026',
+  invoice: 'inv_4Xk9b3Mw',
+});`,
+    python: `import vinr
 
-_To be written._
+item = vinr.InvoiceItem.create(
+    customer="cust_8aZ2",
+    amount=2500,
+    currency="EUR",
+    description="Consulting services — May 2026",
+    invoice="inv_4Xk9b3Mw",
+)`,
+    ruby: `item = Vinr::InvoiceItem.create(
+  customer: 'cust_8aZ2',
+  amount: 2500,
+  currency: 'EUR',
+  description: 'Consulting services — May 2026',
+  invoice: 'inv_4Xk9b3Mw',
+)`,
+  }}
+  response={`{
+  "id": "ii_7Yz1c4Nq",
+  "invoice": "inv_4Xk9b3Mw",
+  "customer": "cust_8aZ2",
+  "amount": 2500,
+  "currency": "EUR",
+  "description": "Consulting services — May 2026",
+  "quantity": 1,
+  "unit_amount": 2500,
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve an invoice item
 
-_To be written._
+<ApiExample
+  id="retrieve-invoice-item"
+  title="Retrieve an invoice item"
+  method="GET"
+  path="/v1/invoice-items/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/invoice-items/ii_7Yz1c4Nq \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `const item = await vinr.invoiceItems.retrieve('ii_7Yz1c4Nq');`,
+    python: `item = vinr.InvoiceItem.retrieve("ii_7Yz1c4Nq")`,
+    ruby: `item = Vinr::InvoiceItem.retrieve('ii_7Yz1c4Nq')`,
+  }}
+  response={`{
+  "id": "ii_7Yz1c4Nq",
+  "invoice": "inv_4Xk9b3Mw",
+  "customer": "cust_8aZ2",
+  "amount": 2500,
+  "currency": "EUR",
+  "description": "Consulting services — May 2026",
+  "quantity": 1,
+  "unit_amount": 2500,
+  "created": 1716300000
+}`}
+/>
 
-## Example request & response
+## Update an invoice item
 
-_To be written._
+Updates the `description` or `amount` on a draft invoice item. Only items on draft invoices may be
+modified.
+
+<ApiExample
+  id="update-invoice-item"
+  title="Update an invoice item"
+  method="POST"
+  path="/v1/invoice-items/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/invoice-items/ii_7Yz1c4Nq \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d description="Consulting services — May 2026 (revised)" \\
+  -d amount=3000`,
+    node: `const item = await vinr.invoiceItems.update('ii_7Yz1c4Nq', {
+  description: 'Consulting services — May 2026 (revised)',
+  amount: 3000,
+});`,
+    python: `item = vinr.InvoiceItem.modify(
+    "ii_7Yz1c4Nq",
+    description="Consulting services — May 2026 (revised)",
+    amount=3000,
+)`,
+    ruby: `item = Vinr::InvoiceItem.update(
+  'ii_7Yz1c4Nq',
+  description: 'Consulting services — May 2026 (revised)',
+  amount: 3000,
+)`,
+  }}
+  response={`{
+  "id": "ii_7Yz1c4Nq",
+  "invoice": "inv_4Xk9b3Mw",
+  "customer": "cust_8aZ2",
+  "amount": 3000,
+  "currency": "EUR",
+  "description": "Consulting services — May 2026 (revised)",
+  "quantity": 1,
+  "unit_amount": 3000,
+  "created": 1716300000
+}`}
+/>
+
+## Delete an invoice item
+
+Removes an item from a draft invoice. Deleted items cannot be recovered.
+
+<ApiExample
+  id="delete-invoice-item"
+  title="Delete an invoice item"
+  method="DELETE"
+  path="/v1/invoice-items/{id}"
+  request={{
+    curl: `curl -X DELETE https://api.vinr.com/v1/invoice-items/ii_7Yz1c4Nq \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `await vinr.invoiceItems.delete('ii_7Yz1c4Nq');`,
+    python: `vinr.InvoiceItem.delete("ii_7Yz1c4Nq")`,
+    ruby: `Vinr::InvoiceItem.delete('ii_7Yz1c4Nq')`,
+  }}
+  response={`{
+  "id": "ii_7Yz1c4Nq",
+  "deleted": true
+}`}
+/>
+
+## List invoice items
+
+Returns invoice items, optionally filtered by customer or invoice.
+
+<ApiExample
+  id="list-invoice-items"
+  title="List invoice items"
+  method="GET"
+  path="/v1/invoice-items"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/invoice-items?customer=cust_8aZ2&invoice=inv_4Xk9b3Mw&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `const items = await vinr.invoiceItems.list({
+  customer: 'cust_8aZ2',
+  invoice: 'inv_4Xk9b3Mw',
+  limit: 10,
+});`,
+    python: `items = vinr.InvoiceItem.list(
+    customer="cust_8aZ2",
+    invoice="inv_4Xk9b3Mw",
+    limit=10,
+)`,
+    ruby: `items = Vinr::InvoiceItem.list(
+  customer: 'cust_8aZ2',
+  invoice: 'inv_4Xk9b3Mw',
+  limit: 10,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "ii_7Yz1c4Nq",
+      "invoice": "inv_4Xk9b3Mw",
+      "customer": "cust_8aZ2",
+      "amount": 2500,
+      "currency": "EUR",
+      "description": "Consulting services — May 2026",
+      "quantity": 1,
+      "unit_amount": 2500,
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`invoiceitem.created`, `invoiceitem.updated`, and `invoiceitem.deleted`. See [Events](/docs/api-reference/events).

@@ -1,39 +1,183 @@
 ---
 title: Referrals
-description: Manage referral codes and attribution.
+description: Create, retrieve, and list referral records tracking customer-to-customer referrals.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A referral tracks when one customer (the referrer) brings a new customer (the referred) to your
+platform. Referrals move through a lifecycle from `pending` to `qualified` to `rewarded` as the
+referred customer meets your program's conditions.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Manage referral codes and attribution.
+## The referral object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the referral, e.g. `ref_2Dm5kW`.
+  </Attribute>
+  <Attribute name="referrer_customer" type="object" expandable>
+    The customer who made the referral. Expand to retrieve the full customer object.
+    <Attributes>
+      <Attribute name="id" type="string">Customer identifier, e.g. `cust_8aZ2`.</Attribute>
+      <Attribute name="email" type="string">Email address on the customer record.</Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="referred_customer" type="object" expandable>
+    The customer who was referred. Expand to retrieve the full customer object.
+    <Attributes>
+      <Attribute name="id" type="string">Customer identifier, e.g. `cust_9bY3`.</Attribute>
+      <Attribute name="email" type="string">Email address on the customer record.</Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="status" type="enum">
+    One of `pending` (referred customer signed up), `qualified` (referral conditions met), or
+    `rewarded` (reward has been issued to the referrer).
+  </Attribute>
+  <Attribute name="reward_amount" type="integer">
+    The reward value issued to the referrer in the smallest currency unit, once the referral reaches
+    `rewarded` status. `null` until that point.
+  </Attribute>
+  <Attribute name="created" type="integer">
+    Unix timestamp when this referral record was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create a referral
 
-_To be written._
+Record a new referral by providing the referrer and referred customer IDs. The referral starts in
+`pending` status and transitions automatically as conditions are met.
 
-## Endpoints
+<ApiExample
+  id="create-referral"
+  title="Create a referral"
+  method="POST"
+  path="/v1/referrals"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/referrals \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d referrer_customer=cust_8aZ2 \\
+  -d referred_customer=cust_9bY3`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const referral = await vinr.referrals.create({
+  referrer_customer: 'cust_8aZ2',
+  referred_customer: 'cust_9bY3',
+});`,
+    python: `import vinr
 
-_To be written._
+referral = vinr.Referral.create(
+    referrer_customer="cust_8aZ2",
+    referred_customer="cust_9bY3",
+)`,
+    ruby: `referral = Vinr::Referral.create(
+  referrer_customer: 'cust_8aZ2',
+  referred_customer: 'cust_9bY3',
+)`,
+  }}
+  response={`{
+  "id": "ref_2Dm5kW",
+  "referrer_customer": "cust_8aZ2",
+  "referred_customer": "cust_9bY3",
+  "status": "pending",
+  "reward_amount": null,
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve a referral
 
-_To be written._
+Fetch a referral by its ID. Expand `referrer_customer` or `referred_customer` to include the full
+customer objects inline.
 
-## Example request & response
+<ApiExample
+  id="retrieve-referral"
+  title="Retrieve a referral"
+  method="GET"
+  path="/v1/referrals/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/referrals/ref_2Dm5kW \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const referral = await vinr.referrals.retrieve('ref_2Dm5kW');`,
+    python: `import vinr
+
+referral = vinr.Referral.retrieve("ref_2Dm5kW")`,
+    ruby: `referral = Vinr::Referral.retrieve('ref_2Dm5kW')`,
+  }}
+  response={`{
+  "id": "ref_2Dm5kW",
+  "referrer_customer": "cust_8aZ2",
+  "referred_customer": "cust_9bY3",
+  "status": "qualified",
+  "reward_amount": null,
+  "created": 1716300000
+}`}
+/>
+
+## List referrals
+
+Returns a paginated list of referrals. Filter by `referrer_customer` to see all referrals made by a
+specific customer.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `referrer_customer` | string | Filter by the referring customer's ID. |
+| `limit` | integer | Number of results to return. Default `10`, max `100`. |
+
+<ApiExample
+  id="list-referrals"
+  title="List referrals"
+  method="GET"
+  path="/v1/referrals"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/referrals?referrer_customer=cust_8aZ2&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const referrals = await vinr.referrals.list({
+  referrer_customer: 'cust_8aZ2',
+  limit: 10,
+});`,
+    python: `import vinr
+
+referrals = vinr.Referral.list(
+    referrer_customer="cust_8aZ2",
+    limit=10,
+)`,
+    ruby: `referrals = Vinr::Referral.list(
+  referrer_customer: 'cust_8aZ2',
+  limit: 10,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "ref_2Dm5kW",
+      "referrer_customer": "cust_8aZ2",
+      "referred_customer": "cust_9bY3",
+      "status": "rewarded",
+      "reward_amount": 1000,
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`referral.created`, `referral.qualified`, and `referral.rewarded`. See [Events](/docs/api-reference/events).

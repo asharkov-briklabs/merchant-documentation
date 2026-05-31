@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { source } from "@/lib/source";
-import { i18n } from "@/lib/i18n";
 
 /**
  * Lightweight, dependency-free retrieval over the docs content, used to ground
@@ -51,7 +50,7 @@ function getIndex(): DocChunk[] {
   if (indexCache) return indexCache;
   const chunks: DocChunk[] = [];
   const failedPaths: string[] = [];
-  const pages = source.getPages(i18n.defaultLanguage);
+  const pages = source.getPages();
   for (const page of pages) {
     try {
       const raw = readFileSync(join(CONTENT_DIR, page.file.path), "utf8");

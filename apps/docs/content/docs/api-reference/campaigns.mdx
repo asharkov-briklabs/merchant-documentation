@@ -1,39 +1,274 @@
 ---
 title: Campaigns
-description: Create and manage engagement campaigns.
+description: Create, retrieve, update, delete, and list marketing campaigns.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A campaign is a time-boxed marketing initiative that groups related coupons or offers under a single
+trackable entity. Use campaigns to coordinate promotions with defined start and end dates and monitor
+aggregate redemption activity.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Create and manage engagement campaigns.
+## The campaign object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the campaign, e.g. `cmp_6Eg4rS`.
+  </Attribute>
+  <Attribute name="name" type="string">
+    Human-readable name for the campaign, e.g. `Summer Sale 2026`.
+  </Attribute>
+  <Attribute name="type" type="enum">
+    One of `coupon` or `offer`, indicating the kind of promotion this campaign groups.
+  </Attribute>
+  <Attribute name="starts_at" type="integer">
+    Unix timestamp when the campaign becomes active.
+  </Attribute>
+  <Attribute name="ends_at" type="integer">
+    Unix timestamp when the campaign ends. After this point redemptions are rejected.
+  </Attribute>
+  <Attribute name="active" type="boolean">
+    `true` if the campaign is currently running (between `starts_at` and `ends_at` and not manually
+    deactivated).
+  </Attribute>
+  <Attribute name="redemption_count" type="integer">
+    Total number of redemptions recorded against coupons or offers in this campaign.
+  </Attribute>
+  <Attribute name="created" type="integer">
+    Unix timestamp when this campaign was created.
+  </Attribute>
+</Attributes>
 
-## The object
+## Create a campaign
 
-_To be written._
+Define the campaign name, type, and schedule. Coupons or offers are associated with a campaign at
+creation time on the coupon/offer object.
 
-## Endpoints
+<ApiExample
+  id="create-campaign"
+  title="Create a campaign"
+  method="POST"
+  path="/v1/campaigns"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/campaigns \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d name="Summer Sale 2026" \\
+  -d starts_at=1748736000 \\
+  -d ends_at=1751328000 \\
+  -d type=coupon`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const campaign = await vinr.campaigns.create({
+  name: 'Summer Sale 2026',
+  starts_at: 1748736000,
+  ends_at: 1751328000,
+  type: 'coupon',
+});`,
+    python: `import vinr
 
-_To be written._
+campaign = vinr.Campaign.create(
+    name="Summer Sale 2026",
+    starts_at=1748736000,
+    ends_at=1751328000,
+    type="coupon",
+)`,
+    ruby: `campaign = Vinr::Campaign.create(
+  name: 'Summer Sale 2026',
+  starts_at: 1748736000,
+  ends_at: 1751328000,
+  type: 'coupon',
+)`,
+  }}
+  response={`{
+  "id": "cmp_6Eg4rS",
+  "name": "Summer Sale 2026",
+  "type": "coupon",
+  "starts_at": 1748736000,
+  "ends_at": 1751328000,
+  "active": false,
+  "redemption_count": 0,
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+## Retrieve a campaign
 
-_To be written._
+Fetch a campaign by its ID.
 
-## Example request & response
+<ApiExample
+  id="retrieve-campaign"
+  title="Retrieve a campaign"
+  method="GET"
+  path="/v1/campaigns/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/campaigns/cmp_6Eg4rS \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const campaign = await vinr.campaigns.retrieve('cmp_6Eg4rS');`,
+    python: `import vinr
+
+campaign = vinr.Campaign.retrieve("cmp_6Eg4rS")`,
+    ruby: `campaign = Vinr::Campaign.retrieve('cmp_6Eg4rS')`,
+  }}
+  response={`{
+  "id": "cmp_6Eg4rS",
+  "name": "Summer Sale 2026",
+  "type": "coupon",
+  "starts_at": 1748736000,
+  "ends_at": 1751328000,
+  "active": true,
+  "redemption_count": 42,
+  "created": 1716300000
+}`}
+/>
+
+## Update a campaign
+
+Update the campaign name, end date, or active status. You cannot change `type` after creation.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `name` | string | New display name for the campaign. |
+| `ends_at` | integer | New Unix timestamp for the campaign end date. |
+| `active` | boolean | Set to `false` to manually deactivate a campaign before its end date. |
+
+<ApiExample
+  id="update-campaign"
+  title="Update a campaign"
+  method="POST"
+  path="/v1/campaigns/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/campaigns/cmp_6Eg4rS \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d ends_at=1753920000 \\
+  -d name="Extended Summer Sale 2026"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const campaign = await vinr.campaigns.update('cmp_6Eg4rS', {
+  ends_at: 1753920000,
+  name: 'Extended Summer Sale 2026',
+});`,
+    python: `import vinr
+
+campaign = vinr.Campaign.modify(
+    "cmp_6Eg4rS",
+    ends_at=1753920000,
+    name="Extended Summer Sale 2026",
+)`,
+    ruby: `campaign = Vinr::Campaign.update(
+  'cmp_6Eg4rS',
+  ends_at: 1753920000,
+  name: 'Extended Summer Sale 2026',
+)`,
+  }}
+  response={`{
+  "id": "cmp_6Eg4rS",
+  "name": "Extended Summer Sale 2026",
+  "type": "coupon",
+  "starts_at": 1748736000,
+  "ends_at": 1753920000,
+  "active": true,
+  "redemption_count": 42,
+  "created": 1716300000
+}`}
+/>
+
+## Delete a campaign
+
+Permanently deletes a campaign. Existing redemptions are preserved but no new redemptions can be
+recorded against this campaign.
+
+<ApiExample
+  id="delete-campaign"
+  title="Delete a campaign"
+  method="DELETE"
+  path="/v1/campaigns/{id}"
+  request={{
+    curl: `curl -X DELETE https://api.vinr.com/v1/campaigns/cmp_6Eg4rS \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const deleted = await vinr.campaigns.delete('cmp_6Eg4rS');`,
+    python: `import vinr
+
+deleted = vinr.Campaign.delete("cmp_6Eg4rS")`,
+    ruby: `deleted = Vinr::Campaign.delete('cmp_6Eg4rS')`,
+  }}
+  response={`{
+  "id": "cmp_6Eg4rS",
+  "deleted": true
+}`}
+/>
+
+## List campaigns
+
+Returns a paginated list of campaigns. Filter by `active` to show only currently running campaigns.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `active` | boolean | Return only active (`true`) or inactive (`false`) campaigns. |
+| `limit` | integer | Number of results to return. Default `10`, max `100`. |
+
+<ApiExample
+  id="list-campaigns"
+  title="List campaigns"
+  method="GET"
+  path="/v1/campaigns"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/campaigns?active=true&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const campaigns = await vinr.campaigns.list({
+  active: true,
+  limit: 10,
+});`,
+    python: `import vinr
+
+campaigns = vinr.Campaign.list(
+    active=True,
+    limit=10,
+)`,
+    ruby: `campaigns = Vinr::Campaign.list(
+  active: true,
+  limit: 10,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "cmp_6Eg4rS",
+      "name": "Extended Summer Sale 2026",
+      "type": "coupon",
+      "starts_at": 1748736000,
+      "ends_at": 1753920000,
+      "active": true,
+      "redemption_count": 42,
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`campaign.created`, `campaign.updated`, and `campaign.ended`. See [Events](/docs/api-reference/events).

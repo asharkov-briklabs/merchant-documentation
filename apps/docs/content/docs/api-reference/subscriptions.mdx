@@ -1,39 +1,298 @@
 ---
 title: Subscriptions
-description: Create and manage recurring subscriptions.
+description: Create, retrieve, update, cancel, and list recurring subscriptions.
 persona: ["developer"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-05-31"
 ---
 
-<Callout type="warn">
-**Draft scaffold.** Structural placeholder with original VINR draft content — the outline below is to be filled in. Not copied from any other provider.
+A subscription bills a customer a recurring amount on a schedule. For most integrations you attach a
+customer to a price and VINR handles the rest — the billing cycle, proration, invoicing, and
+automatic collection. If you operate at scale and need to control proration, billing anchors, metered
+usage, or invoice collection yourself, see **Advanced** below each section.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
 </Callout>
 
-Create and manage recurring subscriptions.
+## The subscription object
 
-This reference page will be auto-generated from the VINR OpenAPI specification (roadmap item #1). The outline below reflects the sections the generated page will contain.
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique identifier, e.g. `sub_9Kpw1Vd`. |
+| `customer` | string | The `cust_` this subscription bills. Expandable. |
+| `status` | enum | `active`, `trialing`, `past_due`, `canceled`. |
+| `price` | string | The `price_` charged each cycle. Expandable. |
+| `current_period_end` | timestamp | Unix timestamp when the next invoice is generated. |
+| `latest_invoice` | string | Most recent `inv_`. Expandable. |
+| `created` | timestamp | Unix timestamp when the subscription was created. |
 
-## The object
+## Create a subscription
 
-_To be written._
+Attach a customer to a price. VINR bills immediately, then on each cycle, collecting automatically
+from the customer's default payment method.
 
-## Endpoints
+<ApiExample
+  id="create-subscription"
+  title="Create a subscription"
+  method="POST"
+  path="/v1/subscriptions"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/subscriptions \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d customer=cust_8aZ2 \\
+  -d price=price_monthly_pro`,
+    node: `import { Vinr } from '@vinr/sdk';
 
-_To be written._
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-## Request parameters
+const subscription = await vinr.subscriptions.create({
+  customer: 'cust_8aZ2',
+  price: 'price_monthly_pro',
+});`,
+    python: `import vinr
 
-_To be written._
+subscription = vinr.Subscription.create(
+    customer="cust_8aZ2",
+    price="price_monthly_pro",
+)`,
+    ruby: `subscription = Vinr::Subscription.create(
+  customer: 'cust_8aZ2',
+  price: 'price_monthly_pro',
+)`,
+  }}
+  response={`{
+  "id": "sub_9Kpw1Vd",
+  "customer": "cust_8aZ2",
+  "status": "active",
+  "price": "price_monthly_pro",
+  "current_period_end": 1717200000,
+  "latest_invoice": "inv_4Tg7",
+  "created": 1716300000
+}`}
+/>
 
-## Response fields
+<Accordions>
+<Accordion title="Advanced (Enterprise) — billing cycle, proration, trials & metered usage">
 
-_To be written._
+Enterprise integrations control *when* and *how* a subscription bills rather than taking the
+defaults. All parameters below are optional additions to the create call above.
 
-## Example request & response
+| Parameter | Type | Description |
+|---|---|---|
+| `billing_cycle_anchor` | timestamp | Pin every invoice to a fixed date (e.g. bill all customers on the 1st) instead of the signup date. |
+| `proration_behavior` | enum | `create_prorations` (default), `none`, or `always_invoice` when the plan or quantity changes mid-cycle. |
+| `backdate_start_date` | timestamp | Start the subscription in the past and generate the catch-up invoice accordingly. |
+| `trial_end` | timestamp | Move to `trialing`; first charge occurs at this time. |
 
-_To be written._
+```ts
+const subscription = await vinr.subscriptions.create({
+  customer: 'cust_8aZ2',
+  price: 'price_monthly_pro',
+  billing_cycle_anchor: 1719792000, // bill on the 1st, not signup day
+  proration_behavior: 'none',       // don't prorate the partial first period
+  trial_end: 1718496000,
+});
+```
+
+**Multiple items & metered usage** — pass an `items` array instead of a single `price`. Metered
+prices are billed from reported usage at the end of each cycle (see
+[Usage records](/docs/api-reference/usage-records)).
+
+```ts
+const subscription = await vinr.subscriptions.create({
+  customer: 'cust_8aZ2',
+  items: [
+    { price: 'price_platform_fee' },                        // flat recurring
+    { price: 'price_api_calls', usage_type: 'metered' },    // billed from usage
+  ],
+});
+```
+
+**Invoice collection** — instead of `charge_automatically`, send an invoice the customer pays
+on terms.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `collection_method` | enum | `charge_automatically` (default) or `send_invoice`. |
+| `days_until_due` | integer | Net terms when `collection_method=send_invoice` (e.g. `30`). |
+| `payment_behavior` | enum | `error_if_incomplete` (default) or `allow_incomplete` to create the subscription even if the first payment needs action. |
+
+Always send an [idempotency key](/docs/api-reference/idempotency) on enterprise create calls so
+retries collapse to one subscription.
+
+</Accordion>
+</Accordions>
+
+## Retrieve a subscription
+
+<ApiExample
+  id="retrieve-subscription"
+  title="Retrieve a subscription"
+  method="GET"
+  path="/v1/subscriptions/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/subscriptions/sub_9Kpw1Vd \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `const subscription = await vinr.subscriptions.retrieve('sub_9Kpw1Vd');`,
+    python: `subscription = vinr.Subscription.retrieve("sub_9Kpw1Vd")`,
+    ruby: `subscription = Vinr::Subscription.retrieve('sub_9Kpw1Vd')`,
+  }}
+  response={`{
+  "id": "sub_9Kpw1Vd",
+  "customer": "cust_8aZ2",
+  "status": "active",
+  "price": "price_monthly_pro",
+  "current_period_end": 1717200000,
+  "latest_invoice": "inv_4Tg7",
+  "created": 1716300000
+}`}
+/>
+
+## Update a subscription
+
+Swap the price (an upgrade or downgrade) or schedule a cancellation at the end of the current
+period. By default a price change prorates and takes effect immediately.
+
+<ApiExample
+  id="update-subscription"
+  title="Update a subscription"
+  method="POST"
+  path="/v1/subscriptions/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/subscriptions/sub_9Kpw1Vd \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d price=price_monthly_team`,
+    node: `const subscription = await vinr.subscriptions.update('sub_9Kpw1Vd', {
+  price: 'price_monthly_team',
+});`,
+    python: `subscription = vinr.Subscription.modify(
+    "sub_9Kpw1Vd",
+    price="price_monthly_team",
+)`,
+    ruby: `subscription = Vinr::Subscription.update(
+  'sub_9Kpw1Vd',
+  { price: 'price_monthly_team' },
+)`,
+  }}
+  response={`{
+  "id": "sub_9Kpw1Vd",
+  "customer": "cust_8aZ2",
+  "status": "active",
+  "price": "price_monthly_team",
+  "current_period_end": 1717200000,
+  "latest_invoice": "inv_5Rh9",
+  "created": 1716300000
+}`}
+/>
+
+<Accordions>
+<Accordion title="Advanced (Enterprise) — cancel_at_period_end & immediate cancellation options">
+
+By default, `cancel_at_period_end: true` schedules the subscription to cancel at the end of the
+current billing period — the customer retains access until then and is not refunded.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `cancel_at_period_end` | boolean | `true` to cancel at period end rather than immediately. |
+| `proration_behavior` | enum | `create_prorations` (default), `none`, or `always_invoice` — controls whether a credit is issued for unused time on upgrade/downgrade. |
+
+```ts
+// Schedule cancellation at period end (customer keeps access until then)
+await vinr.subscriptions.update('sub_9Kpw1Vd', {
+  cancel_at_period_end: true,
+});
+
+// Reverse a scheduled cancellation
+await vinr.subscriptions.update('sub_9Kpw1Vd', {
+  cancel_at_period_end: false,
+});
+```
+
+To cancel immediately and issue a prorated credit for unused time, use the cancel endpoint (below)
+with `prorate: true`. For complex lifecycle changes (future-dated price phases, scheduled
+migrations), drive a subscription **schedule** rather than mutating the subscription directly.
+
+</Accordion>
+</Accordions>
+
+## Cancel a subscription
+
+Cancels the subscription immediately. The customer loses access at once and no further invoices are
+generated. To cancel at the end of the current period, use `cancel_at_period_end` on the update
+endpoint instead.
+
+<ApiExample
+  id="cancel-subscription"
+  title="Cancel a subscription"
+  method="DELETE"
+  path="/v1/subscriptions/{id}"
+  request={{
+    curl: `curl -X DELETE https://api.vinr.com/v1/subscriptions/sub_9Kpw1Vd \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `const subscription = await vinr.subscriptions.cancel('sub_9Kpw1Vd');`,
+    python: `subscription = vinr.Subscription.delete("sub_9Kpw1Vd")`,
+    ruby: `subscription = Vinr::Subscription.delete('sub_9Kpw1Vd')`,
+  }}
+  response={`{
+  "id": "sub_9Kpw1Vd",
+  "customer": "cust_8aZ2",
+  "status": "canceled",
+  "price": "price_monthly_pro",
+  "current_period_end": 1717200000,
+  "latest_invoice": "inv_4Tg7",
+  "created": 1716300000
+}`}
+/>
+
+## List subscriptions
+
+Returns a paginated list of subscriptions. Filter by `customer`, `status`, or both.
+
+<ApiExample
+  id="list-subscriptions"
+  title="List subscriptions"
+  method="GET"
+  path="/v1/subscriptions"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/subscriptions?customer=cust_8aZ2&status=active&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `const subscriptions = await vinr.subscriptions.list({
+  customer: 'cust_8aZ2',
+  status: 'active',
+  limit: 10,
+});`,
+    python: `subscriptions = vinr.Subscription.list(
+    customer="cust_8aZ2",
+    status="active",
+    limit=10,
+)`,
+    ruby: `subscriptions = Vinr::Subscription.list(
+  customer: 'cust_8aZ2',
+  status: 'active',
+  limit: 10,
+)`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "sub_9Kpw1Vd",
+      "customer": "cust_8aZ2",
+      "status": "active",
+      "price": "price_monthly_pro",
+      "current_period_end": 1717200000,
+      "latest_invoice": "inv_4Tg7",
+      "created": 1716300000
+    }
+  ],
+  "has_more": false
+}`}
+/>
 
 ## Related events
 
-_To be written._
+`subscription.created`, `subscription.updated`, `subscription.canceled`, and
+`invoice.payment_succeeded` / `invoice.payment_failed` for each billing cycle. See
+[Events](/docs/api-reference/events).

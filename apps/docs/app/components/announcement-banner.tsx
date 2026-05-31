@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { localeHref } from "@/lib/locale-href";
 import type { getTranslations } from "@/lib/translations";
 
 type T = ReturnType<typeof getTranslations>;
@@ -16,12 +15,11 @@ const BANNER_HREF = "/docs/changelog";
 
 interface AnnouncementBannerProps {
   t: T;
-  locale: string;
   /** Read from the cookie server-side so SSR matches the client. */
   initiallyDismissed?: boolean;
 }
 
-export function AnnouncementBanner({ t, locale, initiallyDismissed }: AnnouncementBannerProps) {
+export function AnnouncementBanner({ t, initiallyDismissed }: AnnouncementBannerProps) {
   const [dismissed, setDismissed] = useState(initiallyDismissed ?? false);
 
   if (dismissed) return null;
@@ -32,7 +30,7 @@ export function AnnouncementBanner({ t, locale, initiallyDismissed }: Announceme
         <span className="h-[6px] w-[6px] shrink-0 rounded-full bg-vinr-500 shadow-[0_0_8px_rgba(42,157,144,0.7)]" />
         <span className="text-vinr-50/[0.78]">{t.bannerText}</span>
         <Link
-          href={localeHref(locale, BANNER_HREF)}
+          href={BANNER_HREF}
           className="font-medium text-vinr-300 transition-colors hover:text-vinr-50"
         >
           {t.bannerCta} →

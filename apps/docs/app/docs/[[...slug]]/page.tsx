@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { source } from "@/lib/source";
+import { SITE_URL } from "@/lib/site-url";
 import {
   DocsPage,
   DocsBody,
@@ -14,16 +15,25 @@ import { Accordion, Accordions } from "fumadocs-ui/components/accordion";
 import { TypeTable } from "fumadocs-ui/components/type-table";
 import { File, Files, Folder } from "fumadocs-ui/components/files";
 import { ImageZoom } from "fumadocs-ui/components/image-zoom";
+import { PageActions } from "../../components/page-actions";
+import { Attributes, Attribute } from "../../components/attributes";
+import { PageFeedback } from "../../components/page-feedback";
+import { MdxHeading } from "../../components/mdx-heading";
+import type { ReactNode } from "react";
 
 export default async function Page(props: {
-  params: Promise<{ slug?: string[]; locale: string }>;
+  params: Promise<{ slug?: string[] }>;
 }) {
   const params = await props.params;
-  const page = source.getPage(params.slug, params.locale);
+  const page = source.getPage(params.slug);
   if (!page) notFound();
 
   const MDX = page.data.body;
   const jsonLd = buildJsonLd(page.url, page.data.title, page.data.description);
+
+  const contentSlug = params.slug ?? [];
+  const markdownPath = `/api/md${contentSlug.length ? `/${contentSlug.join("/")}` : ""}`;
+  const askHref = `/ask?q=${encodeURIComponent(`Explain "${page.data.title}" from the VINR docs.`)}`;
 
   return (
     <>
@@ -44,19 +54,17 @@ export default async function Page(props: {
         path: `apps/docs/content/docs/${page.file.path}`,
       }}
     >
+      <PageActions markdownPath={markdownPath} askHref={askHref} tone="light" />
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
       <DocsBody>
-        <MDX components={{ ...defaultMdxComponents, Step, Steps, Tab, Tabs, Accordion, Accordions, TypeTable, File, Files, Folder, ImageZoom }} />
+        <MDX components={{ ...defaultMdxComponents, Step, Steps, Tab, Tabs, Accordion, Accordions, TypeTable, File, Files, Folder, ImageZoom, Attributes, Attribute, h2: ({ id, children }: { id?: string; children?: ReactNode }) => (<MdxHeading id={id} pageTitle={page.data.title} markdownPath={markdownPath}>{children}</MdxHeading>) }} />
+        <PageFeedback url={page.url} />
       </DocsBody>
     </DocsPage>
     </>
   );
 }
-
-const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
-).replace(/\/$/, "");
 
 /** TechArticle + BreadcrumbList structured data for the current doc page. */
 function buildJsonLd(url: string, title: string, description?: string) {
@@ -88,14 +96,20 @@ function buildJsonLd(url: string, title: string, description?: string) {
 }
 
 export async function generateStaticParams() {
-  return source.generateParams("slug", "locale");
+  // api-reference/* lives on its own /api-reference screen now and these URLs
+  // redirect there (see next.config.mjs). Don't prerender them under /docs —
+  // the content uses the <ApiExample> component that only the /api-reference
+  // route provides.
+  return source
+    .generateParams("slug")
+    .filter((p) => p.slug?.[0] !== "api-reference");
 }
 
 export async function generateMetadata(props: {
-  params: Promise<{ slug?: string[]; locale: string }>;
+  params: Promise<{ slug?: string[] }>;
 }): Promise<Metadata> {
   const params = await props.params;
-  const page = source.getPage(params.slug, params.locale);
+  const page = source.getPage(params.slug);
   if (!page) notFound();
 
   const { title, description } = page.data;
