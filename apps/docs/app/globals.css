@@ -82,6 +82,20 @@
   }
 }
 
+/* The marketing SiteNav is a two-row (Stripe-style) bar 100px tall. fumadocs
+   hardcodes its sidebar/TOC sticky offset to top-14 (56px), so without this
+   override the docs sidebar and table-of-contents slide under our second nav
+   row. Id selectors out-specify fumadocs' utility classes, so no !important. */
+#nd-sidebar,
+#nd-toc {
+  top: 100px;
+  height: calc(100dvh - 100px);
+  max-height: calc(100dvh - 100px);
+}
+#nd-subnav {
+  top: 100px;
+}
+
 /* Pulse animation (live-status dot in the hero code card). */
 @keyframes pulseDot {
   0%, 100% { opacity: 1; }

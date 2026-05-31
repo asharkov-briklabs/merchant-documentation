@@ -39,9 +39,9 @@ export default function Layout({
       tree={source.pageTree[params.locale]}
       nav={{
         // Replace fumadocs' built-in navbar with our marketing SiteNav so the
-        // Stripe/Adyen-style top nav (category dropdowns + centered search)
-        // shows on every docs page. SiteNav is 56px (h-14) sticky — the same
-        // height fumadocs assumes — so sidebar/TOC offsets stay correct.
+        // Stripe-style two-row top nav (search/Ask AI on top, category
+        // dropdowns below) shows on every docs page. SiteNav is 100px tall;
+        // globals.css shifts fumadocs' sidebar/TOC sticky offsets to match.
         component: <SiteNav t={t} locale={params.locale} fluid />,
       }}
       sidebar={{

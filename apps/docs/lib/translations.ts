@@ -8,6 +8,8 @@ const translations = {
     docs: "Docs",
     api: "API",
     askAi: "Ask AI",
+    signIn: "Sign in",
+    help: "Help",
 
     // Hero
     heroTitle: "Documentation",
