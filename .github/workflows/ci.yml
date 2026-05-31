@@ -20,6 +20,10 @@ jobs:
       # that file). GitHub Actions also sets CI=true, which opts out too.
       NEXT_PUBLIC_SITE_URL: https://docs.vinr.com
       ALLOW_DEFAULT_SITE_URL: "true"
+      # `next build` (171 pages + fumadocs + Sentry) runs right at Node's default
+      # ~2GB old-space heap and intermittently OOMs (exit 134) on the runner.
+      # Give it more headroom; the runner has plenty of RAM.
+      NODE_OPTIONS: "--max-old-space-size=4096"
     steps:
       - uses: actions/checkout@v4
 
