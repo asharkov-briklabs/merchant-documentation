@@ -2,21 +2,16 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { streamText } from "ai";
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { retrieveDocs } from "@/lib/docs-retrieval";
+import * as Sentry from "@sentry/nextjs";
+import { retrieveDocs, type RetrievedDoc } from "@/lib/docs-retrieval";
+import { checkAskRateLimit } from "@/lib/rate-limit";
+import { SITE_ORIGIN } from "@/lib/site-url";
 
 // Needs the Node.js runtime: the retrieval index reads the .mdx files from disk.
 export const runtime = "nodejs";
 
 // Docs Q&A is well within Haiku's range; it's fast and cheap for streaming.
 const MODEL = "claude-haiku-4-5-20251001";
-
-// Best-effort, in-memory rate limiting. NOTE: this is per-instance and resets
-// on cold starts, so it only throttles bursts hitting the same warm instance —
-// it is NOT a durable limit. Move to a shared store (e.g. Upstash/Vercel KV)
-// before relying on it for abuse protection.
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || "10");
-const RATE_LIMIT_WINDOW = parseInt(process.env.RATE_LIMIT_WINDOW_MS || "60000");
 
 function getRateLimitKey(req: NextRequest): string {
   return (
@@ -26,16 +21,26 @@ function getRateLimitKey(req: NextRequest): string {
   );
 }
 
-function checkRateLimit(key: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(key);
-  if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW });
-    return true;
+// First line of abuse defense: only allow browser requests from our own site.
+// Blocks naive scripted abuse that hammers the endpoint cross-origin. We allow
+// requests with no Origin header (non-browser clients) — the rate limiter still
+// covers those — and explicitly permit localhost + Vercel preview hosts so dev
+// and preview deploys keep working.
+const SITE_HOST = new URL(SITE_ORIGIN).host;
+function isAllowedOrigin(req: NextRequest): boolean {
+  const origin = req.headers.get("origin");
+  if (!origin) return true;
+  let host: string;
+  try {
+    host = new URL(origin).host;
+  } catch {
+    return false;
   }
-  if (entry.count >= RATE_LIMIT_MAX) return false;
-  entry.count++;
-  return true;
+  if (host === SITE_HOST) return true;
+  if (host === "localhost" || host.startsWith("localhost:")) return true;
+  if (process.env.VERCEL_URL && host === process.env.VERCEL_URL) return true;
+  if (host.endsWith(".vercel.app")) return true;
+  return false;
 }
 
 const RequestSchema = z.object({
@@ -62,15 +67,12 @@ Guidelines:
 - If the provided documentation does not contain the answer, say so clearly and suggest contacting support or browsing the docs — do NOT invent API endpoints, pricing, or compliance requirements.
 - Always recommend consulting official VINR documentation for critical compliance decisions.`;
 
-function buildSystemPrompt(query: string): string {
-  const docs = retrieveDocs(query);
+function buildSystemPrompt(docs: RetrievedDoc[]): string {
   if (docs.length === 0) {
     return `${BASE_SYSTEM_PROMPT}\n\nNo documentation excerpts matched this question. If you cannot answer from general VINR knowledge, say you don't have that information and point the user to the docs or support.`;
   }
   const context = docs
-    .map(
-      (d) => `### ${d.title}\nSource: ${d.url}\n${d.excerpt}`
-    )
+    .map((d) => `### ${d.title}\nSource: ${d.url}\n${d.excerpt}`)
     .join("\n\n");
   return `${BASE_SYSTEM_PROMPT}\n\nRelevant documentation excerpts (cite these URLs):\n\n${context}`;
 }
@@ -83,7 +85,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!checkRateLimit(getRateLimitKey(req))) {
+  if (!isAllowedOrigin(req)) {
+    return Response.json({ error: "Forbidden." }, { status: 403 });
+  }
+
+  const limit = await checkAskRateLimit(getRateLimitKey(req));
+  if (!limit.ok) {
+    if (limit.reason === "global_cap") {
+      // A real cost signal — the global daily ceiling was hit. Page-worthy.
+      Sentry.captureMessage("Ask-AI global daily request cap reached", "warning");
+      return Response.json(
+        { error: "The assistant is temporarily unavailable. Please try again later." },
+        { status: 503 }
+      );
+    }
     return Response.json(
       { error: "Rate limit exceeded. Please try again later." },
       { status: 429 }
@@ -107,12 +122,30 @@ export async function POST(req: NextRequest) {
 
   const { messages } = parsed.data;
   const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  const docs = retrieveDocs(lastUser?.content ?? "");
+
+  // Zero-result tracking: a question that retrieved no grounding is both a
+  // hallucination risk and a "docs to write" signal (roadmap item 8). Capture
+  // it as a Sentry event tagged with the (truncated) query.
+  if (docs.length === 0 && lastUser?.content) {
+    Sentry.captureMessage("Ask-AI retrieved 0 docs for query", {
+      level: "info",
+      tags: { feature: "ask-ai", zero_result: "true" },
+      extra: { query: lastUser.content.slice(0, 200) },
+    });
+  }
 
   const result = streamText({
     model: anthropic(MODEL),
-    system: buildSystemPrompt(lastUser?.content ?? ""),
+    system: buildSystemPrompt(docs),
     messages,
     maxTokens: 2048,
+    onError: ({ error }) => {
+      // Streaming/model errors surface here, not as a thrown POST exception —
+      // without this they'd be invisible.
+      Sentry.captureException(error, { tags: { feature: "ask-ai" } });
+      console.error("[ask] streamText error:", error);
+    },
   });
 
   return result.toDataStreamResponse();

@@ -65,3 +65,22 @@
 - [ ] **22. Standard vs. Advanced modes** — Offer two integration modes: *Standard* follows Stripe's
   opinionated, batteries-included approach; *Advanced* leans toward Adyen's lower-level, more
   configurable approach. Let users toggle and surface the right depth of content per mode.
+
+## Production hardening — deferred follow-ups
+
+> Shipped in the `production-hardening` work: security headers, Sentry, durable Upstash
+> rate-limiting + global cost cap, Ask-AI file-tracing fix, CI pipeline, and a single
+> `NEXT_PUBLIC_SITE_URL` source-of-truth with a prod fail-fast. The two items below were
+> intentionally deferred (right choice for Next 14.2 today; revisit on the trigger noted).
+
+- [ ] **23. Nonce-based strict CSP** — The current CSP (`next.config.mjs`) uses
+  `script-src 'self' 'unsafe-inline'` because Next's inline hydration scripts + the homepage JSON-LD
+  `<script>` need it. Upgrade to a per-request **nonce** so inline scripts are allow-listed and XSS
+  is blocked even with inline scripts present. Requires generating the nonce in `middleware.ts` and
+  injecting it into both the CSP header and Next's script tags — do this carefully: `middleware.ts`
+  is Edge-bundle-sensitive (a past dep bump dragged `__dirname` in and crashed the Edge function).
+  Test against fumadocs-ui client components.
+- [ ] **24. Sentry client config rename (on Next 15 upgrade)** — `sentry.client.config.ts` is correct
+  for Next 14.2 (and the build warning about it is forward-looking only). When upgrading to Next 15+
+  / enabling Turbopack, move its contents to `instrumentation-client.ts` — renaming earlier would
+  silently disable client-side error tracking on 14.2. Pairs with item 19's upgrade cadence.

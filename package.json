@@ -8,7 +8,8 @@
     "dev": "pnpm --filter @vinr/docs dev",
     "build": "pnpm --filter @vinr/docs build",
     "lint": "pnpm --filter @vinr/docs lint",
-    "type-check": "pnpm --filter @vinr/docs type-check"
+    "type-check": "pnpm --filter @vinr/docs type-check",
+    "check-links": "pnpm --filter @vinr/docs check-links"
   },
   "packageManager": "pnpm@9.1.0",
   "engines": {
