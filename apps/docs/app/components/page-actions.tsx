@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 type Tone = "light" | "dark";
@@ -22,6 +21,11 @@ interface PageActionsProps {
  */
 export function PageActions({ markdownPath, askHref, tone = "light" }: PageActionsProps) {
   const [copied, setCopied] = useState<"idle" | "copied" | "error">("idle");
+
+  function openAskPanel() {
+    const message = new URL(askHref, "http://x").searchParams.get("q") ?? "";
+    window.dispatchEvent(new CustomEvent("ask-ai:open", { detail: { message } }));
+  }
 
   async function copyPage() {
     try {
@@ -66,10 +70,10 @@ export function PageActions({ markdownPath, askHref, tone = "light" }: PageActio
         View as Markdown
       </a>
 
-      <Link href={askHref} className={cls}>
+      <button type="button" onClick={openAskPanel} className={cls}>
         <SparkleIcon />
         Ask AI
-      </Link>
+      </button>
     </div>
   );
 }

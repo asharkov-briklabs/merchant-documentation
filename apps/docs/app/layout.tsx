@@ -12,6 +12,7 @@ import { SITE_URL } from "@/lib/site-url";
 import { Inter, Roboto_Mono } from "next/font/google";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { AskAIPanel } from "./components/ask-ai-panel";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <RootProvider search={{ options: { tags: CATEGORY_TAGS } }}>
           {children}
         </RootProvider>
+        <AskAIPanel />
       </body>
     </html>
   );

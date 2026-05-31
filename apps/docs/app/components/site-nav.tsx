@@ -4,7 +4,7 @@ import type { getTranslations } from "@/lib/translations";
 import { CategoryMenu } from "./category-menu";
 import { SearchTrigger } from "./search-trigger";
 import { SidebarToggle } from "./sidebar-toggle";
-import { ChatBubbleIcon } from "./chat-bubble-icon";
+import { AskAiNavButton } from "./ask-ai-nav-button";
 
 interface SiteNavProps {
   t: ReturnType<typeof getTranslations>;
@@ -43,18 +43,7 @@ export function SiteNav({ t, activeKey, fluid }: SiteNavProps) {
             <div className="md:hidden">
               <SearchTrigger placeholder={t.searchPlaceholder} variant="nav" />
             </div>
-            <Link
-              href="/ask"
-              className={[
-                "flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-vinr-500/40 px-3.5 text-[13px] font-medium text-vinr-50 transition-colors duration-[120ms]",
-                activeKey === "ask"
-                  ? "bg-vinr-500/[0.38]"
-                  : "bg-vinr-500/25 hover:bg-vinr-500/[0.38]",
-              ].join(" ")}
-            >
-              <ChatBubbleIcon className="h-[13px] w-[13px]" strokeWidth={1.8} />
-              <span className="hidden sm:inline">{t.askAi}</span>
-            </Link>
+            <AskAiNavButton label={t.askAi} active={activeKey === "ask"} />
           </div>
 
           {/* Right: Sign in */}

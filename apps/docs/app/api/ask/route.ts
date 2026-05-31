@@ -24,13 +24,10 @@ function getRateLimitKey(req: NextRequest): string {
 // First line of abuse defense: only allow browser requests from our own site.
 // Blocks naive scripted abuse that hammers the endpoint cross-origin. We allow
 // requests with no Origin header (non-browser clients) — the rate limiter still
-// covers those — and permit localhost for dev. Additional hosts (custom
-// domains, preview/staging deploys on any platform) are configured via the
-// comma-separated ALLOWED_ORIGINS env var, e.g.
-//   ALLOWED_ORIGINS=staging.example.com,*.preview.example.com
-// A leading "*." entry matches that domain and any subdomain. The legacy
-// VERCEL_URL / *.vercel.app hosts are still honored when present, so existing
-// Vercel deploys keep working without extra config — but nothing requires them.
+// covers those — and permit localhost for dev. Additional hosts (staging,
+// internal tooling) can be added via the comma-separated ALLOWED_ORIGINS env
+// var, e.g. ALLOWED_ORIGINS=staging.example.com,*.preview.example.com
+// A leading "*." entry matches that domain and any subdomain.
 const SITE_HOST = new URL(SITE_ORIGIN).host;
 
 const EXTRA_ALLOWED = (process.env.ALLOWED_ORIGINS ?? "")
@@ -60,9 +57,6 @@ function isAllowedOrigin(req: NextRequest): boolean {
   if (host === SITE_HOST.toLowerCase()) return true;
   if (host === "localhost" || host.startsWith("localhost:")) return true;
   if (matchesAllowed(host)) return true;
-  // Optional, platform-specific conveniences — only ever match on Vercel.
-  if (process.env.VERCEL_URL && host === process.env.VERCEL_URL) return true;
-  if (host.endsWith(".vercel.app")) return true;
   return false;
 }
 
