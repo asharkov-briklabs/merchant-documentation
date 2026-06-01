@@ -3,17 +3,20 @@ import type { ReactNode } from "react";
 import { getTranslations } from "@/lib/translations";
 import { apiSource } from "@/lib/api-source";
 import { SiteNav } from "../components/site-nav";
+import { SidebarBridgeProvider, SidebarBridgeSetter } from "../components/sidebar-bridge";
 
 export default function ApiLayout({ children }: { children: ReactNode }) {
   const t = getTranslations();
   return (
-    <DocsLayout
-      tree={apiSource.pageTree}
-      nav={{
-        component: <SiteNav t={t} fluid showSidebarToggle />,
-      }}
-    >
-      {children}
-    </DocsLayout>
+    <SidebarBridgeProvider>
+      <SiteNav t={t} fluid />
+      <DocsLayout
+        tree={apiSource.pageTree}
+        nav={{ enabled: false }}
+      >
+        <SidebarBridgeSetter />
+        {children}
+      </DocsLayout>
+    </SidebarBridgeProvider>
   );
 }

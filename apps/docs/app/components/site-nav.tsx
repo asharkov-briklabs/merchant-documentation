@@ -11,8 +11,6 @@ interface SiteNavProps {
   activeKey?: "docs" | "api" | "ask" | null;
   /** Span full width instead of the 1200px marketing width. */
   fluid?: boolean;
-  /** Render the mobile sidebar toggle. Only pass true inside a DocsLayout — useSidebar() requires SidebarContext. */
-  showSidebarToggle?: boolean;
 }
 
 // Stripe-style two-row top nav:
@@ -20,7 +18,7 @@ interface SiteNavProps {
 //   Row 2 (44px): category dropdowns · API Reference + Help
 // Total sticky height is 100px — the docs layout shifts fumadocs' sidebar/TOC
 // sticky offsets to match (see #nd-sidebar/#nd-toc overrides in globals.css).
-export function SiteNav({ t, activeKey, fluid, showSidebarToggle }: SiteNavProps) {
+export function SiteNav({ t, activeKey, fluid }: SiteNavProps) {
   const rowWidth = fluid ? "w-full" : "w-full max-w-[1200px] mx-auto";
 
   return (
@@ -28,9 +26,9 @@ export function SiteNav({ t, activeKey, fluid, showSidebarToggle }: SiteNavProps
       {/* Row 1 — logo / search + Ask AI / Sign in */}
       <div className="h-14 px-6 md:px-10">
         <div className={["grid h-full grid-cols-[auto_1fr_auto] items-center gap-3 md:gap-5", rowWidth].join(" ")}>
-          {/* Left: (docs mobile sidebar toggle) + logo */}
+          {/* Left: mobile sidebar toggle (renders only on pages with a sidebar) + logo */}
           <div className="flex items-center">
-            {showSidebarToggle && <SidebarToggle label={t.navMenu} />}
+            <SidebarToggle label={t.navMenu} />
             <Link href="/" className="flex items-center">
               <VinrWordmark height={18} fill="#F7FDFC" />
             </Link>

@@ -1,20 +1,17 @@
 "use client";
 
-import { useSidebar } from "fumadocs-ui/components/sidebar/base";
+import { useSidebarBridge } from "./sidebar-bridge";
 
 /**
- * Mobile-only trigger for the fumadocs docs sidebar (page tree). Needed
- * because replacing DocsLayout's built-in navbar (via nav.component) also
- * removes its built-in sidebar toggle. Only render this inside DocsLayout —
- * useSidebar() reads a context that only the docs layout provides.
+ * Mobile-only trigger for the fumadocs docs sidebar. Uses SidebarBridgeContext
+ * so it can render outside DocsLayout's grid (in the top-level SiteNav).
+ * Returns null automatically on pages without a sidebar.
  */
 export function SidebarToggle({ label }: { label?: string }) {
-  const { open, setOpen } = useSidebar();
-  // fumadocs setOpen is typed as (v: boolean) => void, not React.Dispatch, so
-  // it cannot accept a functional updater — `setOpen((v) => !v)` fails the
-  // type check. Using `!open` is fine in practice: the sidebar is a mobile-only
-  // element and two uncoalesced click events within a single 16ms frame are not
-  // a realistic scenario here.
+  const sidebar = useSidebarBridge();
+  if (!sidebar) return null;
+
+  const { open, setOpen } = sidebar;
   return (
     <button
       type="button"
