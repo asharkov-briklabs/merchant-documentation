@@ -53,7 +53,7 @@ function getIndex(): DocChunk[] {
   const pages = source.getPages();
   for (const page of pages) {
     try {
-      const raw = readFileSync(join(CONTENT_DIR, page.file.path), "utf8");
+      const raw = readFileSync(join(CONTENT_DIR, page.path), "utf8");
       chunks.push({
         url: page.url,
         title: page.data.title ?? "",
@@ -63,7 +63,7 @@ function getIndex(): DocChunk[] {
     } catch {
       // A page without a readable source file just isn't retrievable; skip it
       // rather than failing the whole assistant.
-      failedPaths.push(page.file.path);
+      failedPaths.push(page.path);
     }
   }
 

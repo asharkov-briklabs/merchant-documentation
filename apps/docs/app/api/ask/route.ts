@@ -60,17 +60,37 @@ function isAllowedOrigin(req: NextRequest): boolean {
   return false;
 }
 
+// AI SDK v6 sends UIMessage format with parts[]. Accept either parts or legacy
+// content string so the route tolerates both old and new client versions.
+const MessagePartSchema = z.object({
+  type: z.string(),
+  text: z.string().max(8000).optional(),
+}).passthrough();
+
 const RequestSchema = z.object({
   messages: z
     .array(
       z.object({
         role: z.enum(["user", "assistant"]),
-        content: z.string().min(1).max(8000),
+        // v6: parts array with text parts
+        parts: z.array(MessagePartSchema).optional(),
+        // legacy / fallback
+        content: z.string().max(8000).optional(),
       })
     )
     .min(1)
     .max(50),
 });
+
+function extractText(msg: { parts?: Array<{ type: string; text?: string }>; content?: string }): string {
+  if (msg.parts) {
+    return msg.parts
+      .filter((p) => p.type === "text")
+      .map((p) => p.text ?? "")
+      .join("");
+  }
+  return msg.content ?? "";
+}
 
 const BASE_SYSTEM_PROMPT = `You are the VINR Documentation Assistant — an AI that helps merchants understand and integrate with the VINR payment platform.
 
@@ -109,7 +129,6 @@ export async function POST(req: NextRequest) {
   const limit = await checkAskRateLimit(getRateLimitKey(req));
   if (!limit.ok) {
     if (limit.reason === "global_cap") {
-      // A real cost signal — the global daily ceiling was hit. Page-worthy.
       Sentry.captureMessage("Ask-AI global daily request cap reached", "warning");
       return Response.json(
         { error: "The assistant is temporarily unavailable. Please try again later." },
@@ -137,13 +156,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { messages } = parsed.data;
-  const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  // Only require non-empty content for user messages; assistant turns can have
+  // no text parts if they contain tool calls or reasoning (latent — no tools
+  // are registered now, but this keeps history intact if tools are added later).
+  const coreMessages = parsed.data.messages
+    .map((m) => ({ role: m.role as "user" | "assistant", content: extractText(m) }))
+    .filter((m) => m.role !== "user" || m.content.length > 0);
+
+  if (coreMessages.length === 0) {
+    return Response.json({ error: "No message content found." }, { status: 400 });
+  }
+
+  const lastUser = [...coreMessages].reverse().find((m) => m.role === "user");
   const docs = retrieveDocs(lastUser?.content ?? "");
 
-  // Zero-result tracking: a question that retrieved no grounding is both a
-  // hallucination risk and a "docs to write" signal (roadmap item 8). Capture
-  // it as a Sentry event tagged with the (truncated) query.
   if (docs.length === 0 && lastUser?.content) {
     Sentry.captureMessage("Ask-AI retrieved 0 docs for query", {
       level: "info",
@@ -155,15 +181,13 @@ export async function POST(req: NextRequest) {
   const result = streamText({
     model: anthropic(MODEL),
     system: buildSystemPrompt(docs),
-    messages,
-    maxTokens: 2048,
+    messages: coreMessages,
+    maxOutputTokens: 2048,
     onError: ({ error }) => {
-      // Streaming/model errors surface here, not as a thrown POST exception —
-      // without this they'd be invisible.
       Sentry.captureException(error, { tags: { feature: "ask-ai" } });
       console.error("[ask] streamText error:", error);
     },
   });
 
-  return result.toDataStreamResponse();
+  return result.toUIMessageStreamResponse();
 }

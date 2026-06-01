@@ -13,11 +13,12 @@ export const dynamic = "force-dynamic";
  *   /api/md/payments            → content/docs/payments.mdx
  *   /api/md/api-reference/refunds → content/docs/api-reference/refunds.mdx
  */
-export function GET(
+export async function GET(
   _req: Request,
-  { params }: { params: { slug?: string[] } },
+  { params }: { params: Promise<{ slug?: string[] }> },
 ) {
-  const page = source.getPage(params.slug);
+  const { slug } = await params;
+  const page = source.getPage(slug);
   if (!page) return new Response("Not found", { status: 404 });
 
   return new Response(pageToMarkdown(page), {

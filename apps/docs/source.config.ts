@@ -7,10 +7,9 @@ export const { docs, meta } = defineDocs({
   },
 });
 
-export const { docs: apiDocs, meta: apiMeta } = defineDocs({
-  docs: { dir: "content/api/openapi" },
-  meta: { dir: "content/api/openapi" },
-});
+// content/api/openapi/ — old fumadocs-openapi v4 generated MDX files — is no
+// longer compiled. API docs now use openapi.staticSource() (lib/api-source.ts)
+// which reads openapi.yaml directly without pre-generated MDX files.
 
 export default defineConfig({
   mdxOptions: {

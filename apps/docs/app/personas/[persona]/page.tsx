@@ -59,7 +59,7 @@ export default async function PersonaPage(props: {
     .filter((page) => page.data.persona?.includes(persona))
     .sort((a, b) => {
       const byPriority =
-        PRIORITY_ORDER[a.data.priority] - PRIORITY_ORDER[b.data.priority];
+        PRIORITY_ORDER[a.data.priority as Priority] - PRIORITY_ORDER[b.data.priority as Priority];
       return byPriority !== 0
         ? byPriority
         : a.data.title.localeCompare(b.data.title);
@@ -70,15 +70,15 @@ export default async function PersonaPage(props: {
       <SiteNav t={t} activeKey="docs" />
 
       {/* Header */}
-      <section className="border-b border-border">
+      <section className="border-b border-fd-border">
         <div className="mx-auto max-w-[1200px] px-6 pb-8 pt-12">
-          <p className="text-[13px] font-medium text-muted-foreground">
+          <p className="text-[13px] font-medium text-fd-muted-foreground">
             Documentation for
           </p>
-          <h1 className="mt-1 text-[28px] font-semibold tracking-tight text-foreground">
+          <h1 className="mt-1 text-[28px] font-semibold tracking-tight text-fd-foreground">
             {data.title}
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fd-muted-foreground">
             {data.description}
           </p>
         </div>
@@ -86,34 +86,34 @@ export default async function PersonaPage(props: {
 
       {/* Recommended pages */}
       <section className="mx-auto w-full max-w-[1200px] px-6 py-10">
-        <h2 className="text-sm font-semibold text-foreground">
+        <h2 className="text-sm font-semibold text-fd-foreground">
           Recommended reading
         </h2>
         {pages.length > 0 ? (
-          <div className="mt-4 grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-fd-border bg-fd-border sm:grid-cols-2">
             {pages.map((page) => (
               <Link
                 key={page.url}
                 href={page.url}
-                className="group bg-card p-5 transition-colors hover:bg-accent"
+                className="group bg-fd-card p-5 transition-colors hover:bg-fd-accent"
               >
-                <h3 className="text-sm font-medium text-foreground group-hover:text-vinr-700 dark:group-hover:text-vinr-300">
+                <h3 className="text-sm font-medium text-fd-foreground group-hover:text-vinr-700 dark:group-hover:text-vinr-300">
                   {page.data.title}
                 </h3>
-                <p className="mt-1 text-[13px] text-muted-foreground">
+                <p className="mt-1 text-[13px] text-fd-muted-foreground">
                   {page.data.description}
                 </p>
               </Link>
             ))}
           </div>
         ) : (
-          <p className="mt-4 text-[13px] text-muted-foreground">
+          <p className="mt-4 text-[13px] text-fd-muted-foreground">
             No pages are tagged for this persona yet.
           </p>
         )}
 
-        <div className="mt-10 border-t border-border pt-8">
-          <p className="text-sm text-muted-foreground">
+        <div className="mt-10 border-t border-fd-border pt-8">
+          <p className="text-sm text-fd-muted-foreground">
             Need help?{" "}
             <Link
               href="/ask"

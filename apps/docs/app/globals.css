@@ -1,77 +1,120 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind v4 */
+@import "tailwindcss";
 
-@layer base {
-  :root {
-    /* Design tokens (colors, spacing, radii, shadows) are defined once in
-       tailwind.config.ts and consumed as Tailwind classes (e.g. bg-vinr-900).
-       Only the font families and the fumadocs --fd-* theme overrides need to
-       live here as CSS variables. */
+/* fumadocs v16 — neutral.css brings in lib/default-colors.css which defines
+   the @theme static block for fd-diff-*, fd-info, fd-error etc. that
+   lib/shiki.css uses via @apply. preset.css then adds layout/typography. */
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
 
-    /* Font families */
-    --font-sans:    var(--font-inter, "Inter"), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    --font-mono:    var(--font-roboto-mono, "Roboto Mono"), ui-monospace, Menlo, Consolas, monospace;
-    --font-display: "Caveat", cursive;
-    --font-script:  "Caveat", "Comic Sans MS", cursive;
+/* Dark mode via .dark class selector (replaces darkMode: "class" in v3 config) */
+@variant dark (&:where(.dark, .dark *));
 
-    /* fumadocs overrides — light mode (HSL triplets, no hsl() wrapper) */
-    /* #ffffff  → 0 0% 100% */
-    --fd-background:        0 0% 100%;
-    /* #0b3b45  → 193 67% 16% */
-    --fd-foreground:        193 67% 16%;
-    /* #f7fdfc  → 168 80% 97% */
-    --fd-muted:             168 80% 97%;
-    /* #a4a7a8  → 183 2% 65% */
-    --fd-muted-foreground:  183 2% 65%;
-    /* #ffffff */
-    --fd-popover:           0 0% 100%;
-    --fd-popover-foreground: 193 67% 16%;
-    /* #ffffff */
-    --fd-card:              0 0% 100%;
-    --fd-card-foreground:   193 67% 16%;
-    /* #e7ebec  → 187 7% 91% */
-    --fd-border:            187 7% 91%;
-    /* #0b3b45 */
-    --fd-primary:           193 67% 16%;
-    /* #f7fdfc */
-    --fd-primary-foreground: 168 80% 97%;
-    /* #f4f6f6  → 180 7% 96% */
-    --fd-secondary:         180 7% 96%;
-    /* #f4f6f6 */
-    --fd-accent:            180 7% 96%;
-    /* #0b3b45 */
-    --fd-accent-foreground: 193 67% 16%;
-    /* #0b3b45 */
-    --fd-ring:              193 67% 16%;
-  }
+/* ─── VINR theme tokens ───────────────────────────────────────────────────── */
+/* Replaces tailwind.config.ts — all tokens in @theme generate utility classes */
 
-  .dark {
-    /* fumadocs overrides — dark mode */
-    /* #05191d  → 190 68% 7% */
-    --fd-background:        190 68% 7%;
-    /* #f7fdfc */
-    --fd-foreground:        168 80% 97%;
-    /* #0b3b45 */
-    --fd-muted:             193 67% 16%;
-    /* #97d1d1  → 180 37% 70% */
-    --fd-muted-foreground:  180 37% 70%;
-    /* #082d35  → 191 66% 12% */
-    --fd-popover:           191 66% 12%;
-    --fd-popover-foreground: 168 80% 97%;
-    --fd-card:              191 66% 12%;
-    --fd-card-foreground:   168 80% 97%;
-    /* rgba white/7 on dark → approximate border */
-    --fd-border:            190 30% 15%;
-    /* #f7fdfc */
-    --fd-primary:           168 80% 97%;
-    /* #05191d */
-    --fd-primary-foreground: 190 68% 7%;
-    --fd-secondary:         193 67% 16%;
-    --fd-accent:            193 67% 16%;
-    --fd-accent-foreground: 168 80% 97%;
-    --fd-ring:              168 80% 97%;
-  }
+@theme {
+  /* VINR brand palette */
+  --color-vinr-50:  #f7fdfc;
+  --color-vinr-100: #e7f7f7;
+  --color-vinr-200: #c6e8e8;
+  --color-vinr-300: #97d1d1;
+  --color-vinr-500: #2a9d90;
+  --color-vinr-600: #22857a;
+  --color-vinr-700: #0b3b45;
+  --color-vinr-800: #082d35;
+  --color-vinr-900: #05191d;
+
+  /* Zinc overrides */
+  --color-zinc-50:  #fafafa;
+  --color-zinc-100: #f8f9f9;
+  --color-zinc-200: #f4f6f6;
+  --color-zinc-400: #eceff0;
+  --color-zinc-600: #d2d6d7;
+  --color-zinc-700: #a4a7a8;
+  --color-zinc-800: #7f8182;
+  --color-zinc-900: #616363;
+  --color-zinc-950: #2c2e2e;
+
+  /* Lime overrides (flag / status colors) */
+  --color-lime-500: #6da544;
+  --color-lime-700: #496e2d;
+  --color-lime-900: #225f47;
+
+  /* Blue overrides */
+  --color-blue-500: #338af3;
+  --color-blue-700: #0052b4;
+
+  /* Misc brand accent colors */
+  --color-yellow:   #ffda44;
+  --color-red:      #d80027;
+  --color-red-deep: #a2001d;
+  --color-purple:   #9747ff;
+
+  /* Font families */
+  --font-sans:    var(--font-inter, "Inter"), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono:    var(--font-roboto-mono, "Roboto Mono"), ui-monospace, Menlo, Consolas, monospace;
+  --font-display: "Caveat", cursive;
+
+  /* Border radii (override Tailwind v4 defaults to match v3 values) */
+  --radius-sm:   4px;
+  --radius-md:   6px;
+  --radius-lg:   8px;
+  --radius-xl:   12px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-xs:        0 1px 2px 0 rgba(0,0,0,0.05);
+  --shadow-sm:        0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1);
+  --shadow-md:        0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+  --shadow-lg:        0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+  --shadow-card:      0 1px 2px rgba(0,0,0,0.04);
+  --shadow-card-hover: 0 4px 12px rgba(11,59,69,0.06);
+}
+
+/* ─── fumadocs color overrides — VINR brand palette ──────────────────────── */
+/* Placed in :root/:dark so they win over fumadocs' @theme defaults. */
+
+:root {
+  /* --font-script is not a Tailwind utility (no utility class uses it), so it
+     lives here rather than in @theme. The other font vars are in @theme above
+     with full fallback stacks — don't re-declare them here or they shadow those. */
+  --font-script: "Caveat", "Comic Sans MS", cursive;
+
+  /* Light mode */
+  --color-fd-background:        hsl(0 0% 100%);
+  --color-fd-foreground:        hsl(193 67% 16%);
+  --color-fd-muted:             hsl(168 80% 97%);
+  --color-fd-muted-foreground:  hsl(183 2% 65%);
+  --color-fd-popover:           hsl(0 0% 100%);
+  --color-fd-popover-foreground: hsl(193 67% 16%);
+  --color-fd-card:              hsl(0 0% 100%);
+  --color-fd-card-foreground:   hsl(193 67% 16%);
+  --color-fd-border:            hsl(187 7% 91%);
+  --color-fd-primary:           hsl(193 67% 16%);
+  --color-fd-primary-foreground: hsl(168 80% 97%);
+  --color-fd-secondary:         hsl(180 7% 96%);
+  --color-fd-accent:            hsl(180 7% 96%);
+  --color-fd-accent-foreground: hsl(193 67% 16%);
+  --color-fd-ring:              hsl(193 67% 16%);
+}
+
+.dark {
+  --color-fd-background:        hsl(190 68% 7%);
+  --color-fd-foreground:        hsl(168 80% 97%);
+  --color-fd-muted:             hsl(193 67% 16%);
+  --color-fd-muted-foreground:  hsl(180 37% 70%);
+  --color-fd-popover:           hsl(191 66% 12%);
+  --color-fd-popover-foreground: hsl(168 80% 97%);
+  --color-fd-card:              hsl(191 66% 12%);
+  --color-fd-card-foreground:   hsl(168 80% 97%);
+  --color-fd-border:            hsl(190 30% 15%);
+  --color-fd-primary:           hsl(168 80% 97%);
+  --color-fd-primary-foreground: hsl(190 68% 7%);
+  --color-fd-secondary:         hsl(193 67% 16%);
+  --color-fd-accent:            hsl(193 67% 16%);
+  --color-fd-accent-foreground: hsl(168 80% 97%);
+  --color-fd-ring:              hsl(168 80% 97%);
 }
 
 @layer base {
@@ -85,7 +128,7 @@
 /* The marketing SiteNav is a two-row (Stripe-style) bar 100px tall. fumadocs
    hardcodes its sidebar/TOC sticky offset to top-14 (56px), so without this
    override the docs sidebar and table-of-contents slide under our second nav
-   row. Id selectors out-specify fumadocs' utility classes, so no !important. */
+   row. */
 #nd-sidebar,
 #nd-toc {
   top: 100px;
@@ -113,4 +156,3 @@
     scroll-behavior: auto !important;
   }
 }
-

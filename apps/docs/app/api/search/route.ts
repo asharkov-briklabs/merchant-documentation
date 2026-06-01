@@ -24,7 +24,7 @@ const untaggedFolders = Array.from(
   new Set(
     source
       .getPages()
-      .map((page) => page.file.path.split("/")[0])
+      .map((page) => page.path.split("/")[0])
       // Top-level docs (e.g. index.mdx) have no folder segment — skip them.
       .filter((segment) => segment.endsWith(".mdx") === false)
   )
@@ -39,13 +39,12 @@ if (untaggedFolders.length > 0) {
 }
 
 export const { GET } = createSearchAPI("advanced", {
-  tag: true,
   indexes: source.getPages().map((page) => ({
     id: page.url,
     title: page.data.title,
     description: page.data.description,
     url: page.url,
-    tag: categoryTag(page.file.path, page.data.category),
+    tag: categoryTag(page.path, page.data.category),
     structuredData: page.data.structuredData,
   })),
 });

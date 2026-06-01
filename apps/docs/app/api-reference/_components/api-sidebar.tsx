@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSearchContext } from "fumadocs-ui/provider";
+import { useSearchContext } from "fumadocs-ui/contexts/search";
 import {
   createContext,
   useContext,

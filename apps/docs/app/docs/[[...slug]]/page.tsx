@@ -52,7 +52,7 @@ export default async function Page(props: {
         owner: "asharkov-briklabs",
         repo: "Vinr-Merchant_Documentation",
         sha: "main",
-        path: `apps/docs/content/docs/${page.file.path}`,
+        path: `apps/docs/content/docs/${page.path}`,
       }}
     >
       <PageActions markdownPath={markdownPath} askHref={askHref} tone="light" />

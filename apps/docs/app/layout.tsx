@@ -6,7 +6,7 @@
 // Tailwind build (duplicate preflight, duplicate `.hidden`/utilities, duplicate
 // `--fd-*` defaults) that fought our globals.css for cascade order.
 import "./globals.css";
-import { RootProvider } from "fumadocs-ui/provider";
+import { RootProvider } from "fumadocs-ui/provider/next";
 import { CATEGORY_TAGS } from "@/lib/taxonomy";
 import { SITE_URL } from "@/lib/site-url";
 import { Inter, Roboto_Mono } from "next/font/google";

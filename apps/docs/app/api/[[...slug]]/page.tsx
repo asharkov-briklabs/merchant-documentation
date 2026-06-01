@@ -1,26 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { DocsPage, DocsBody, DocsTitle, DocsDescription } from "fumadocs-ui/page";
-import defaultMdxComponents from "fumadocs-ui/mdx";
-import { Root, API, APIInfo, APIExample, Responses, Response, ResponseTypes, ExampleResponse, TypeScriptResponse, Property, ObjectCollapsible, Requests, Request, APIPlayground } from "fumadocs-openapi/ui";
+import { createAPIPage } from "fumadocs-openapi/ui";
+import { openapi } from "@/lib/openapi";
 import { apiSource } from "@/lib/api-source";
 
-const openApiComponents = {
-  Root,
-  API,
-  APIInfo,
-  APIExample,
-  Responses,
-  Response,
-  ResponseTypes,
-  ExampleResponse,
-  TypeScriptResponse,
-  Property,
-  ObjectCollapsible,
-  Requests,
-  Request,
-  APIPlayground,
-};
+const APIPage = createAPIPage(openapi);
 
 export default async function Page(props: {
   params: Promise<{ slug?: string[] }>;
@@ -29,14 +14,14 @@ export default async function Page(props: {
   const page = apiSource.getPage(params.slug);
   if (!page) notFound();
 
-  const MDX = page.data.body;
+  const apiProps = page.data.getAPIPageProps();
 
   return (
-    <DocsPage toc={page.data.toc} full={page.data.full}>
+    <DocsPage toc={[]} full>
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
       <DocsBody>
-        <MDX components={{ ...defaultMdxComponents, ...openApiComponents }} />
+        <APIPage {...apiProps} />
       </DocsBody>
     </DocsPage>
   );

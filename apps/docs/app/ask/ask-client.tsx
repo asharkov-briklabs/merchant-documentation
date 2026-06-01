@@ -1,6 +1,8 @@
 "use client";
 
-import { useChat } from "ai/react";
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import { getMessageText } from "@/lib/ui-message";
 import { useRef, useEffect, useCallback, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -18,14 +20,15 @@ export function AskClient({ t }: { t: ReturnType<typeof getTranslations> }) {
     t.askSuggestion4,
   ];
 
-  const { messages, input, handleInputChange, handleSubmit, append, isLoading, error, reload, stop } =
-    useChat({
-      api: "/api/ask",
-    });
+  const { messages, sendMessage, regenerate, stop, status, error } = useChat({
+    transport: new DefaultChatTransport({ api: "/api/ask" }),
+  });
+
+  const [input, setInput] = useState("");
+  const isLoading = status === "submitted" || status === "streaming";
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [hasSentMessage, setHasSentMessage] = useState(false);
   const autoAskedRef = useRef(false);
 
   // Deep-link entry point for the "Ask AI" page action: /ask?q=… auto-sends the
@@ -35,12 +38,11 @@ export function AskClient({ t }: { t: ReturnType<typeof getTranslations> }) {
     const q = new URLSearchParams(window.location.search).get("q");
     if (!q?.trim()) return;
     autoAskedRef.current = true;
-    setHasSentMessage(true);
-    append({ role: "user", content: q });
+    sendMessage({ parts: [{ type: "text", text: q }] });
     const url = new URL(window.location.href);
     url.searchParams.delete("q");
     window.history.replaceState(null, "", url);
-  }, [append]);
+  }, [sendMessage]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -59,10 +61,10 @@ export function AskClient({ t }: { t: ReturnType<typeof getTranslations> }) {
     (e: React.FormEvent) => {
       e.preventDefault();
       if (!input.trim() || isLoading) return;
-      setHasSentMessage(true);
-      handleSubmit(e);
+      sendMessage({ parts: [{ type: "text", text: input }] });
+      setInput("");
     },
-    [input, isLoading, handleSubmit]
+    [input, isLoading, sendMessage]
   );
 
   const handleKeyDown = useCallback(
@@ -77,14 +79,10 @@ export function AskClient({ t }: { t: ReturnType<typeof getTranslations> }) {
 
   const selectSuggestion = useCallback(
     (suggestion: string) => {
-      const event = {
-        target: { value: suggestion },
-      } as React.ChangeEvent<HTMLTextAreaElement>;
-      handleInputChange(event);
-      // Focus the textarea so user can just hit Enter
+      setInput(suggestion);
       textareaRef.current?.focus();
     },
-    [handleInputChange]
+    []
   );
 
   return (
@@ -95,7 +93,7 @@ export function AskClient({ t }: { t: ReturnType<typeof getTranslations> }) {
       {/* Conversation Area */}
       <div className="flex-1 overflow-y-auto">
         {/* Empty State */}
-        {messages.length === 0 && !hasSentMessage && (
+        {messages.length === 0 && !isLoading && (
           <div className="flex h-full flex-col items-center justify-center px-4 pb-32">
             {/* AI Avatar */}
             <div className="relative mb-6">
@@ -132,70 +130,73 @@ export function AskClient({ t }: { t: ReturnType<typeof getTranslations> }) {
         {messages.length > 0 && (
           <div className="mx-auto max-w-2xl px-4 py-6">
             <div className="space-y-6">
-              {messages.map((message) => (
-                <div key={message.id} className="group">
-                  {message.role === "user" ? (
-                    /* User message — right-aligned, compact */
-                    <div className="flex justify-end">
-                      <div className="max-w-[80%] rounded-2xl rounded-br-md bg-vinr-700 px-4 py-2.5 text-sm text-white dark:bg-vinr-500">
-                        {message.content}
+              {messages.map((message) => {
+                const text = getMessageText(message);
+                return (
+                  <div key={message.id} className="group">
+                    {message.role === "user" ? (
+                      /* User message — right-aligned, compact */
+                      <div className="flex justify-end">
+                        <div className="max-w-[80%] rounded-2xl rounded-br-md bg-vinr-700 px-4 py-2.5 text-sm text-white dark:bg-vinr-500">
+                          {text}
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    /* Assistant message — full width, clean */
-                    <div className="flex gap-3">
-                      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-vinr-100 to-vinr-200 dark:from-vinr-900 dark:to-vinr-800">
-                        <Image src={brandmarkLight} alt="" width={14} height={14} className="dark:hidden" />
-                        <Image src={brandmarkDark} alt="" width={14} height={14} className="hidden dark:block" />
-                      </div>
-                      <div className="min-w-0 flex-1 pt-0.5">
-                        <div className="prose prose-sm max-w-none text-fd-foreground prose-p:leading-relaxed prose-pre:bg-fd-muted prose-pre:text-fd-foreground prose-code:text-vinr-700 prose-code:before:content-none prose-code:after:content-none dark:prose-code:text-vinr-300">
-                          <ReactMarkdown
-                            components={{
-                              code({ children, className }) {
-                                const isInline = !className;
-                                if (isInline) {
+                    ) : (
+                      /* Assistant message — full width, clean */
+                      <div className="flex gap-3">
+                        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-vinr-100 to-vinr-200 dark:from-vinr-900 dark:to-vinr-800">
+                          <Image src={brandmarkLight} alt="" width={14} height={14} className="dark:hidden" />
+                          <Image src={brandmarkDark} alt="" width={14} height={14} className="hidden dark:block" />
+                        </div>
+                        <div className="min-w-0 flex-1 pt-0.5">
+                          <div className="prose prose-sm max-w-none text-fd-foreground prose-p:leading-relaxed prose-pre:bg-fd-muted prose-pre:text-fd-foreground prose-code:text-vinr-700 prose-code:before:content-none prose-code:after:content-none dark:prose-code:text-vinr-300">
+                            <ReactMarkdown
+                              components={{
+                                code({ children, className }) {
+                                  const isInline = !className;
+                                  if (isInline) {
+                                    return (
+                                      <code className="rounded bg-fd-muted px-1.5 py-0.5 text-[13px]">
+                                        {children}
+                                      </code>
+                                    );
+                                  }
                                   return (
-                                    <code className="rounded bg-fd-muted px-1.5 py-0.5 text-[13px]">
-                                      {children}
-                                    </code>
+                                    <pre className="overflow-x-auto rounded-lg bg-fd-muted p-4">
+                                      <code className="text-[13px]">{children}</code>
+                                    </pre>
                                   );
-                                }
-                                return (
-                                  <pre className="overflow-x-auto rounded-lg bg-fd-muted p-4">
-                                    <code className="text-[13px]">{children}</code>
-                                  </pre>
-                                );
-                              },
-                              a({ href, children }) {
-                                return (
-                                  <a href={href} className="text-vinr-700 underline hover:text-vinr-900 dark:text-vinr-300 dark:hover:text-vinr-200" target="_blank" rel="noopener noreferrer">
-                                    {children}
-                                  </a>
-                                );
-                              },
-                            }}
-                          >
-                            {message.content}
-                          </ReactMarkdown>
-                        </div>
-                        {/* Message actions (visible on hover) */}
-                        <div className="mt-2 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-                          <button
-                            onClick={() => navigator.clipboard.writeText(message.content)}
-                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-fd-muted-foreground transition-colors hover:bg-fd-accent hover:text-fd-foreground"
-                          >
-                            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.75a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
-                            </svg>
-                            Copy
-                          </button>
+                                },
+                                a({ href, children }) {
+                                  return (
+                                    <a href={href} className="text-vinr-700 underline hover:text-vinr-900 dark:text-vinr-300 dark:hover:text-vinr-200" target="_blank" rel="noopener noreferrer">
+                                      {children}
+                                    </a>
+                                  );
+                                },
+                              }}
+                            >
+                              {text}
+                            </ReactMarkdown>
+                          </div>
+                          {/* Message actions (visible on hover) */}
+                          <div className="mt-2 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                            <button
+                              onClick={() => navigator.clipboard.writeText(text)}
+                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-fd-muted-foreground transition-colors hover:bg-fd-accent hover:text-fd-foreground"
+                            >
+                              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.75a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+                              </svg>
+                              Copy
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    )}
+                  </div>
+                );
+              })}
 
               {/* Streaming indicator */}
               {isLoading && (
@@ -225,7 +226,7 @@ export function AskClient({ t }: { t: ReturnType<typeof getTranslations> }) {
                       {error.message || "Something went wrong. Please try again."}
                     </p>
                     <button
-                      onClick={() => reload()}
+                      onClick={() => regenerate()}
                       className="mt-1.5 text-xs font-medium text-vinr-700 hover:text-vinr-900 dark:text-vinr-300 dark:hover:text-vinr-200"
                     >
                       Try again →
@@ -249,7 +250,7 @@ export function AskClient({ t }: { t: ReturnType<typeof getTranslations> }) {
             <textarea
               ref={textareaRef}
               value={input}
-              onChange={handleInputChange}
+              onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={t.askPlaceholder}
               rows={1}

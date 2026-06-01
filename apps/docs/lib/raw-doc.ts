@@ -18,7 +18,7 @@ import remarkStringify from "remark-stringify";
 const CONTENT_DIR = join(process.cwd(), "content", "docs");
 
 interface MarkdownablePage {
-  file: { path: string };
+  path: string;
   data: { title?: string; description?: string };
 }
 
@@ -354,7 +354,7 @@ const FRONTMATTER_RE = /^---\n[\s\S]*?\n---\n?/;
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export function pageToMarkdown(page: MarkdownablePage): string {
-  const raw = readFileSync(join(CONTENT_DIR, page.file.path), "utf8");
+  const raw = readFileSync(join(CONTENT_DIR, page.path), "utf8");
   // Strip frontmatter before parsing — remarkParse would misread it as <hr> + paragraph.
   const source = raw.replace(FRONTMATTER_RE, "");
   const body = String(processor.processSync(source)).trim();
