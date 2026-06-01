@@ -51,6 +51,18 @@ export function CategoryMenu({ t }: CategoryMenuProps) {
       {/* Desktop: dropdown row */}
       <div className="hidden items-center md:flex">
         {NAV_GROUPS.map((group, i) => {
+          if (group.noDropdown) {
+            return (
+              <Link
+                key={group.path}
+                href={group.path}
+                className="flex h-8 items-center rounded-md px-2.5 text-[13px] font-medium whitespace-nowrap text-vinr-50/[0.72] transition-colors duration-[120ms] hover:bg-white/[0.08] hover:text-vinr-50"
+              >
+                {group.label}
+              </Link>
+            );
+          }
+
           const isOpen = open === i;
           return (
             <div

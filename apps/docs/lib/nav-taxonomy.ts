@@ -20,12 +20,15 @@ export interface NavGroup {
   path: string;
   label: string;
   items: NavLink[];
+  /** When true, renders as a plain link instead of a dropdown trigger. */
+  noDropdown?: boolean;
 }
 
 export const NAV_GROUPS: NavGroup[] = [
   {
     path: "/docs/getting-started",
     label: "Get started",
+    noDropdown: true,
     items: [
       { path: "/docs/getting-started", label: "Overview" },
       { path: "/docs/getting-started/quick-start", label: "Quick start" },
@@ -46,7 +49,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: "CreditCard",
       },
       {
-        path: "/docs/payments/authorize-and-capture",
+        path: "/docs/payments/online-payments",
         label: "Online Payments",
         description: "Cards, wallets, links, and digital payment flows",
         icon: "Globe",
