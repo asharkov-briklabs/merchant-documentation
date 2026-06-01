@@ -140,6 +140,9 @@
 #nd-docs-layout {
   --fd-banner-height: 100px;
 }
+#nd-sidebar {
+  background-color: var(--color-fd-background);
+}
 /* Suppress the fumadocs v16 root-folder streaming tab strip. In v16 it renders
    as a React streaming boundary that becomes a direct <body> child above
    #nd-docs-layout, independent of the DocsLayout tabs={false} prop.

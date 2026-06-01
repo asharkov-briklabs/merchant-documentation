@@ -5,6 +5,7 @@ import { CategoryMenu } from "./category-menu";
 import { SearchTrigger } from "./search-trigger";
 import { SidebarToggle } from "./sidebar-toggle";
 import { AskAiNavButton } from "./ask-ai-nav-button";
+import { ThemeToggle } from "./theme-toggle";
 
 interface SiteNavProps {
   t: ReturnType<typeof getTranslations>;
@@ -46,8 +47,9 @@ export function SiteNav({ t, activeKey, fluid }: SiteNavProps) {
             <AskAiNavButton label={t.askAi} active={activeKey === "ask"} />
           </div>
 
-          {/* Right: Sign in */}
-          <div className="flex items-center justify-end">
+          {/* Right: Theme toggle + Sign in */}
+          <div className="flex items-center gap-2 justify-end">
+            <ThemeToggle />
             <a
               href="https://dashboard.vinr.com"
               target="_blank"
