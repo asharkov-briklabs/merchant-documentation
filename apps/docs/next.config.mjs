@@ -84,6 +84,8 @@ const config = {
     return [
       { source: "/docs/api-reference", destination: "/api-reference", permanent: false },
       { source: "/docs/api-reference/:path*", destination: "/api-reference/:path*", permanent: false },
+      // fumadocs-openapi generates no index page for /api, so redirect root to first operation.
+      { source: "/api", destination: "/api/listPayments", permanent: false },
     ];
   },
 };
