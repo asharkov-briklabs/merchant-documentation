@@ -25,6 +25,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         tabs={false}
         nav={{ enabled: false }}
         searchToggle={{ enabled: false }}
+        themeSwitch={{ enabled: false }}
         sidebar={{ collapsible: false }}
       >
         <SidebarBridgeSetter />

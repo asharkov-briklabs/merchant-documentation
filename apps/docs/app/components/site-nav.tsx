@@ -21,11 +21,12 @@ interface SiteNavProps {
 // sticky offsets to match (see #nd-sidebar/#nd-toc overrides in globals.css).
 export function SiteNav({ t, activeKey, fluid }: SiteNavProps) {
   const rowWidth = fluid ? "w-full" : "w-full max-w-[1200px] mx-auto";
+  const padX = fluid ? "px-4" : "px-6 md:px-10";
 
   return (
     <nav className="sticky top-0 z-40 border-b border-white/[0.07] bg-vinr-900">
       {/* Row 1 — logo / search + Ask AI / Sign in */}
-      <div className="h-14 px-6 md:px-10">
+      <div className={`h-14 ${padX}`}>
         <div className={["grid h-full grid-cols-[auto_1fr_auto] items-center gap-3 md:gap-5", rowWidth].join(" ")}>
           {/* Left: mobile sidebar toggle (renders only on pages with a sidebar) + logo */}
           <div className="flex items-center">
@@ -63,7 +64,7 @@ export function SiteNav({ t, activeKey, fluid }: SiteNavProps) {
       </div>
 
       {/* Row 2 — category dropdowns / API Reference + Help */}
-      <div className="h-11 border-t border-white/[0.05] px-6 md:px-10">
+      <div className={`h-11 border-t border-white/[0.05] ${padX}`}>
         <div className={["flex h-full items-center justify-between gap-3", rowWidth].join(" ")}>
           <CategoryMenu t={t} />
 
