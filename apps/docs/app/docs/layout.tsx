@@ -8,13 +8,11 @@ import { CATEGORIES } from "@/lib/taxonomy";
 import { decorateEnterpriseTree } from "@/lib/enterprise-nav";
 import { SiteNav } from "../components/site-nav";
 import type { LayoutTab } from "fumadocs-ui/layouts/shared";
+import { ProductSwitcher } from "./components/product-switcher";
 
-// Product switcher (Stripe-style): one entry per doc category. Projected from
-// the single taxonomy registry (lib/taxonomy.ts) so titles/icons stay in sync
-// with the search facet and never drift.
+// Product switcher entries — one per doc category (api-reference excluded; it
+// lives on its own /api-reference screen with a separate layout).
 const TABS: LayoutTab[] = CATEGORIES
-  // The API reference lives on its own dedicated screen (/api-reference),
-  // not inside the docs DocsLayout, so it's excluded from the product switcher.
   .filter((c) => c.slug !== "api-reference")
   .map((c) => ({
     url: `/docs/${c.slug}`,
@@ -39,11 +37,17 @@ export default function Layout({ children }: { children: ReactNode }) {
   return (
     <DocsLayout
       tree={tree}
-      tabs={TABS}
+      tabs={false}
       nav={{
         // Replace fumadocs' built-in navbar with our marketing SiteNav so the
         // Stripe-style two-row top nav shows on every docs page.
         component: <SiteNav t={t} fluid />,
+      }}
+      sidebar={{
+        // The ProductSwitcher is a custom replacement for the removed
+        // fumadocs v16 RootToggle — renders a compact dropdown at the top of
+        // the sidebar rather than a top-of-page tab strip.
+        banner: <ProductSwitcher tabs={TABS} />,
       }}
     >
       {children}

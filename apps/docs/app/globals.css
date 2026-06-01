@@ -135,8 +135,13 @@
   height: calc(100dvh - 100px);
   max-height: calc(100dvh - 100px);
 }
-#nd-subnav {
-  top: 100px;
+/* Suppress the fumadocs v16 root-folder streaming tab strip. In v16 it renders
+   as a React streaming boundary that becomes a direct <body> child above
+   #nd-docs-layout, independent of the DocsLayout tabs={false} prop.
+   Root-folder switching is handled by ProductSwitcher in the sidebar banner
+   and by the SiteNav second row — the strip is redundant. */
+body > div.p-3.empty\:hidden:has(button[data-active]) {
+  display: none;
 }
 
 /* Pulse animation (live-status dot in the hero code card). */
