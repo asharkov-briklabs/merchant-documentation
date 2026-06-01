@@ -1,12 +1,10 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { SiteNav } from "./components/site-nav";
 import { SiteFooter } from "./components/site-footer";
 import { HeroMeshBg } from "./components/hero-mesh-bg";
 import { CodeCard } from "./components/code-card";
 import { SearchTrigger } from "./components/search-trigger";
 import { ChatBubbleIcon } from "./components/chat-bubble-icon";
-import { AnnouncementBanner, BANNER_COOKIE } from "./components/announcement-banner";
 import { getTranslations } from "@/lib/translations";
 import { CATEGORY_BY_SLUG } from "@/lib/taxonomy";
 import type { Category } from "@/lib/schema";
@@ -14,8 +12,6 @@ import { SITE_URL } from "@/lib/site-url";
 
 export default function HomePage() {
   const t = getTranslations();
-  const bannerDismissed =
-    cookies().get(BANNER_COOKIE)?.value === "dismissed";
 
   return (
     <main>
@@ -32,7 +28,6 @@ export default function HomePage() {
           }),
         }}
       />
-      <AnnouncementBanner t={t} initiallyDismissed={bannerDismissed} />
       <SiteNav t={t} activeKey="docs" />
 
       {/* Hero */}
