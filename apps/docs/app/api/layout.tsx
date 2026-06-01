@@ -10,7 +10,7 @@ export default function ApiLayout({ children }: { children: ReactNode }) {
     <DocsLayout
       tree={apiSource.pageTree}
       nav={{
-        component: <SiteNav t={t} fluid />,
+        component: <SiteNav t={t} fluid showSidebarToggle />,
       }}
     >
       {children}

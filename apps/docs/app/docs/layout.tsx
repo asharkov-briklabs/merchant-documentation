@@ -41,7 +41,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       nav={{
         // Replace fumadocs' built-in navbar with our marketing SiteNav so the
         // Stripe-style two-row top nav shows on every docs page.
-        component: <SiteNav t={t} fluid />,
+        component: <SiteNav t={t} fluid showSidebarToggle />,
       }}
       sidebar={{
         // The ProductSwitcher is a custom replacement for the removed
