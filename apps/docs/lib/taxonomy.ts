@@ -29,6 +29,8 @@ export const CATEGORIES: CategoryMeta[] = [
   { slug: "engagement", label: "Engagement", description: "Loyalty, rewards, campaigns", icon: "Gift" },
   { slug: "integration", label: "Integration", description: "Checkout, Elements, webhooks", icon: "Blocks" },
   { slug: "operations", label: "Operations", description: "Settlement, payouts, reporting", icon: "Activity" },
+  { slug: "platforms", label: "Platforms", description: "Marketplaces, sub-merchant onboarding, split payments", icon: "Layers" },
+  { slug: "industries-and-markets", label: "Industries and markets", description: "Industry guides and geographic market compliance", icon: "LayoutGrid" },
   { slug: "compliance", label: "Compliance", description: "PCI, KYC/AML, PSD2, GDPR", icon: "ShieldCheck" },
   { slug: "api-reference", label: "API reference", description: "Endpoints, objects, errors", icon: "Code" },
   { slug: "troubleshooting", label: "Troubleshooting", description: "Errors, declines, debugging", icon: "LifeBuoy" },

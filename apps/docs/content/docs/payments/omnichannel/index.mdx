@@ -1,0 +1,132 @@
+---
+title: "Unified commerce"
+description: "Connect online, in-store, and mobile channels into a single commerce experience with VINR."
+persona: ["developer", "business-owner"]
+priority: "P0"
+lastUpdated: "2026-05-31"
+---
+
+Unified commerce means one shopper identity, shared payment tokens, and consistent data across every channel — web, mobile app, and physical store. VINR achieves this through cross-channel shopper recognition, shared tokenization, and a unified transaction history: a card saved during online checkout works at the terminal, a loyalty balance earned in-store is redeemable through the app, and every order — regardless of origin — appears in one place for your team and for your customer.
+
+## Why unified commerce matters
+
+The table below contrasts a fragmented multi-channel setup against a unified commerce approach across four dimensions that directly affect revenue and operations.
+
+<TypeTable
+  type={{
+    "Shopper experience": {
+      type: "Fragmented",
+      description: "Customers re-enter card details and shipping address on every channel; no recognition across touchpoints.",
+    },
+    "Returns and exchanges": {
+      type: "Fragmented",
+      description: "Online orders cannot be returned in-store; staff cannot see the original transaction, leading to manual workarounds and customer friction.",
+    },
+    "Loyalty and rewards": {
+      type: "Fragmented",
+      description: "Points accumulate separately per channel; balances cannot be redeemed cross-channel; customers feel punished for switching.",
+    },
+    "Reporting and reconciliation": {
+      type: "Fragmented",
+      description: "Finance teams merge exports from multiple systems; attribution is guesswork; a single customer's lifetime value is invisible.",
+    },
+    "Payment method reuse": {
+      type: "Fragmented",
+      description: "Tokens are channel-specific; a card saved online cannot be used for MOTO or in-store, forcing re-tokenization and raising PCI scope.",
+    },
+  }}
+/>
+
+<Callout type="info">
+In a unified commerce model: shoppers are recognised by email or phone at any touchpoint, payment tokens are shared across channels, returns are accepted anywhere regardless of origin, loyalty balances are single and consistent, and all transactions roll up into one reconciliation feed.
+</Callout>
+
+## What VINR unifies
+
+The following capabilities together form VINR's unified commerce layer. Each links to the dedicated reference page.
+
+- **Shopper recognition and shared tokens** — a shopper profile anchors across channels; the same `pm_` token works online, in-app, and at the terminal. See [Tokenization](/docs/payments/tokenization).
+- **Endless aisle** — staff complete a sale for out-of-stock items by taking payment in-store and fulfilling from another location or warehouse; the order enters the same transaction history. See [In-person payments](/docs/payments/in-person).
+- **Click and collect (BOPIS)** — customers buy online and collect in-store; the in-store handoff is linked to the original online payment. See [Click and collect](/docs/payments/omnichannel/click-and-collect).
+- **Buy online, return in-store (BORIS)** — store staff can look up and refund any online order directly from the terminal. See [In-person refunds](/docs/payments/in-person/refunds).
+- **Pay by link in-store** — staff generate a payment link from the terminal or dashboard for a remote or contactless handoff; the customer pays on their own device. See [Payment links](/docs/payments/payment-links).
+- **MOTO (mail order / telephone order)** — agents take card details over the phone and charge a stored or new `pm_` token without a customer-facing checkout page. See [In-person features](/docs/payments/in-person/features).
+- **Cross-channel loyalty** — a single loyalty balance accumulates and is redeemable regardless of whether the purchase was online, in-app, or in-store. See [Cross-channel loyalty](/docs/payments/omnichannel/cross-channel-loyalty).
+- **Digital receipts** — receipts are delivered by email or SMS after any channel's transaction and are accessible in the shopper's profile. See [Receipts and engagement](/docs/payments/in-person/receipts-and-engagement).
+- **Shopper insights** — unified transaction history and loyalty data feed into a single analytics view; segment shoppers across channels from one place. See [Engagement analytics](/docs/engagement/engagement-analytics).
+
+## How channels share a shopper identity
+
+A shopper's email address or phone number is the anchor for their VINR profile. When a shopper provides either at any touchpoint — checkout, loyalty sign-up, or terminal prompt — VINR resolves or creates a `cust_` record and links all subsequent activity to it: payment tokens, loyalty balance, and order history follow the profile, not the channel.
+
+<Steps>
+
+### Shopper provides an identifier
+
+The shopper enters their email or phone at checkout (web, mobile, or in-person terminal). VINR looks for an existing `cust_` record matching that identifier.
+
+### Profile is resolved or created
+
+If a match is found, the session is linked to the existing profile — all previously stored `pm_` tokens, loyalty balance, and order history are immediately available. If no match is found, a new profile is created and the identifier is stored.
+
+### Payment token is attached
+
+The payment method used in this transaction is tokenised and attached to the `cust_` record. The same token can now be charged on any channel without the shopper re-entering their card details.
+
+### Loyalty and order history are updated
+
+Points are credited to the single loyalty balance. The order is appended to the unified transaction history, visible to both the shopper (via digital receipt and account portal) and your operations team.
+
+### Cross-channel availability is immediate
+
+Any subsequent touchpoint — a store visit, an app session, a phone order — that resolves the same identifier has access to the full profile: stored methods, accrued points, and prior orders.
+
+</Steps>
+
+<Accordions>
+<Accordion title="Advanced — profile merging and identity resolution">
+
+When a shopper uses different identifiers across channels (a personal email online, a work phone in-store), VINR creates separate profiles until an explicit merge is requested. You can merge profiles via the API, which consolidates tokens, loyalty balances, and order history into the surviving `cust_` record. The source record is tombstoned and redirects lookups to the target.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const merged = await vinr.customers.merge({
+  sourceId: 'cust_oldProfile...',
+  targetId: 'cust_primaryProfile...',
+});
+
+// merged.id           → "cust_primaryProfile..."
+// merged.paymentMethods → combined list of pm_ tokens
+// merged.loyaltyBalance → sum of both balances
+```
+
+Merges are irreversible. Audit the source and target profiles before calling this endpoint. Listen for the `customer.merged` webhook to update any downstream references to the source `cust_` ID.
+
+For high-volume retailers where identity resolution must happen at scale — probabilistic matching on name plus partial card number, for example — contact your VINR account manager to enable the advanced identity graph feature.
+
+</Accordion>
+</Accordions>
+
+## Prerequisites
+
+Before enabling unified commerce flows you need the following in place.
+
+- A VINR account with **both online and in-person processing** enabled. Contact your account manager if either is not active on your account.
+- At least one **online integration**: either [Hosted Checkout](/docs/integration/checkout) or [Elements](/docs/integration/elements), so web and mobile payments create `cust_` profiles.
+- At least one **VINR terminal** provisioned and assigned to a location, so in-store transactions can resolve and update shopper profiles. See [In-person payments](/docs/payments/in-person) for terminal setup and pairing.
+- Shopper identifier collection enabled at checkout — pass `customer.email` or `customer.phone` when creating a payment, or enable the terminal's shopper prompt in the [Dashboard](/docs/operations/dashboard).
+
+<Callout type="warn">
+Unified commerce features require the shopper identifier to be present at transaction time. Transactions processed without a resolvable email or phone create an anonymous `cust_` record that cannot be merged retroactively without a manual API call.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Shopper recognition" href="/docs/payments/omnichannel/shopper-recognition" description="How VINR identifies and links shoppers across web, app, and in-store touchpoints." />
+  <Card title="Click and collect" href="/docs/payments/omnichannel/click-and-collect" description="Let customers buy online and collect in-store with a linked payment and fulfilment flow." />
+  <Card title="Cross-channel loyalty" href="/docs/payments/omnichannel/cross-channel-loyalty" description="Configure a single loyalty balance that accumulates and redeems across every channel." />
+</Cards>

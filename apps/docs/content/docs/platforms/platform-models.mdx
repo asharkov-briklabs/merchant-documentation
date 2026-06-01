@@ -1,0 +1,74 @@
+---
+title: Platform models
+description: Compare SaaS, marketplace, and PayFac integration models to choose the right architecture for your platform.
+---
+
+VINR supports three platform models. Your choice determines who owns the customer relationship, who bears liability, and how much integration work is required.
+
+## Models at a glance
+
+| | SaaS / PayFac | Marketplace | Managed marketplace |
+|---|---|---|---|
+| **Sub-merchant onboarding** | Platform-managed | Platform-managed | VINR-hosted |
+| **Compliance responsibility** | Platform | Platform | Shared |
+| **Charge created on** | Platform account | Platform account | Sub-merchant account |
+| **Customer sees** | Your brand | Your brand | Your brand or VINR |
+| **Engineering effort** | High | Medium | Low |
+
+---
+
+## SaaS / PayFac model
+
+Your platform acts as a **payment facilitator** (PayFac). You take on the processing agreement, onboard sub-merchants under your master merchant ID, and bear primary liability for their transactions.
+
+- Best for: vertical SaaS (e-commerce, booking, POS platforms)
+- You control the full checkout and onboarding UX
+- Sub-merchants may not know VINR is involved
+- Requires the highest level of compliance diligence
+
+## Marketplace model
+
+Your platform intermediates between buyers and sellers. Payments are created on the platform account and funds are split to sub-merchant balance accounts minus your commission.
+
+- Best for: two-sided marketplaces, on-demand services, gig economy
+- Platform bears liability for refunds and chargebacks on transactions it routes
+- Sub-merchants access a VINR-hosted dashboard (optional) or API only
+
+## Managed marketplace
+
+Lower-effort option where VINR handles more of the compliance and onboarding. Sub-merchants go through a VINR-hosted onboarding flow and maintain a more direct relationship with VINR.
+
+- Best for: platforms that want to launch quickly without deep compliance investment
+- Reduced platform liability in exchange for less UI control
+- Sub-merchants may interact with VINR directly for support
+
+---
+
+## Charge routing options
+
+Regardless of model, you choose how payments are routed:
+
+### Direct split
+The charge is created on the platform account. At authorization or capture, a split instruction divides the gross amount into components: sub-merchant share, platform commission, fees, and tax.
+
+```json
+"splits": [
+  { "type": "balance_account", "amount": 8500, "description": "Seller payout" },
+  { "type": "commission",      "amount": 1000, "description": "Platform fee"  },
+  { "type": "payment_fee",     "amount":  500, "description": "Processing"    }
+]
+```
+
+### Transfer after charge
+Charge and fund distribution are decoupled. The platform charges the buyer, then issues one or more transfers to sub-merchant balance accounts independently. Useful when the final recipient isn't known at authorization time.
+
+### Multi-party split
+A single charge is split across multiple sub-merchants simultaneously — useful for bundle purchases, group bookings, or marketplace orders with multiple sellers.
+
+---
+
+## Next steps
+
+- [Sub-merchant onboarding](/docs/platforms/onboarding) — register sub-merchants under your platform
+- [Split payments](/docs/platforms/split-payments) — split components, timing, and edge cases
+- [Verification & KYC/KYB](/docs/platforms/verification) — what VINR requires before sub-merchants can transact

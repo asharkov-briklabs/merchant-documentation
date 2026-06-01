@@ -1,0 +1,147 @@
+---
+title: Account management
+description: Account structure, team users, SSO, MFA, and balance visibility.
+persona: ["operations", "finance-manager", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+Your VINR account has a hierarchy of entities, users, and access controls. This page covers how accounts are structured, how to add and manage team members, how to enable SSO and MFA, and how to read the balances panel.
+
+## Account structure
+
+A VINR account is built around a root **organization** that can contain one or more **merchant accounts**. Each merchant account has its own API credentials, payout schedule, and balance — useful if you operate multiple brands, geographies, or legal entities under one contract.
+
+```
+Organization
+├── Merchant account A  (e.g. "VINR EU")
+│   ├── API credentials
+│   ├── Balance
+│   └── Payout account
+└── Merchant account B  (e.g. "VINR US")
+    ├── API credentials
+    ├── Balance
+    └── Payout account
+```
+
+<Callout type="info">
+All merchant accounts share the organization's contract tier and support access. Test credentials are always separate from live credentials and never move real money.
+</Callout>
+
+Contact [support@vinr.com](mailto:support@vinr.com) to request additional merchant accounts. Each account goes through a brief KYC review before going live.
+
+## User roles
+
+VINR uses role-based access control. Assign the minimum role needed — the API never depends on a user's dashboard role.
+
+| Role | What they can do |
+|---|---|
+| **Owner** | Everything, including billing and account deletion. |
+| **Admin** | All settings except billing and ownership transfer. |
+| **Developer** | API keys, webhooks, integration settings. No financial data. |
+| **Finance** | Reports, payouts, dispute management. Read-only on integration. |
+| **Viewer** | Read-only across all sections. |
+
+### Invite a team member
+
+Go to **Dashboard → Settings → Team** and click **Invite**. Enter the email and role. The invitation link expires in 72 hours.
+
+```typescript
+// Invite via API (Admin or Owner credentials required)
+await vinr.team.invitations.create({
+  email: 'maria@example.com',
+  role: 'finance',
+  merchantAccountId: 'ma_...',   // omit to grant org-level access
+});
+```
+
+### Remove a user
+
+Revoking access is immediate — the user's session tokens are invalidated and existing API keys they created are not affected (keys are scoped to the merchant account, not the user).
+
+```typescript
+await vinr.team.members.remove('mbr_...');
+```
+
+## Single sign-on (SSO)
+
+VINR supports SAML 2.0 SSO via your identity provider (Okta, Azure AD, Google Workspace, and others). Once enabled, team members must sign in through your IdP — email/password login is disabled for SSO-managed users.
+
+<Steps>
+
+### Register VINR in your IdP
+
+Create a SAML application in your IdP. The values you need:
+
+| Field | Value |
+|---|---|
+| Entity ID / Audience | `https://auth.vinr.com/saml/sp` |
+| ACS URL | `https://auth.vinr.com/saml/acs` |
+| Name ID format | Email |
+
+### Configure VINR
+
+In **Dashboard → Settings → SSO**, paste the IdP metadata URL or XML. VINR validates the configuration with a test login before activating.
+
+### Map groups to roles
+
+Optionally map IdP groups to VINR roles. Users not in a mapped group default to the **Viewer** role.
+
+### Enable
+
+Flip the toggle. Existing sessions remain valid for 24 hours, then require re-authentication via SSO.
+
+</Steps>
+
+## Multi-factor authentication
+
+MFA is enforced by default for Owner and Admin accounts. Supported methods:
+
+- **TOTP** — any authenticator app (Google Authenticator, Authy, 1Password)
+- **WebAuthn / passkey** — hardware security keys (YubiKey) or platform passkeys
+
+<Callout type="warn">
+Disabling the MFA requirement is possible at the organization level, but VINR recommends against it. Accounts processing above EUR 50,000/month cannot disable it without written approval.
+</Callout>
+
+## Balances
+
+The **Balances** panel (Dashboard → Finance → Balances) shows three figures per currency:
+
+| Balance type | What it represents |
+|---|---|
+| **Available** | Settled funds eligible for payout now. |
+| **Pending** | Charges in the funding-delay window — not yet available. |
+| **Reserve** | Funds held as a rolling security reserve (if applicable to your plan). |
+
+```typescript
+const balance = await vinr.balance.retrieve();
+// {
+//   available: [{ amount: 184250, currency: 'EUR' }],
+//   pending:   [{ amount:  39000, currency: 'EUR' }],
+//   reserved:  [{ amount:   5000, currency: 'EUR' }]
+// }
+```
+
+The pending balance becomes available as each payment's funding delay clears (typically 2–7 days depending on payment method and plan). Reserve amounts are released automatically as your rolling window advances — see your contract for the reserve percentage and release schedule.
+
+## Notification center
+
+Configure which events trigger email or webhook notifications per user or per role under **Dashboard → Settings → Notifications**:
+
+- Balance below threshold
+- Payout created / paid / failed
+- Dispute opened / escalated
+- Settlement delay
+- API error rate spike
+- Team member added / removed
+
+Webhook notifications go to your configured [webhook endpoints](/docs/integration/webhooks) and are distinct from payment event webhooks — they do not carry `pay_` or `po_` data, only operational alerts.
+
+## Next steps
+
+<Cards>
+  <Card title="Payouts" href="/docs/operations/payouts" description="Schedule and monitor fund transfers to your bank." />
+  <Card title="Risk & fraud" href="/docs/operations/risk-management" description="Protect your account with rules and profiles." />
+  <Card title="Reporting" href="/docs/operations/reporting" description="Financial and operational report exports." />
+</Cards>

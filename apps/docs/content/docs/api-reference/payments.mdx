@@ -313,7 +313,123 @@ payments = vinr.Payment.list(
 }`}
 />
 
+## Adjust an authorization
+
+Increase or decrease the authorized amount before capture. Useful for hotel incidentals, tips added
+after the sale, or removing a cancelled line item. The issuer re-evaluates the adjustment and may
+decline an increase.
+
+<ApiExample
+  id="adjust-payment"
+  title="Adjust an authorization"
+  method="POST"
+  path="/v1/payments/{id}/adjust"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/payments/pay_3Nx8a2Lk/adjust \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d amount=6500`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.adjust('pay_3Nx8a2Lk', {
+  amount: 6500,   // new authorized ceiling — up from 5000
+});`,
+    python: `import vinr
+
+payment = vinr.Payment.adjust(
+    "pay_3Nx8a2Lk",
+    amount=6500,
+)`,
+    ruby: `payment = Vinr::Payment.adjust(
+  'pay_3Nx8a2Lk',
+  amount: 6500,
+)`,
+  }}
+  response={`{
+  "id": "pay_3Nx8a2Lk",
+  "amount": 6500,
+  "amount_authorized": 6500,
+  "amount_capturable": 6500,
+  "status": "requires_capture",
+  "adjustment": {
+    "previous_amount": 5000,
+    "adjusted_at": 1716301200
+  }
+}`}
+/>
+
+<Accordions>
+<Accordion title="Advanced — decrease and acquirer limits">
+
+Pass a `amount` lower than the current authorized amount to **decrease** the hold. Not all card
+networks support authorization decreases — for networks that don't, VINR retains the original hold
+and captures only the lower amount at capture time (releasing the difference automatically).
+
+| Parameter | Type | Description |
+|---|---|---|
+| `amount` | integer | New authorized ceiling in minor units. Must differ from the current amount. |
+
+See [Authorization adjustment](/docs/payments/authorization-adjustment) for the full guide on
+industry-specific use cases (hotel, car rental, tips).
+
+</Accordion>
+</Accordions>
+
+## Reverse a payment
+
+A reversal cancels an authorized-but-not-yet-captured payment and immediately releases the hold.
+Equivalent to `cancel` for most integrations; use `reverse` for acquirers that distinguish between
+a void (same-day same-acquirer release) and a generic cancel.
+
+<ApiExample
+  id="reverse-payment"
+  title="Reverse a payment"
+  method="POST"
+  path="/v1/payments/{id}/reverse"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/payments/pay_3Nx8a2Lk/reverse \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.reverse('pay_3Nx8a2Lk');`,
+    python: `import vinr
+
+payment = vinr.Payment.reverse("pay_3Nx8a2Lk")`,
+    ruby: `payment = Vinr::Payment.reverse('pay_3Nx8a2Lk')`,
+  }}
+  response={`{
+  "id": "pay_3Nx8a2Lk",
+  "amount": 5000,
+  "currency": "EUR",
+  "status": "canceled",
+  "reversal": {
+    "id": "rev_2Ym4b",
+    "reversed_at": 1716301500
+  }
+}`}
+/>
+
+<Accordions>
+<Accordion title="Advanced — partial reversal">
+
+Pass `amount` to release only part of the authorization. Useful when one item in a multi-item
+authorization ships and the rest is cancelled.
+
+```ts
+await vinr.payments.reverse('pay_3Nx8a2Lk', { amount: 2000 });
+// releases 2000 of the 5000 hold; remaining 3000 stays authorized
+```
+
+See [Authorization adjustment](/docs/payments/authorization-adjustment) for the decision matrix
+comparing reverse, void, adjust-down, and refund.
+
+</Accordion>
+</Accordions>
+
 ## Related events
 
-`payment.succeeded`, `payment.requires_action`, `payment.captured`, `payment.failed`, and
-`payment.canceled`. See [Events](/docs/api-reference/events).
+`payment.succeeded`, `payment.requires_action`, `payment.captured`, `payment.failed`,
+`payment.canceled`, `payment.adjusted`, and `payment.reversed`. See [Events](/docs/api-reference/events).

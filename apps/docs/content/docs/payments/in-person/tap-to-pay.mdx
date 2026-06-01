@@ -1,0 +1,251 @@
+---
+title: "Tap to Pay"
+description: "Accept contactless payments directly on an iPhone or Android device — no hardware terminal required."
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+Tap to Pay turns a merchant's iPhone or Android device into a contactless payment terminal. Customers tap a card, Apple Pay, Google Pay, or Samsung Pay wallet directly on the device screen — no companion hardware, no card reader dongle, and no additional accessories required. VINR implements this through Apple's Tap to Pay on iPhone API and the Android NFC payment APIs, so the cryptographic card data never leaves the platform's secure enclave.
+
+## Requirements
+
+<Tabs items={["iOS", "Android"]}>
+<Tab value="iOS">
+
+- iPhone XS or later
+- iOS 16.0 or later
+- VINR iOS SDK (`VinrSDK` via Swift Package Manager)
+- An Apple developer account with the Tap to Pay on iPhone entitlement granted by Apple
+
+</Tab>
+<Tab value="Android">
+
+- Android device with hardware NFC (check `PackageManager.FEATURE_NFC`)
+- Android 9 (API level 28) or later
+- VINR Android SDK (`com.vinr:sdk`) added as a Gradle dependency
+- `android.permission.NFC` declared in your manifest
+
+</Tab>
+</Tabs>
+
+<Callout type="info">
+Tap to Pay on iPhone is available in the United States, United Kingdom, Australia, Canada, and a growing list of European markets. Android NFC acceptance is available wherever VINR processes card-present transactions. Contact [VINR support](mailto:support@vinr.com) to confirm availability in your region before shipping.
+</Callout>
+
+## Accepted payment types
+
+Both iOS and Android accept the following contactless payment types:
+
+| Type | Examples |
+|---|---|
+| Contactless cards | Visa, Mastercard, Amex (physical or virtual, NFC-enabled) |
+| Apple Pay | iPhone, Apple Watch, iPad |
+| Google Pay | Android devices with NFC |
+| Samsung Pay | Samsung Galaxy devices |
+
+Chip+PIN and magnetic stripe are supported only on dedicated VINR hardware terminals. See [Mobile solutions](/docs/payments/in-person/mobile-solutions) for an overview of hardware options.
+
+## iOS integration
+
+<Steps>
+
+### Install the SDK via Swift Package Manager
+
+Add the VINR iOS SDK to your `Package.swift` or via Xcode's package manager UI:
+
+```swift
+dependencies: [
+    .package(
+        url: "https://github.com/vinr/vinr-ios-sdk.git",
+        from: "1.0.0"
+    )
+],
+targets: [
+    .target(
+        name: "YourApp",
+        dependencies: ["VinrSDK"]
+    )
+]
+```
+
+### Request the Tap to Pay entitlement
+
+In the Apple Developer portal, navigate to your App ID, enable the **Tap to Pay on iPhone** capability, and download the updated provisioning profile. Add the entitlement to your `.entitlements` file:
+
+```xml
+<key>com.apple.developer.proximity-reader.payment.acceptance</key>
+<true/>
+```
+
+Apple reviews entitlement requests within one to two business days. Your app will fail to launch Tap to Pay without this entitlement, even in sandbox.
+
+### Discover the reader
+
+Initialize the VINR client and discover the Tap to Pay reader before presenting a payment:
+
+```swift
+import VinrSDK
+
+let vinr = Vinr(secretKey: ProcessInfo.processInfo.environment["VINR_SECRET_KEY"] ?? "")
+
+Task {
+    let reader = try await vinr.tapToPay.discoverReader()
+    try await reader.connect()
+}
+```
+
+### Create a payment intent and collect payment
+
+```swift
+let intent = try await vinr.payments.create(
+    amount: 2500,
+    currency: "USD",
+    captureMethod: .automatic
+)
+
+let result = try await reader.collectPayment(intentId: intent.id)
+```
+
+The SDK presents the built-in Apple UI asking the customer to tap their card or wallet. No custom UI is required.
+
+### Handle the result
+
+```swift
+switch result.status {
+case .succeeded:
+    print("Payment succeeded: \(result.paymentId ?? "")")
+    await fulfillOrder(result.metadata)
+case .requiresCapture:
+    try await vinr.payments.capture(id: result.paymentId ?? "")
+case .failed:
+    print("Payment failed: \(result.errorCode ?? "unknown")")
+default:
+    break
+}
+```
+
+</Steps>
+
+## Android integration
+
+Add the VINR Android SDK to your module-level `build.gradle`:
+
+```kotlin
+dependencies {
+    implementation("com.vinr:sdk:1.+")
+}
+```
+
+Declare NFC permission in `AndroidManifest.xml`:
+
+```xml
+<uses-permission android:name="android.permission.NFC" />
+<uses-feature android:name="android.hardware.nfc" android:required="true" />
+```
+
+Initialize the client and accept a contactless payment:
+
+```kotlin
+import com.vinr.sdk.Vinr
+import com.vinr.sdk.tapTopay.TapToPayReader
+
+val vinr = Vinr(secretKey = System.getenv("VINR_SECRET_KEY") ?: "")
+
+lifecycleScope.launch {
+    val reader = vinr.tapToPay.discoverReader(context)
+    reader.connect()
+
+    val intent = vinr.payments.create(
+        amount = 2500,
+        currency = "USD",
+        captureMethod = "automatic"
+    )
+
+    val result = reader.collectPayment(intentId = intent.id)
+
+    when (result.status) {
+        "succeeded" -> fulfillOrder(result.paymentId)
+        "requires_capture" -> vinr.payments.capture(id = result.paymentId)
+        "failed" -> handleFailure(result.errorCode)
+    }
+}
+```
+
+<TypeTable
+  type={{
+    intentId: { type: "string", description: "ID of a payment intent created server-side (pay_…). Required." },
+    captureMethod: { type: "'automatic' | 'manual'", description: "Whether VINR captures immediately on authorization, or holds for a separate capture call.", default: "automatic" },
+    metadata: { type: "object", description: "Up to 40 key/value pairs attached to the payment and echoed on webhook events." },
+  }}
+/>
+
+## PCI scope
+
+Tap to Pay on iPhone operates under Apple's certified L2 kernel, which carries an Apple-issued SAQ-A equivalent certification. The VINR Android SDK routes sensitive card data exclusively through the device's NFC controller and VINR's PCI-certified processing backend.
+
+<Callout type="warn">
+Never attempt to read, log, or store card data from NFC callback delegates or BroadcastReceivers. The platform APIs intentionally withhold raw card data from the application layer. Any attempt to intercept it will result in a rejected submission on iOS and may violate PCI DSS on Android. VINR's SDK surface only exposes the resulting payment intent ID, never card numbers or CVVs.
+</Callout>
+
+Merchants using Tap to Pay are in the same PCI scope as merchants using VINR-hosted checkout: minimal, with no requirement to handle raw card data. See [Compliance overview](/docs/compliance/pci-dss) for the full scope breakdown.
+
+## Receipts and refunds
+
+VINR automatically sends a digital receipt to the customer's email or phone number if one is associated with their wallet or card. No receipt printer is required.
+
+To refund a Tap to Pay payment, the customer must be present to tap their original card or wallet again. Refunds cannot be issued remotely for card-present transactions; the tap verification confirms the card is still in the customer's possession.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const refund = await vinr.refunds.create({
+  payment: 'pay_3Nf8x2a',
+  reason: 'requested_by_customer',
+});
+```
+
+The refund object follows the same status lifecycle (`pending` → `succeeded` | `failed`) as online refunds. See [Refunds](/docs/payments/refunds) for full details on partial refunds, fee handling, and failure recovery.
+
+<Accordions>
+<Accordion title="Advanced — multiple readers, hardware switching, and offline">
+
+### Managing multiple readers in a session
+
+A single app session can discover and connect to more than one Tap to Pay reader instance, but only one reader can be in the `collectPayment` state at a time. Use reader IDs to track which reader is active and gate your UI accordingly:
+
+```swift
+let readers = try await vinr.tapToPay.discoverAllReaders()
+let activeReader = readers.first(where: { $0.status == .ready })
+```
+
+On Android, call `reader.disconnect()` before switching the active reader to avoid `NFC_CONFLICT` errors.
+
+### Switching between Tap to Pay and a hardware terminal mid-session
+
+If your deployment uses a mix of Tap to Pay and a VINR hardware terminal (for example, a Nexgo CT20 countertop unit alongside a mobile device), disconnect the Tap to Pay reader before initiating a payment on the hardware terminal. Both use the same payment intent pipeline, but the NFC controller and the hardware terminal connection manager compete for the same reader slot in the VINR session.
+
+```swift
+try await tapToPayReader.disconnect()
+try await hardwareTerminal.connect()
+let result = try await hardwareTerminal.collectPayment(intentId: intent.id)
+```
+
+### Offline mode is not supported
+
+Tap to Pay on both iOS and Android requires an active internet connection for every transaction. There is no offline queue or store-and-forward mode for NFC card-present payments. If connectivity is lost mid-transaction, the SDK returns a `connection_unavailable` error and the payment intent remains in `requires_payment_method` state so it can be retried.
+
+For environments with unreliable connectivity, consider a VINR hardware terminal with built-in 4G (Nexgo N92 or Nexgo N86Pro), which maintains a dedicated cellular fallback independent of your venue Wi-Fi.
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Accept a payment" href="/docs/payments/in-person/accept-a-payment" description="End-to-end guide for card-present payment flows with VINR." />
+  <Card title="Mobile solutions" href="/docs/payments/in-person/mobile-solutions" description="Compare Tap to Pay with VINR's Android mPOS hardware options." />
+  <Card title="Refunds" href="/docs/payments/refunds" description="Process full and partial refunds, handle failures, and reconcile." />
+</Cards>

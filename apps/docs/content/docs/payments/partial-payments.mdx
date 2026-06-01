@@ -1,0 +1,287 @@
+---
+title: Partial payments
+description: Let customers pay a single order across multiple payment methods.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+Partial payments let a customer cover a single order using more than one payment method — for example, a gift card for the balance on file and a credit card for the remainder, or two cards split at checkout. Each method is charged only for its portion; the sum of all captured amounts should equal the order total. Common use cases include gift card redemption at checkout, mixed-method POS tender, and deposit-then-balance payment flows.
+
+## How it works
+
+VINR does not have a native "split order" object. Instead, each portion is a standard `payment` created independently and tied to the same order by a shared reference in `metadata`. Your backend owns the order total check: VINR processes and settles each payment on its own rail, and your application decides when the collection of payments fully covers the order.
+
+Every partial payment:
+
+- Has its own `pay_…` identifier and independent lifecycle.
+- Carries `metadata.orderId` (and any other fields you choose) so you can group them server-side.
+- Emits its own lifecycle events (`payment.completed`, `payment.failed`, etc.).
+- Can be refunded independently up to its own captured amount.
+
+The recommended pattern is to store the order total in your own system, create payment objects one at a time, and accumulate `amountCaptured` across all payments sharing the same `orderId` until the sum reaches the order total.
+
+## Create a partial payment
+
+<Steps>
+
+<Step>
+
+### Charge the first method (e.g. gift card)
+
+Create a payment for exactly the amount the first method can cover. Set `metadata.orderId` to your order identifier and `metadata.portion` to `'partial'` so your backend can query grouped payments later.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const giftCardPayment = await vinr.payments.create({
+  amount: 2000,
+  currency: 'EUR',
+  paymentMethod: giftCardPaymentMethodId,
+  description: 'Order #9142 — gift card portion',
+  returnUrl: 'https://yoursite.com/orders/9142/confirm',
+  metadata: {
+    orderId: '9142',
+    portion: 'partial',
+  },
+});
+
+// giftCardPayment.id     → "pay_4Gc7w1b..."
+// giftCardPayment.amount → 2000  (€20.00)
+```
+
+</Step>
+
+<Step>
+
+### Charge the second method for the remainder
+
+Once the first payment reaches `completed`, create a second payment for the outstanding balance. Reuse the same `orderId` and set `portion` to `'final'` to mark it as the settling charge.
+
+```typescript
+const ORDER_TOTAL = 5500; // €55.00 in minor units
+
+const firstCaptured = giftCardPayment.amountCaptured; // 2000
+
+const cardPayment = await vinr.payments.create({
+  amount: ORDER_TOTAL - firstCaptured, // 3500 → €35.00
+  currency: 'EUR',
+  paymentMethod: cardPaymentMethodId,
+  description: 'Order #9142 — card remainder',
+  returnUrl: 'https://yoursite.com/orders/9142/confirm',
+  metadata: {
+    orderId: '9142',
+    portion: 'final',
+  },
+});
+
+// cardPayment.id     → "pay_7Hm2n9d..."
+// cardPayment.amount → 3500  (€35.00)
+```
+
+</Step>
+
+<Step>
+
+### Confirm the customer flow
+
+Each payment that requires customer interaction (3DS, hosted redirect, etc.) has its own `returnUrl`. Redirect the customer to the first payment's hosted URL, wait for `payment.completed`, then present the second payment flow. The `returnUrl` for each can be the same page — use `metadata.portion` to track which step the customer just completed.
+
+</Step>
+
+</Steps>
+
+<Tabs items={["TypeScript SDK", "REST (cURL)"]}>
+<Tab value="TypeScript SDK">
+
+```typescript
+const remainder = await vinr.payments.create({
+  amount: 3500,
+  currency: 'EUR',
+  paymentMethod: cardPaymentMethodId,
+  metadata: { orderId: '9142', portion: 'final' },
+});
+```
+
+</Tab>
+<Tab value="REST (cURL)">
+
+```bash
+curl https://api.vinr.com/v1/payments \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 3500,
+    "currency": "EUR",
+    "paymentMethod": "pm_...",
+    "metadata": { "orderId": "9142", "portion": "final" }
+  }'
+```
+
+</Tab>
+</Tabs>
+
+## Tracking order completion
+
+Listen for `payment.completed` on each partial payment. In your webhook handler, sum `amountCaptured` across all payments that share the same `orderId` and compare the total to the order amount stored in your system.
+
+```typescript
+const event = vinr.webhooks.verify(rawBody, req.headers['x-vinr-signature']);
+
+if (event.type === 'payment.completed') {
+  const payment = event.data;
+  const orderId = payment.metadata?.orderId;
+
+  if (orderId) {
+    await recordPartialCapture(orderId, payment.id, payment.amountCaptured);
+
+    const totalCaptured = await sumCapturedForOrder(orderId);
+    const orderTotal = await getOrderTotal(orderId);
+
+    if (totalCaptured >= orderTotal) {
+      await markOrderPaid(orderId);
+    }
+  }
+}
+```
+
+<Callout type="warn">
+VINR does not auto-link partial payments or track whether they collectively satisfy an order total. Your application owns the order completion check. If the second payment fails, your backend must decide whether to retry, request a new method, or cancel and refund the first payment.
+</Callout>
+
+## Refunds on partial orders
+
+Each partial payment is refunded independently via its own `pay_…` ID, up to its own captured amount. A full order refund means issuing a separate refund for each payment that contributed to the order.
+
+```typescript
+async function refundOrder(orderId: string): Promise<void> {
+  const payments = await getPaymentsForOrder(orderId);
+
+  for (const payment of payments) {
+    if (payment.amountCaptured > 0 && payment.amountRefunded < payment.amountCaptured) {
+      const refundable = payment.amountCaptured - payment.amountRefunded;
+
+      await vinr.refunds.create({
+        payment: payment.id,
+        amount: refundable,
+        reason: 'requested_by_customer',
+        metadata: { orderId },
+      });
+    }
+  }
+}
+```
+
+To refund only a portion of the order (e.g. one line item), determine which payment covered that item and issue a targeted refund against that payment's ID. See [Refunds](/docs/payments/refunds) for status lifecycle and fee behaviour.
+
+<Callout type="info">
+A refund can never exceed a single payment's captured amount. If a line item spans two payments — which is unusual but possible in open-ended split flows — you will need to issue two separate refunds.
+</Callout>
+
+## Partial payment fields
+
+<TypeTable
+  type={{
+    amount: {
+      type: "integer",
+      description: "The portion this payment covers, in minor units (e.g. 2000 = €20.00). Each partial payment carries only its own slice of the order total.",
+    },
+    "metadata.orderId": {
+      type: "string",
+      description: "Your order identifier. Set identically on every payment belonging to the same order so you can group and reconcile them server-side.",
+    },
+    "metadata.portion": {
+      type: "string",
+      description: "Informational tag for your backend. Recommended values: 'partial' for non-final charges, 'final' for the settling payment. VINR does not interpret this field.",
+    },
+  }}
+/>
+
+## Advanced
+
+<Accordions>
+<Accordion title="Gift card + card split at checkout">
+
+The most common partial-payment pattern is a gift card that covers part of the balance and a card that covers the rest. Because gift card payment methods are typically non-interactive (no 3DS, no redirect), you can charge the gift card synchronously and only redirect the customer for the card step:
+
+```typescript
+const gc = await vinr.payments.create({
+  amount: giftCardBalance,
+  currency: 'EUR',
+  paymentMethod: giftCardPmId,
+  captureMethod: 'automatic',
+  metadata: { orderId, portion: 'partial' },
+});
+
+if (gc.status === 'completed') {
+  const remaining = orderTotal - gc.amountCaptured;
+
+  const card = await vinr.payments.create({
+    amount: remaining,
+    currency: 'EUR',
+    paymentMethod: cardPmId,
+    returnUrl: `https://yoursite.com/orders/${orderId}/confirm`,
+    metadata: { orderId, portion: 'final' },
+  });
+
+  return { redirectUrl: card.hostedUrl };
+}
+```
+
+If the gift card charge fails (e.g. insufficient balance), do not proceed to the card step. Surface the error and ask the customer to enter a different gift card or pay the full amount by card.
+
+</Accordion>
+<Accordion title="Loyalty points redemption offset">
+
+Loyalty point redemptions are typically fulfilled as a discount rather than a payment rail — your platform converts points to a currency credit and reduces the chargeable amount. If you model the loyalty redemption as a zero-amount (or discounted-amount) entry in your order ledger, only the remaining balance needs a VINR payment:
+
+```typescript
+const pointsCredit = redeemLoyaltyPoints(customerId, pointsToRedeem); // e.g. 500 minor units
+const chargeAmount = Math.max(0, orderTotal - pointsCredit);
+
+if (chargeAmount > 0) {
+  await vinr.payments.create({
+    amount: chargeAmount,
+    currency: 'EUR',
+    paymentMethod: cardPmId,
+    metadata: { orderId, pointsApplied: pointsCredit },
+  });
+}
+```
+
+Record the points redemption in your own ledger. Do not create a VINR payment for the points portion unless your loyalty programme is itself backed by a VINR-managed balance.
+
+</Accordion>
+<Accordion title="POS split-tender flow">
+
+In point-of-sale environments, a customer may want to split a payment across two physical cards or a card and cash. Cash is handled entirely outside VINR; create a single payment for the card portion only, with `metadata.cashTendered` to record the full tender picture for reconciliation:
+
+```typescript
+const cashTendered = 1000; // €10.00 cash, handled at terminal
+
+await vinr.payments.create({
+  amount: orderTotal - cashTendered,
+  currency: 'EUR',
+  paymentMethod: cardPmId,
+  metadata: {
+    orderId,
+    cashTendered,
+    posTerminalId: terminal.id,
+  },
+});
+```
+
+For two-card splits at a POS terminal, follow the same sequence as the gift card + card pattern above: charge the first card, confirm `payment.completed` via webhook or synchronous poll, then present the second card prompt for the remainder. Most POS SDKs support this with a single-tender loop.
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Partial authorization" href="/docs/payments/partial-authorization" description="Capture less than the authorized amount and release the rest." />
+  <Card title="Refunds" href="/docs/payments/refunds" description="Reverse captured funds on any individual payment object." />
+  <Card title="Payment lifecycle" href="/docs/payments/payment-lifecycle" description="Every payment status and the events that fire on each transition." />
+</Cards>

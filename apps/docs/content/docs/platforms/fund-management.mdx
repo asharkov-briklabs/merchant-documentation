@@ -1,0 +1,125 @@
+---
+title: Fund management
+description: Balance accounts, reserve accounts, internal transfers, and sweep rules for managing sub-merchant funds.
+---
+
+Every sub-merchant on your platform gets a **balance account** — a virtual ledger where their split proceeds accumulate before being paid out to their bank account. Your platform account also has a balance account for your own earnings.
+
+## Account structure
+
+```
+Platform account (liable account)
+├── Platform balance account          ← platform commission lands here
+├── Reserve account                   ← held funds buffer
+└── Sub-merchant accounts
+    ├── Sub-merchant A balance account
+    ├── Sub-merchant B balance account
+    └── ...
+```
+
+### Balance accounts
+
+A balance account holds settled funds for a single entity. Funds arrive via:
+- Payment splits (sub-merchant share)
+- Internal transfers from the platform
+- Top-ups (funds added by the platform on behalf of the sub-merchant)
+
+Funds leave via:
+- Payouts to the sub-merchant's bank account
+- Internal transfers to the platform or other balance accounts
+- Refunds and chargeback reversals
+
+### Reserve accounts
+
+A reserve account is a separate ledger used to hold back a portion of funds as a risk buffer. The platform sets a reserve policy (percentage or fixed amount) and VINR withholds that amount from payouts until the reserve target is met.
+
+Use reserves to:
+- Cover potential chargeback liability from sub-merchants with elevated dispute rates
+- Hold funds during new sub-merchant probationary periods
+- Meet regulatory requirements in certain markets
+
+```json
+POST /v1/platform/sub-merchants/{id}/reserve-policy
+{
+  "type": "percentage",
+  "percentage": 10,
+  "holding_days": 90
+}
+```
+
+---
+
+## Internal transfers
+
+Move funds between balance accounts within your platform without triggering a bank-level payout:
+
+```json
+POST /v1/platform/transfers
+{
+  "from_balance_account": "ba_platform",
+  "to_balance_account":   "ba_seller_abc",
+  "amount": 5000,
+  "currency": "USD",
+  "description": "Bonus payment"
+}
+```
+
+Use cases:
+- Pay bonuses or incentives to sub-merchants
+- Correct a mis-split from a prior payment
+- Top up a sub-merchant account in advance of a high-volume period
+
+---
+
+## Sweeps (automated fund movement)
+
+A sweep rule automatically moves funds between balance accounts on a schedule. Configure them to:
+- Transfer sub-merchant earnings to their payout balance daily
+- Replenish reserve accounts from incoming settlements
+- Zero out temporary holding accounts at end of day
+
+```json
+POST /v1/platform/balance-accounts/{id}/sweeps
+{
+  "schedule": { "type": "daily", "time": "22:00" },
+  "target_balance_account": "ba_platform_main",
+  "sweep_type": "pull",
+  "trigger": "balance_exceeds",
+  "trigger_amount": 0
+}
+```
+
+Sweep types: `push` (source → target) and `pull` (target draws from source).
+
+---
+
+## Top-ups
+
+Add funds to a sub-merchant's balance account directly from the platform — for example, to pre-fund a merchant before they've earned enough to cover a payout:
+
+```json
+POST /v1/platform/sub-merchants/{id}/top-ups
+{
+  "amount": 10000,
+  "currency": "USD",
+  "source": "ba_platform"
+}
+```
+
+---
+
+## Balance webhooks
+
+| Event | Trigger |
+|---|---|
+| `balance_account.balance.updated` | Balance changes (credit or debit) |
+| `balance_account.sweep.completed` | Sweep executed successfully |
+| `balance_account.sweep.failed` | Sweep failed (insufficient funds) |
+| `reserve_account.threshold_reached` | Reserve target met |
+
+---
+
+## Next steps
+
+- [Payouts](/docs/platforms/payouts) — how funds move from balance accounts to bank accounts
+- [Split payments](/docs/platforms/split-payments) — how funds arrive in balance accounts

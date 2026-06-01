@@ -225,7 +225,9 @@ const QUICK_LINKS: { title: string; links: { label: string; href: string }[] }[]
     links: [
       { label: "Accept payments online", href: "/docs/payments" },
       { label: "Payment methods & rails", href: "/docs/payments/payment-methods" },
-      { label: "Accept payments in-person", href: "/docs/payments" },
+      { label: "Accept payments in-person", href: "/docs/payments/in-person" },
+      { label: "Unified commerce", href: "/docs/payments/omnichannel" },
+      { label: "Plugins", href: "/docs/payments/plugins" },
     ],
   },
   {
@@ -248,11 +250,11 @@ const QUICK_LINKS: { title: string; links: { label: string; href: string }[] }[]
 
 const TRY_TASKS: { label: string; href: string }[] = [
   { label: "Accept a payment", href: "/docs/guides/accept-a-payment" },
+  { label: "Collect an in-person payment", href: "/docs/guides/collect-in-person-payment" },
+  { label: "Install the WooCommerce plugin", href: "/docs/guides/install-the-woocommerce-plugin" },
   { label: "Create a subscription", href: "/docs/billing/subscriptions/creating-subscriptions" },
-  { label: "Send an invoice", href: "/docs/guides/send-an-invoice" },
   { label: "Save & reuse cards", href: "/docs/guides/save-and-reuse-cards" },
   { label: "Earn loyalty at checkout", href: "/docs/guides/earn-loyalty-at-checkout" },
-  { label: "Reconcile settlements", href: "/docs/guides/reconcile-settlements" },
 ];
 
 const PRODUCT_BUCKETS: { group: string; slugs: Category[] }[] = [

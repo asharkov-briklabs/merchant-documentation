@@ -1,0 +1,219 @@
+---
+title: Go omnichannel
+description: Link your online and in-store channels so shoppers can save cards online and reuse them in person, and earn loyalty on every purchase.
+category: "payments"
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-06-01"
+---
+
+This guide walks you through connecting your online checkout to your in-store terminal so shoppers can save a card on your website, pay faster at the counter, and see their loyalty balance grow across both channels. By the end you'll have a single `shopperReference` tying every purchase together, a saved card token reusable at the terminal, and a webhook handler that credits loyalty points regardless of where the payment happens.
+
+## Overview
+
+```
+online checkout (save card)
+    │  payments.create({ shopperReference, setupFutureUsage: 'recurring' })
+    │─────────────────────────────────────────► VINR
+    │  pm_… token                              │
+    │◄──────────────────────────────────────────│
+    │  store pm_ against shopperReference      │
+    │
+    ▼
+in-store terminal (reuse token)
+    │  terminal.payments.create({ shopperReference, paymentMethod: 'pm_…' })
+    │─────────────────────────────────────────► VINR ──► terminal
+    │  terminal_payment.completed (webhook)    │
+    │◄──────────────────────────────────────────│
+    │
+    ▼
+loyalty credited across channels
+    │  engagement.loyalty.credit({ shopperReference, orderId, amount })
+    │─────────────────────────────────────────► VINR
+```
+
+## Step 1 — Identify shoppers with a shopperReference
+
+A `shopperReference` is the stable identifier you assign to each customer. Add it to every `payments.create` and `terminal.payments.create` call so VINR can link the shopper's history across channels.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const onlinePayment = await vinr.payments.create(
+  {
+    amount: 7500,
+    currency: 'EUR',
+    description: 'Order ord_9921',
+    returnUrl: 'https://yoursite.com/orders/ord_9921/complete',
+    shopperReference: 'ada@example.com',
+    shopperEmail: 'ada@example.com',
+    metadata: { orderId: 'ord_9921' },
+  },
+  { idempotencyKey: 'order-ord_9921' },
+);
+
+const terminalPayment = await vinr.terminal.payments.create(
+  {
+    terminalId: 'term_store01_lane2',
+    amount: 3200,
+    currency: 'EUR',
+    shopperReference: 'ada@example.com',
+    shopperEmail: 'ada@example.com',
+    metadata: { orderId: 'ord_9944' },
+  },
+  { idempotencyKey: 'order-ord_9944' },
+);
+```
+
+<TypeTable
+  type={{
+    shopperReference: { type: "string", description: "Your stable customer ID — typically their email address or your internal user ID. Used by VINR to link saved cards, loyalty, and purchase history across channels.", default: "—" },
+    shopperEmail: { type: "string", description: "Customer email address. Included for receipt delivery and shopper recognition; does not need to match shopperReference.", default: "—" },
+  }}
+/>
+
+<Callout type="warn">
+`shopperReference` must be stable. Never change it for a returning customer — doing so breaks the link to their saved cards and loyalty account across every channel.
+</Callout>
+
+## Step 2 — Save a card during online checkout and reuse it in store
+
+Set `setupFutureUsage: 'recurring'` on the online payment to instruct VINR to store the card and run the authentication needed for future merchant-initiated charges.
+
+```typescript
+export async function POST(req: Request) {
+  const { orderId, customerId, shopperReference } = await req.json();
+
+  const payment = await vinr.payments.create(
+    {
+      amount: 7500,
+      currency: 'EUR',
+      description: `Order ${orderId}`,
+      returnUrl: `https://yoursite.com/orders/${orderId}/complete`,
+      shopperReference,
+      shopperEmail: `${shopperReference}`,
+      setupFutureUsage: 'recurring',
+      metadata: { orderId, customerId },
+    },
+    { idempotencyKey: `order-${orderId}` },
+  );
+
+  return Response.json({ checkoutUrl: payment.checkoutUrl });
+}
+```
+
+When the payment completes, VINR emits `payment.completed` with a `paymentMethod` field containing the saved `pm_…` token. Persist it against the `shopperReference`.
+
+```typescript
+export async function POST(req: Request) {
+  const event = vinr.webhooks.verify(
+    await req.text(),
+    req.headers.get('x-vinr-signature'),
+  );
+
+  if (event.type === 'payment.completed' && event.data.paymentMethod) {
+    await db.saveToken({
+      shopperReference: event.data.shopperReference,
+      paymentMethodId: event.data.paymentMethod.id,
+      brand: event.data.paymentMethod.card.brand,
+      last4: event.data.paymentMethod.card.last4,
+    });
+  }
+  return new Response('OK', { status: 200 });
+}
+```
+
+At the terminal, look up the saved token for the shopper and pass it directly. VINR presents a tap-to-confirm prompt on the terminal; the customer does not re-enter their card details.
+
+```typescript
+export async function POST(req: Request) {
+  const { orderId, shopperReference } = await req.json();
+
+  const { paymentMethodId } = await db.getToken(shopperReference);
+
+  const payment = await vinr.terminal.payments.create(
+    {
+      terminalId: 'term_store01_lane2',
+      amount: 3200,
+      currency: 'EUR',
+      shopperReference,
+      paymentMethod: paymentMethodId,
+      metadata: { orderId },
+    },
+    { idempotencyKey: `order-${orderId}` },
+  );
+
+  return Response.json({ status: payment.status });
+}
+```
+
+<Callout type="info">
+The customer taps to confirm at the terminal but does not re-enter card details. VINR uses the stored recurring mandate, so no additional 3D Secure challenge is required.
+</Callout>
+
+## Step 3 — Credit loyalty on every channel
+
+Both `payment.completed` (online) and `terminal_payment.completed` (in-store) carry `shopperReference`. Handle them in the same webhook so loyalty points accumulate regardless of channel.
+
+```typescript
+export async function POST(req: Request) {
+  const event = vinr.webhooks.verify(
+    await req.text(),
+    req.headers.get('x-vinr-signature'),
+  );
+
+  const isPaymentEvent =
+    event.type === 'payment.completed' ||
+    event.type === 'terminal_payment.completed';
+
+  if (!isPaymentEvent) {
+    return new Response('OK', { status: 200 });
+  }
+
+  const { shopperReference, id: paymentId, amount, metadata } = event.data;
+
+  await vinr.engagement.loyalty.credit(
+    {
+      shopperReference,
+      orderId: metadata.orderId,
+      amount,
+      source: { payment: paymentId },
+    },
+    { idempotencyKey: `loyalty-${metadata.orderId}` },
+  );
+
+  return new Response('OK', { status: 200 });
+}
+```
+
+Points are reflected in the shopper's loyalty account immediately. Their balance appears on their next digital receipt and in any loyalty UI you build using the [cross-channel loyalty API](/docs/payments/omnichannel/cross-channel-loyalty).
+
+## What you've built
+
+<Steps>
+
+### Unified shopper identity
+
+Every payment — online or in-store — now carries a `shopperReference` that VINR uses to link saved cards, purchase history, and loyalty across channels.
+
+### Frictionless in-store checkout
+
+A shopper who saves their card on your website can pay at any terminal with a single tap. No card re-entry, no additional authentication prompts.
+
+### Channel-agnostic loyalty
+
+Both `payment.completed` and `terminal_payment.completed` feed the same loyalty credit handler, so points accumulate on every purchase. The shopper sees a unified balance on their next digital receipt.
+
+</Steps>
+
+Your shoppers can now save a card on your website, pay faster in store, and see their loyalty points balance grow across both channels. Explore the full unified commerce feature set at [Omnichannel payments](/docs/payments/omnichannel).
+
+## Next steps
+
+<Cards>
+  <Card title="Shopper recognition" href="/docs/payments/omnichannel/shopper-recognition" description="Look up a shopper's profile, saved cards, and history at the point of sale." />
+  <Card title="Click and collect" href="/docs/payments/omnichannel/click-and-collect" description="Let shoppers pay online and pick up in store, with real-time order status at the terminal." />
+  <Card title="Loyalty accounts" href="/docs/engagement/loyalty-accounts" description="Manage point balances, tiers, and redemptions across every channel." />
+</Cards>

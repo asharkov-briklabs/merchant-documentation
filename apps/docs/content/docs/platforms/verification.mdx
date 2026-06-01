@@ -1,0 +1,109 @@
+---
+title: Verification & KYC/KYB
+description: Identity and business verification requirements for sub-merchants — individual KYC, business KYB, UBO collection, and country-specific documents.
+---
+
+VINR must verify every sub-merchant before enabling payment acceptance or payouts. Requirements vary by legal entity type and country of incorporation.
+
+## Entity types
+
+| Type | Verification required |
+|---|---|
+| Individual / sole trader | Government-issued ID, proof of address |
+| Company / LLC | Business registration, UBO details, director ID |
+| Partnership | Partnership agreement, partner IDs |
+| Non-profit | Registration certificate, signatory ID |
+
+---
+
+## KYC — individuals
+
+For individual sub-merchants or the named representative of a business entity:
+
+- **Government-issued ID** — passport, national ID card, or driver's licence
+- **Proof of address** — utility bill or bank statement dated within 90 days
+- **Selfie / liveness check** — required in select markets (US, UK, Australia, Thailand)
+
+Documents must be in Latin-script or accompanied by a certified translation.
+
+---
+
+## KYB — businesses
+
+For registered companies, LLCs, and other legal entities:
+
+- **Proof of registration** — certificate of incorporation, company extract from national registry
+- **Proof of address** — registered office address matching the registry record
+- **Memorandum / articles of association** — required in some jurisdictions (UAE, India)
+- **Ultimate Beneficial Owner (UBO) details** — any person owning ≥25% of the entity
+
+### UBO collection
+
+VINR requires disclosure of all individuals who own or control ≥25% of the sub-merchant entity (directly or indirectly). For each UBO:
+
+1. Full legal name and date of birth
+2. Residential address
+3. Ownership percentage
+4. Government-issued ID (same standards as individual KYC)
+
+If no individual meets the 25% threshold, the senior managing official (CEO / director) must be identified as the controlling person.
+
+---
+
+## Capabilities system
+
+Verification unlocks **capabilities**. Sub-merchants start with no capabilities; each passes after the corresponding check clears:
+
+| Capability | Requires |
+|---|---|
+| `card_payments` | Identity verification complete |
+| `bank_transfers` | Identity + bank account ownership verified |
+| `payouts` | Full KYC/KYB + bank account |
+| `in_person_payments` | Identity + terminal agreement |
+| `cross_border_payouts` | Enhanced due diligence (EDD) |
+
+Your platform can query a sub-merchant's current capabilities at any time:
+
+```
+GET /v1/platform/sub-merchants/{id}/capabilities
+```
+
+---
+
+## Country-specific requirements
+
+| Country | Additional requirements |
+|---|---|
+| United States | EIN (businesses), SSN last 4 (individuals), 1099 tax reporting threshold |
+| European Union | UBO attestation template, digital attestation accepted |
+| United Kingdom | Companies House number match |
+| Australia / NZ | ABN/ACN, trust deed for trust entities |
+| Singapore | SingPass MyInfo integration available; unverified accounts closed after 120 days |
+| UAE | Trade licence, memorandum of association |
+| India | PAN card, GST registration (if applicable) |
+| Japan | Japanese kana and kanji scripts both required |
+| Canada | Director registry name match |
+
+---
+
+## Ongoing compliance
+
+Verification is not one-time. VINR may trigger periodic reviews:
+
+- **Annual review** for high-volume sub-merchants
+- **Event-triggered review** after a sanctions screening hit, unusual activity, or significant ownership change
+- **Document expiry** — IDs with expiry dates must be refreshed before expiry
+
+VINR fires `sub_merchant.verification.review_required` when a periodic review is needed. Until resolved, the sub-merchant's capabilities may be restricted.
+
+---
+
+## Sanctions screening
+
+All sub-merchants are screened against OFAC, EU, UN, and local sanctions lists at onboarding and on an ongoing basis. A match triggers:
+
+1. Immediate capability restriction
+2. `sub_merchant.sanctions.flagged` webhook to your platform
+3. Enhanced document collection request
+
+Contact your VINR platform manager if a sub-merchant believes they have been incorrectly flagged.

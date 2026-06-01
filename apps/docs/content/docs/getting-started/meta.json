@@ -4,12 +4,13 @@
   "icon": "Rocket",
   "pages": [
     "index",
+    "core-concepts",
     "quick-start",
     "account-setup",
     "authentication",
+    "integration-overview",
     "test-mode",
     "sdks",
-    "integration-overview",
     "go-live-checklist",
     "glossary"
   ]

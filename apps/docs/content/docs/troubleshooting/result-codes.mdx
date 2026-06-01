@@ -1,0 +1,170 @@
+---
+title: "Result codes"
+description: Complete reference for VINR payment and authentication result codes, decline codes, and ECI values — with recommended actions for each.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+VINR attaches a `resultCode` to every payment and authentication attempt. Use it — not the HTTP status code — to route application logic: retry the charge, prompt the customer to update their payment method, or suppress a specific error message. The HTTP status only tells you whether the API call succeeded; `resultCode` tells you what the _payment_ did.
+
+## How to read codes
+
+Every payment object and `payment.*` webhook payload carries two fields:
+
+- **`resultCode`** — the top-level outcome of the attempt (e.g. `Authorised`, `Refused`, `Pending`).
+- **`declineCode`** — present only when `resultCode` is `Refused`; the specific reason the issuer or VINR returned.
+
+```json
+{
+  "id": "pay_3Kd9aZ2eRb",
+  "resultCode": "Refused",
+  "declineCode": "insufficient_funds",
+  "amount": { "value": 2500, "currency": "EUR" },
+  "customer": "cust_8Qm2"
+}
+```
+
+The same structure appears on the `payment.failed` webhook event:
+
+```json
+{
+  "event": "payment.failed",
+  "data": {
+    "id": "pay_3Kd9aZ2eRb",
+    "resultCode": "Refused",
+    "declineCode": "insufficient_funds"
+  }
+}
+```
+
+<Callout type="info">
+Branch your control flow on `resultCode` first, then on `declineCode` for fine-grained handling. Never key logic off the human-readable `message` — it can change without notice.
+</Callout>
+
+## Authorization result codes
+
+| resultCode | Meaning | Recommended action |
+|---|---|---|
+| `Authorised` | The issuer approved the charge. | Fulfil the order or capture the hold. |
+| `Refused` | The issuer or VINR declined the charge. | Inspect `declineCode` and act accordingly (see below). |
+| `Error` | A technical error prevented a decision. | Retry with a fresh idempotency key; contact support if it persists. |
+| `Cancelled` | The shopper or merchant cancelled before completion. | Allow the customer to restart checkout. |
+| `Pending` | The payment is waiting for an out-of-band confirmation (e.g. bank transfer). | Poll or listen for a `payment.completed` webhook before fulfilling. |
+| `Received` | VINR has received the request but the outcome is not yet known (async rails). | Wait for a status update event; do not fulfil yet. |
+| `PresentToShopper` | A voucher or payment instruction must be presented to the customer. | Render the voucher or instructions from the payment response. |
+| `IdentifyShopper` | The issuer needs the shopper fingerprinted before proceeding. | Trigger the device fingerprint step in your front end. |
+| `ChallengeShopper` | A 3DS2 challenge is required. | Open the challenge window; resume the payment on completion. |
+| `RedirectShopper` | The customer must be redirected to complete authentication (e.g. 3DS1, iDEAL). | Redirect to the URL in `action.url`; handle the return. |
+| `AuthenticationFinished` | 3DS authentication completed. | Submit the authentication result to finalise the payment. |
+| `AuthenticationNotRequired` | Liability shift applied without a challenge (frictionless). | Proceed to authorisation; no customer action needed. |
+
+## Decline codes
+
+`declineCode` is populated whenever `resultCode` is `Refused`. It carries the issuer's or VINR's specific reason.
+
+| declineCode | Description | Recoverable | Recommended action |
+|---|---|---|---|
+| `insufficient_funds` | The card does not have enough balance or credit for this amount. | Yes | Retry later or ask for a different payment method. |
+| `card_declined` | Generic issuer decline — no specific reason given. | Yes | Retry once later; if it fails again, ask for a different method. |
+| `expired_card` | The card's expiry date has passed. | No | Prompt the customer to update or replace their card. |
+| `incorrect_cvc` | The CVC/CVV entered does not match issuer records. | No | Re-prompt for the security code; do not retry without correction. |
+| `stolen_card` | The card was reported stolen. | No | Block further attempts on this card; do not surface reason to the customer. |
+| `lost_card` | The card was reported lost. | No | Block further attempts on this card; do not surface reason to the customer. |
+| `do_not_honor` | The issuer declined without a specific reason (often a soft decline). | Yes | Retry on a delayed schedule (e.g. 24 h); if persistent, ask for a different method. |
+| `do_not_honor_retry` | Issuer declined and explicitly asked not to retry immediately. | Yes (later) | Wait at least 24 h before retrying; respect the issuer's signal. |
+| `issuer_unavailable` | The issuer's systems could not be reached. | Yes | Retry with the same idempotency key after a short delay. |
+| `transaction_not_permitted` | The card type or account does not permit this transaction type. | No | Ask the customer to use a different card. |
+| `restricted_card` | The card is subject to a restriction (region, merchant category, etc.). | No | Ask for an alternative payment method. |
+| `card_velocity_exceeded` | The card has hit its transaction frequency or spend limit. | Yes (later) | Retry after the limit window resets; inform the customer. |
+| `invalid_amount` | The transaction amount is outside the range permitted for this card. | No | Verify amount formatting (positive integer, minor units); check minimum/maximum for the currency. |
+| `invalid_card_number` | The card number did not pass the Luhn check or is not a recognised BIN. | No | Re-prompt the customer for their card number. |
+| `processing_error` | A transient error at the card network or VINR rail; no issuer decision reached. | Yes | Retry immediately with the same idempotency key. |
+| `fraud_decline` | Blocked by VINR Radar or a custom fraud rule before reaching the issuer. | No | Review your Radar rule set; do not retry without investigating. |
+| `authentication_failed` | A 3DS authentication was attempted but the cardholder failed the challenge. | Yes | Re-initiate the 3DS flow; the customer may have entered the wrong OTP. |
+| `card_not_supported` | The card does not support the requested transaction type (e.g. recurring on a prepaid card). | No | Ask the customer to use a credit or debit card that supports this transaction. |
+| `currency_not_supported` | The card or issuer does not accept the presented currency. | No | Offer local currency checkout or ask for a different payment method. |
+| `pickup_card` | The issuer has instructed the merchant to retain the card (in-person) or to permanently block it (online). | No | Treat as a hard block; do not retry or surface the reason to the customer. |
+
+<Callout type="warn">
+Never display the raw `declineCode` or issuer message to the cardholder for fraud-related codes (`stolen_card`, `lost_card`, `fraud_decline`, `pickup_card`). Show a generic decline message and log the code server-side.
+</Callout>
+
+## Authentication result codes
+
+3D Secure outcomes are reported as an ECI (Electronic Commerce Indicator) value alongside the card scheme's authentication result. The ECI drives liability shift.
+
+| ECI | Meaning | Liability shift |
+|---|---|---|
+| `05` | Fully authenticated — the cardholder completed the 3DS challenge successfully. | Yes — shifted to the issuer. |
+| `06` | Authentication attempted — 3DS was triggered but the issuer or cardholder did not complete a full challenge (frictionless or unavailable). | Partial — check scheme rules for your region. |
+| `07` | Not authenticated — 3DS was not performed or failed. | No — merchant bears liability. |
+| `01` (Amex) | Successful authentication (American Express equivalent of `05`). | Yes |
+| `02` (Amex) | Attempted authentication (American Express equivalent of `06`). | Partial |
+
+<Callout type="info">
+VINR sets `resultCode: AuthenticationNotRequired` for low-value or low-risk transactions where the issuer grants a frictionless exemption. These payments still receive ECI `06` and benefit from partial liability shift in most schemes.
+</Callout>
+
+## Using codes in your application
+
+The pattern below covers the most common routing decisions based on `declineCode`:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+async function handlePaymentResult(paymentId: string) {
+  const payment = await vinr.payments.retrieve(paymentId);
+
+  if (payment.resultCode === 'Authorised') {
+    return fulfillOrder(payment);
+  }
+
+  if (payment.resultCode === 'ChallengeShopper' || payment.resultCode === 'RedirectShopper') {
+    return initiateAuthenticationFlow(payment.action);
+  }
+
+  if (payment.resultCode !== 'Refused') {
+    return waitForWebhook(payment.id);
+  }
+
+  switch (payment.declineCode) {
+    case 'insufficient_funds':
+    case 'do_not_honor':
+    case 'do_not_honor_retry':
+    case 'issuer_unavailable':
+    case 'processing_error':
+      return scheduleRetry(payment.id, { delayMs: 24 * 60 * 60 * 1000 });
+
+    case 'expired_card':
+    case 'incorrect_cvc':
+    case 'invalid_card_number':
+    case 'card_not_supported':
+    case 'currency_not_supported':
+      return promptCustomerToUpdateCard(payment.customer, {
+        reason: 'Your card details need to be updated.',
+      });
+
+    case 'authentication_failed':
+      return reinitiateThreeDSecure(payment);
+
+    case 'stolen_card':
+    case 'lost_card':
+    case 'fraud_decline':
+    case 'pickup_card':
+      return blockFurtherAttempts(payment.customer);
+
+    default:
+      return promptCustomerForAlternativeMethod(payment.customer);
+  }
+}
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Declines & failures" href="/docs/troubleshooting/declines-and-failures" description="Root causes, soft vs. hard declines, and smart retry schedules." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Receive payment.failed and other status events in real time." />
+</Cards>

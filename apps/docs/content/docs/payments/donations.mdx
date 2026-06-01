@@ -1,0 +1,197 @@
+---
+title: Donations
+description: Accept charitable donations at checkout with preset amounts, free entry, and round-up flows.
+persona: ["developer", "business-owner"]
+priority: "P2"
+lastUpdated: "2026-05-31"
+---
+
+VINR supports charitable donation flows alongside regular payments. You can offer customers fixed preset amounts to choose from, an open free-form entry field, or a round-up-to-donate prompt at checkout. Under the hood every donation is a standard `payment` with a `donation` flag set — that flag changes receipt language, adds a charity line to the settlement record, and adjusts the reporting category so donation totals stay separate from your trading revenue.
+
+## Preset and free-form amounts
+
+Use a Checkout session when you want VINR to host the donation UI. Pass `donationType: 'preset'` and an `amounts` array to render a set of selectable buttons; pass `donationType: 'open'` to render a text field where the donor enters any amount.
+
+<Tabs items={["Preset amounts", "Free-form entry"]}>
+
+<Tab value="Preset amounts">
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const session = await vinr.checkout.sessions.create({
+  currency: 'GBP',
+  description: 'Donate to the VINR Community Fund',
+  returnUrl: 'https://yoursite.com/donate/thanks',
+  donation: {
+    type: 'preset',
+    amounts: [500, 1000, 2500],
+    charityName: 'VINR Community Fund',
+    charityRegNumber: 'GB-CHY-123456',
+    taxDeductible: true,
+  },
+  metadata: { campaign: 'spring-2026' },
+});
+
+// session.url → "https://checkout.vinr.com/c/cs_..."
+// Hosted checkout renders three buttons: £5 · £10 · £25
+```
+
+</Tab>
+
+<Tab value="Free-form entry">
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const session = await vinr.checkout.sessions.create({
+  currency: 'GBP',
+  description: 'Donate any amount to the VINR Community Fund',
+  returnUrl: 'https://yoursite.com/donate/thanks',
+  donation: {
+    type: 'open',
+    charityName: 'VINR Community Fund',
+    charityRegNumber: 'GB-CHY-123456',
+    taxDeductible: true,
+  },
+  metadata: { campaign: 'spring-2026' },
+});
+
+// session.url → "https://checkout.vinr.com/c/cs_..."
+// Hosted checkout renders a free-text amount field
+```
+
+</Tab>
+
+</Tabs>
+
+When a donor completes the session VINR creates a `pay_…` object on your behalf. The `donation` sub-object on that payment is set automatically from the session configuration — you do not need to set it again on the resulting payment.
+
+## Round-up donations
+
+Round-up donations let a customer top their order total up to the nearest whole currency unit and give the difference to charity. Pass `donation: { type: 'roundUp' }` on any payment creation request. VINR calculates the round-up at checkout, presents it to the customer as an opt-in, and — if accepted — charges the rounded total. The `donationAmount` field on the completed payment tells you how much was donated.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 1870,
+  currency: 'EUR',
+  description: 'Order #3041',
+  returnUrl: 'https://yoursite.com/orders/3041/complete',
+  donation: {
+    type: 'roundUp',
+    charityName: 'VINR Community Fund',
+    charityRegNumber: 'EU-CHY-789012',
+    taxDeductible: false,
+  },
+  metadata: { orderId: '3041' },
+});
+
+// After customer accepts the round-up at checkout:
+// payment.amount         → 1870   (original order amount)
+// payment.donationAmount → 130    (€1.30 rounded up to €20.00)
+// payment.totalAmount    → 2000   (total charged to the card)
+```
+
+If the customer declines the round-up prompt, `donationAmount` is `0` and `totalAmount` equals the original `amount`.
+
+## Receipts and tax
+
+When `donation` is present on a payment, VINR automatically switches the receipt to charitable language — the subject line, body copy, and footer reference the charity name rather than your trading name. For jurisdictions that require a formal acknowledgement of a tax-deductible gift, set `donation.taxDeductible: true`. VINR then formats the receipt to meet the jurisdictional requirements on file for your account (e.g. Gift Aid statements in the UK, substantiation notices in the US under IRC § 170).
+
+<Callout type="warn">
+VINR formats receipts for jurisdictions where your account is registered and `taxDeductible: true` is set, but does not determine whether your organisation or a specific donation qualifies for tax-deductible status. Consult your tax adviser before enabling `taxDeductible` for any market.
+</Callout>
+
+## Donation config fields
+
+<TypeTable
+  type={{
+    type: {
+      type: "'preset' | 'open' | 'roundUp'",
+      description: "The donation collection mode. preset renders selectable amount buttons. open renders a free-text entry field. roundUp presents a round-up opt-in on an existing order.",
+      default: "—",
+    },
+    amounts: {
+      type: "integer[]",
+      description: "Preset donation amounts in the session's minor units. Required when type is preset. Ignored for other types.",
+      default: "—",
+    },
+    taxDeductible: {
+      type: "boolean",
+      description: "When true VINR formats the receipt as a tax-deductible gift acknowledgement per jurisdictional requirements on your account.",
+      default: "false",
+    },
+    charityName: {
+      type: "string",
+      description: "Display name of the charity shown on the checkout page and receipt.",
+      default: "—",
+    },
+    charityRegNumber: {
+      type: "string",
+      description: "Registered charity number shown on the receipt. Format varies by jurisdiction (e.g. GB-CHY-..., EU-CHY-...).",
+      default: "—",
+    },
+  }}
+/>
+
+## Reporting
+
+Donations appear as a separate line in your settlement under `category: 'donation'`, keeping them distinct from trading revenue. Use the reporting API to pull donation totals over any period by filtering balance transactions on that category.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const transactions = await vinr.balanceTransactions.list({
+  category: 'donation',
+  created: {
+    gte: '2026-05-01T00:00:00Z',
+    lte: '2026-05-31T23:59:59Z',
+  },
+  limit: 100,
+});
+
+const totalDonated = transactions.data.reduce(
+  (sum, tx) => sum + tx.amount,
+  0,
+);
+
+// totalDonated → sum of all donation amounts in minor units for the period
+```
+
+Each balance transaction in the result links back to the originating `pay_…` object via `tx.sourceId`. Export these records in CSV or JSON from the Dashboard under **Reporting → Transactions → filter: Donations** for offline reconciliation. See [Reconciliation](/docs/operations/reconciliation) for the full settlement model.
+
+<Accordions>
+<Accordion title="Advanced">
+
+**Recurring donations**
+
+Combine donation configuration with a recurring payment mandate to bill donors on a schedule. Create an initial on-session payment with `setupFutureUsage: 'recurring'` and `donation` set, then charge the stored method off-session each period. See [Recurring payments](/docs/payments/recurring-payments) for mandate capture and off-session charge patterns.
+
+**Multi-currency donation pages**
+
+Checkout sessions accept any currency enabled on your account. For a multi-currency donation page create one session per currency and route donors to the appropriate URL based on their locale, or present a currency selector that triggers a new session creation server-side. The `amounts` array for preset types should always be expressed in the minor units of the session currency.
+
+**Charity platform integrations**
+
+If you route donations through a third-party charity platform (e.g. JustGiving, Benevity), use `metadata` to carry the platform's campaign and donor identifiers on each `pay_…` object. Your webhook handler can then forward the `payment.completed` event — including `donationAmount` and the metadata — to the platform's API without needing to query VINR again.
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Payment links" href="/docs/payments/payment-links" description="Create no-code shareable links — useful for standalone donation pages." />
+  <Card title="Recurring payments" href="/docs/payments/recurring-payments" description="Combine with recurring mandates to accept regular donation pledges." />
+  <Card title="Reconciliation" href="/docs/operations/reconciliation" description="Match donation settlement lines to your ledger and charity accounts." />
+</Cards>

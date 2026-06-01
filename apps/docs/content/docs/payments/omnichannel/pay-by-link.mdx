@@ -1,0 +1,207 @@
+---
+title: "Pay by link (in store)"
+description: "Send a payment link to a customer who is in your store but prefers to pay on their own device."
+persona: ["developer", "business-owner"]
+priority: "P2"
+lastUpdated: "2026-05-31"
+---
+
+Pay by link in a physical store means your staff generates a short URL or QR code at the counter — the customer scans it and completes checkout on their own phone. No card is handed over, no terminal is touched. This flow is useful when a customer forgot their wallet, wants to use a buy-now-pay-later option, or prefers a digital payment method your terminal does not support (Apple Pay via browser, a local wallet, stablecoins). It is distinct from remote pay-by-link, where a link is sent to someone who is not present — see [Payment links](/docs/payments/payment-links) for that core feature.
+
+## Create a link at the counter
+
+Your POS triggers a call to your backend when the cashier initiates a link payment. Your server calls `vinr.paymentLinks.create` with a short expiry and metadata that ties the link to the physical transaction context. VINR returns a `qrCodeUrl` (a PNG) that you display on the terminal idle screen or print on a slip.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const link = await vinr.paymentLinks.create({
+  amount: 7500,
+  currency: 'EUR',
+  expiresAfter: 600,
+  metadata: {
+    inStore: true,
+    terminalId: 'term_01HZ5QXYZ',
+    staffId: 'staff_9A3BK',
+  },
+});
+
+console.log(link.url);        // "https://pay.vinr.com/l/AbCd12"
+console.log(link.qrCodeUrl);  // PNG render — pass to terminal screen or printer
+```
+
+The returned `link.qrCodeUrl` is a ready-to-render PNG. Display it full-screen on the terminal or customer-facing display while the customer has their phone ready.
+
+## Customer scans and pays
+
+The customer points their phone camera at the QR code. VINR Checkout opens in their browser — no app install required. They can pay with any method enabled on your account: credit or debit cards, BNPL providers, digital wallets (Apple Pay, Google Pay), saved cards, or stablecoins. Your server receives a `payment.completed` webhook event when the transaction settles.
+
+```typescript
+app.post('/webhooks/vinr', express.raw({ type: 'application/json' }), (req, res) => {
+  const event = vinr.webhooks.constructEvent(
+    req.body,
+    req.headers['vinr-signature'] as string,
+    process.env.VINR_WEBHOOK_SECRET!,
+  );
+
+  if (event.type === 'payment.completed') {
+    const payment = event.data;
+    if (payment.metadata?.inStore) {
+      await pos.markOrderPaid(payment.metadata.terminalId, payment.id);
+    }
+  }
+
+  res.sendStatus(200);
+});
+```
+
+The `metadata.terminalId` you passed at link creation comes back on the payment object, so you can reconcile the digital payment against the open order on that lane without any additional state.
+
+## Fallback if the link expires
+
+After the configured timeout the link becomes inactive and VINR Checkout shows an expiry message to the customer. At that point the staff member can generate a fresh link or fall back to the standard terminal flow.
+
+<Callout type="warn">
+Always set a short `expiresAfter` for in-store links — 600 seconds (10 minutes) is the recommended default. A link with no expiry, or a long one, can be forwarded and reused by anyone who receives it after the customer leaves the store.
+</Callout>
+
+To regenerate a link, call `vinr.paymentLinks.create` again with the same metadata. The previous link is already inactive so there is no risk of double-collection.
+
+## MOTO pay by link
+
+Mail Order / Telephone Order (MOTO) is a related pattern for phone orders. A staff member takes an order over the phone, creates a payment link, and sends it to the customer by SMS or email. The customer pays on their own device at their convenience — the staff member never keys card details into a terminal or dashboard, which keeps your PCI scope clean.
+
+```typescript
+const motoLink = await vinr.paymentLinks.create({
+  amount: 12000,
+  currency: 'GBP',
+  expiresAfter: 86400,
+  metadata: {
+    channel: 'moto',
+    orderId: 'order_7812',
+    staffId: 'staff_9A3BK',
+  },
+});
+
+await sms.send({
+  to: customerPhone,
+  body: `Your VINR payment link: ${motoLink.url}`,
+});
+```
+
+Compare this approach to card-present MOTO (keying card numbers via the terminal) in [In-person features](/docs/payments/in-person/features#moto). Pay-by-link MOTO produces a cleaner audit trail and removes the staff member from the card data flow entirely.
+
+## Field reference
+
+<TypeTable
+  type={{
+    amount: {
+      type: "number",
+      description: "Payment amount in the currency's minor units (e.g. 7500 = €75.00). Required.",
+    },
+    currency: {
+      type: "string",
+      description: "ISO 4217 three-letter currency code (e.g. EUR, GBP, USD). Required.",
+    },
+    expiresAfter: {
+      type: "number",
+      description: "Seconds until the link expires. Strongly recommended for in-store use — 600 (10 min) is the default guideline.",
+      default: "—",
+    },
+    "metadata.inStore": {
+      type: "boolean",
+      description: "Flag that marks this as an in-store link. Returned on the payment object for webhook reconciliation.",
+      default: "false",
+    },
+    "metadata.terminalId": {
+      type: "string",
+      description: "The terminal or lane ID this link was generated from. Lets you reconcile the payment against an open POS order.",
+      default: "—",
+    },
+    "metadata.staffId": {
+      type: "string",
+      description: "The staff member who created the link. Useful for auditing and per-associate reporting.",
+      default: "—",
+    },
+    "allowedPaymentMethods": {
+      type: "string[]",
+      description: "Restrict which payment methods appear at checkout (e.g. ['card', 'apple_pay']). Omit to show all methods enabled on your account.",
+      default: "all enabled methods",
+    },
+  }}
+/>
+
+<Accordions>
+<Accordion title="Advanced — terminal screen QR display, link analytics, and multi-use links">
+
+### Push the QR to the terminal idle screen
+
+If your terminals support the VINR Terminal Display API, you can push the QR code image directly to the customer-facing screen rather than rendering it in your POS UI. Call `vinr.terminal.display.show` with the `qrCodeUrl` returned by link creation:
+
+```typescript
+await vinr.terminal.display.show({
+  terminalId: 'term_01HZ5QXYZ',
+  content: {
+    type: 'image',
+    url: link.qrCodeUrl,
+    caption: 'Scan to pay on your phone',
+  },
+});
+```
+
+When the payment completes (or the link expires), send a `vinr.terminal.display.clear` call to return the terminal to its idle state.
+
+### Link analytics — scan vs. payment conversion
+
+Every in-store link records two events: `link.scanned` (the QR was opened) and `payment.completed`. The gap between them reveals checkout drop-off on specific devices or at specific lanes. Retrieve link-level stats via the Dashboard under **Payments → Links → [link ID]**, or query the events API:
+
+```typescript
+const events = await vinr.paymentLinks.listEvents(link.id);
+const scans    = events.filter(e => e.type === 'link.scanned').length;
+const payments = events.filter(e => e.type === 'payment.completed').length;
+const conversionRate = payments / scans;
+```
+
+Low conversion on a specific terminal typically indicates placement (QR hard to scan), network issues (customer phone can't load checkout), or a mismatch between the allowed methods and what customers carry.
+
+### Multi-use links for service businesses
+
+Barbershops, restaurants, and similar businesses can use a single reusable link per lane or table instead of generating one per transaction. Set `reusable: true` — the link accepts multiple payments and never expires unless you explicitly deactivate it. Each payment is still a distinct `payment` object, so reconciliation is unaffected.
+
+```typescript
+const tableLinkQR = await vinr.paymentLinks.create({
+  currency: 'EUR',
+  reusable: true,
+  metadata: {
+    inStore: true,
+    terminalId: 'term_table_7',
+  },
+});
+```
+
+Because the amount is not fixed at link creation, VINR Checkout prompts the customer to enter (or confirm) an amount. You can pre-fill it by appending `?amount=7500` to the URL at display time without regenerating the underlying link.
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card
+    title="Payment links"
+    href="/docs/payments/payment-links"
+    description="Core payment-link API — create, share, and track links for remote and online use cases."
+  />
+  <Card
+    title="Shopper recognition"
+    href="/docs/payments/omnichannel/shopper-recognition"
+    description="Identify shoppers across channels so loyalty, saved cards, and preferences follow them in store."
+  />
+  <Card
+    title="In-person features"
+    href="/docs/payments/in-person/features"
+    description="Tipping, MOTO, surcharging, DCC, and the full feature reference for VINR terminals."
+  />
+</Cards>

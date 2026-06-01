@@ -1,0 +1,110 @@
+---
+title: Plugins
+description: Pre-built VINR payment plugins for popular e-commerce platforms — install, configure, and go live without writing custom integration code.
+persona: ["developer", "business-owner"]
+priority: "P0"
+lastUpdated: "2026-05-31"
+---
+
+<Callout type="info">
+  This is illustrative content. Plugin availability and exact menu paths may differ; refer to your VINR account manager for production details.
+</Callout>
+
+VINR's plugin library brings VINR payments to the most popular e-commerce and POS platforms with minimal setup. Each plugin handles the payment form, 3D Secure authentication, tokenization, and webhook delivery so merchants can focus on running their store rather than writing integration code.
+
+## Plugin types
+
+VINR distributes plugins in two categories:
+
+- **Built by VINR** — officially maintained and certified with the platform, updated with each VINR API release. Covered by VINR support.
+- **Partner plugins** — built by third-party developers certified by VINR and verified annually for compatibility. Supported by the plugin author.
+
+| Plugin | Platform | Type | Version | Status |
+|---|---|---|---|---|
+| VINR for WooCommerce | WooCommerce / WordPress | Built by VINR | 3.x | Available |
+| VINR for Adobe Commerce | Adobe Commerce (Magento) | Built by VINR | 2.x | Available |
+| VINR for Salesforce Commerce Cloud | SFCC (B2C Commerce) | Built by VINR | 1.x | Available |
+| VINR for Shopify | Shopify | Partner | — | Coming soon |
+| VINR for BigCommerce | BigCommerce | Partner | — | Coming soon |
+| VINR for PrestaShop | PrestaShop | Partner | — | Coming soon |
+
+## Capability matrix
+
+The table below shows which features each currently available plugin supports.
+
+| Feature | WooCommerce | Adobe Commerce | Salesforce Commerce Cloud |
+|---|---|---|---|
+| Online payments | ✓ | ✓ | ✓ |
+| In-person (Terminal) | ✓ | — | — |
+| Tokenization / saved cards | ✓ | ✓ | ✓ |
+| 3D Secure | ✓ | ✓ | ✓ |
+| Installments | ✓ | ✓ | — |
+| Recurring / subscriptions | ✓ | ✓ | ✓ |
+| Multi-currency | ✓ | ✓ | ✓ |
+
+<Callout type="info">
+  Capability availability may depend on your VINR contract and the payment methods enabled on your account. Contact your account manager to confirm which features are active.
+</Callout>
+
+## Choosing a plugin
+
+- **Use the official VINR plugin** for your platform if one is listed as Available above. Official plugins receive updates in step with the VINR API and are the lowest-effort path to production.
+- **Use the API directly** if you are building a custom storefront, a headless commerce setup, or an in-house checkout that does not map to a supported platform. See [Integration models](/docs/integration/integration-models) for an overview of the available integration paths.
+- **Contact your account manager** if the plugin does not support a feature you need — for example, a specific local payment method, a custom capture flow, or a platform that is currently listed as Coming soon.
+
+<Accordions>
+<Accordion title="Advanced — selecting a plugin for a headless or composable architecture">
+
+Headless commerce stacks (Contentful + Next.js, Hydrogen, Remix storefronts) do not use platform plugins. The plugin assumes it can render into the platform's native checkout template; a headless frontend bypasses that entirely.
+
+For headless setups, integrate VINR Elements or the Payments API directly:
+
+- [VINR Elements](/docs/integration/elements) renders a pre-built, PCI-compliant card form as an iframe component you embed anywhere.
+- The [Payments API](/docs/integration/integration-models) gives full control over the payment lifecycle for teams that want to own the entire flow.
+
+If your platform supports both a native checkout and a headless storefront (as Salesforce B2C Commerce can), the plugin covers the native path; build against the API for the headless path.
+
+</Accordion>
+</Accordions>
+
+## Installation overview
+
+Every VINR plugin follows the same high-level pattern. Each plugin's detail page documents the exact steps and screenshots for that platform.
+
+<Steps>
+<Step>
+**Download the plugin** from the VINR Dashboard under **Settings → Plugins**, or from the platform's marketplace where listed.
+</Step>
+<Step>
+**Install the plugin** using the platform's standard extension manager (e.g. WordPress plugin uploader, Magento Component Manager, SFCC cartridge deployment).
+</Step>
+<Step>
+**Enter your API credentials** in the plugin settings page. You will need your live and test API keys from the VINR Dashboard. Never hard-code credentials in source control.
+
+```shell
+VINR_API_KEY_TEST=test_sk_...
+VINR_API_KEY_LIVE=live_sk_...
+```
+</Step>
+<Step>
+**Configure payment methods** — enable the payment methods you want to offer (cards, SEPA, local methods) and set capture mode and 3DS preferences.
+</Step>
+<Step>
+**Test in sandbox mode** using the VINR test card numbers. Confirm that payments, refunds, and webhook events all reach your platform.
+</Step>
+<Step>
+**Go live** — switch the plugin from sandbox to live mode, verify your credentials, and place a real transaction to confirm end-to-end connectivity.
+</Step>
+</Steps>
+
+<Callout type="warn">
+  Always complete a full test cycle in sandbox before switching to live mode. Enabling live mode with misconfigured payment methods or webhook endpoints can result in failed orders or unprocessed events.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="WooCommerce plugin" href="/docs/payments/plugins/woocommerce" description="Install and configure the VINR plugin for WooCommerce, including cards, SEPA, and in-person terminal payments." />
+  <Card title="Adobe Commerce plugin" href="/docs/payments/plugins/adobe-commerce" description="Deploy the VINR Magento 2 cartridge, configure payment methods, and set up 3DS and tokenization." />
+  <Card title="Salesforce Commerce Cloud plugin" href="/docs/payments/plugins/salesforce-commerce-cloud" description="Integrate VINR into SFCC B2C Commerce with the official cartridge — configure, test, and go live." />
+</Cards>

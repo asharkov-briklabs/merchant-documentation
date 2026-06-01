@@ -1,0 +1,144 @@
+---
+title: Payouts
+description: Control when sub-merchants are paid — managed schedules, on-demand payouts, instant payouts, and cross-border transfers.
+---
+
+A payout moves funds from a sub-merchant's balance account to their external bank account (or debit card). Your platform controls payout timing.
+
+## Payout schedules
+
+### Managed (platform-controlled)
+
+The platform sets the payout schedule for each sub-merchant. Sub-merchants cannot change it themselves unless you explicitly grant them that permission.
+
+```json
+POST /v1/platform/sub-merchants/{id}/payout-schedule
+{
+  "interval": "weekly",
+  "anchor_day": "friday",
+  "delay_days": 2
+}
+```
+
+Supported intervals: `daily`, `weekly`, `monthly`, `manual`.
+
+`delay_days` adds a rolling hold after each settlement day — useful for building in a dispute window before funds leave the platform.
+
+### Sub-merchant-controlled
+
+Grant the sub-merchant permission to manage their own schedule:
+
+```json
+POST /v1/platform/sub-merchants/{id}/payout-schedule
+{
+  "interval": "sub_merchant_managed"
+}
+```
+
+---
+
+## On-demand payouts
+
+Trigger a payout immediately regardless of the standing schedule:
+
+```json
+POST /v1/platform/sub-merchants/{id}/payouts
+{
+  "amount": 25000,
+  "currency": "USD",
+  "bank_account_id": "ba_ext_..."
+}
+```
+
+Omit `amount` to pay out the full available balance. On-demand payouts are useful for milestone payments, accelerated settlement after a successful event, or correcting a missed scheduled payout.
+
+---
+
+## Instant payouts
+
+For sub-merchants with an eligible debit card or instant bank account on file, VINR can deliver funds within ~30 minutes. A small per-payout fee applies.
+
+```json
+POST /v1/platform/sub-merchants/{id}/payouts
+{
+  "amount": 10000,
+  "currency": "USD",
+  "destination": "card_...",
+  "method": "instant"
+}
+```
+
+Check eligibility before offering instant payouts in your UI:
+
+```
+GET /v1/platform/sub-merchants/{id}/payout-eligibility?method=instant
+```
+
+---
+
+## Payout lifecycle
+
+```
+pending → in_transit → paid
+    ↓
+  failed → retry or manual reissue
+```
+
+| Status | Meaning |
+|---|---|
+| `pending` | Payout queued; waiting for next settlement window |
+| `in_transit` | Bank transfer initiated |
+| `paid` | Funds delivered |
+| `failed` | Bank rejected the transfer (invalid account, closed account, etc.) |
+| `canceled` | Payout was canceled before it left the platform |
+
+### Failure handling
+
+On failure, VINR fires `sub_merchant.payout.failed` with a `failure_code`. The funds are returned to the sub-merchant's balance account. Common failure codes:
+
+| Code | Cause |
+|---|---|
+| `account_closed` | Bank account no longer active |
+| `invalid_account_number` | Account details incorrect |
+| `insufficient_funds` | Balance account had insufficient settled funds |
+| `no_account` | Routing + account number combination not found |
+
+After a failure, VINR disables the failing external account and the sub-merchant must add a new one before payouts resume.
+
+---
+
+## Cross-border payouts
+
+Pay sub-merchants in their local currency from a different settlement currency. Supported for qualifying platforms.
+
+- VINR performs FX conversion at the mid-market rate plus a conversion margin
+- The FX rate is locked at payout initiation
+- Sub-merchant receives local currency; your platform's balance account is debited in settlement currency
+
+```json
+POST /v1/platform/sub-merchants/{id}/payouts
+{
+  "amount": 100000,
+  "currency": "USD",
+  "destination_currency": "EUR"
+}
+```
+
+---
+
+## Payout reports
+
+Pull a structured report of all sub-merchant payouts for reconciliation:
+
+```
+GET /v1/platform/payouts?from=2025-01-01&to=2025-01-31&format=csv
+```
+
+Fields: payout ID, sub-merchant ID, amount, currency, status, initiated at, completed at, failure code.
+
+---
+
+## Next steps
+
+- [Fund management](/docs/platforms/fund-management) — reserves and balance account controls
+- [Platform controls](/docs/platforms/platform-controls) — restrict payout access by sub-merchant capability

@@ -1,0 +1,148 @@
+---
+title: Authorization adjustments
+description: Increase, decrease, or fully reverse a card authorization before capture — for hotels, car rentals, tips, and dynamic order amounts.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+An authorization adjustment modifies the hold on a card after the initial authorization but before any funds are captured. This is the correct tool when the final charge amount is not yet known at the moment of authorization — hotel check-ins that add incidentals, car rentals where the final mileage or fuel charge is added at return, restaurant orders where a tip is added after the meal, or subscription upsells where the invoice line items change before billing runs. Adjustments keep the original authorization alive rather than voiding it and starting over, which avoids a second issuer round-trip and a second round of friction for the cardholder.
+
+## Increase an authorization
+
+To raise the hold, call `vinr.payments.adjust` with a new `amount` that is strictly higher than the current `authorizedAmount`. VINR submits an incremental authorization to the issuer network. The issuer re-evaluates the cardholder's available balance and the account's credit limit at that moment, so an increase can be declined even if the original authorization was approved.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const adjusted = await vinr.payments.adjust('pay_3Nf8x2a', {
+  amount: 7500,
+});
+
+// adjusted.adjustedAmount   → 7500   (new authorized ceiling, in minor units)
+// adjusted.originalAmount   → 5000   (the amount from the initial authorization)
+// adjusted.status           → "authorized"
+// adjusted.reversedAt       → null
+```
+
+If the issuer declines the increase, VINR returns a `402` error with `code: "authorization_declined"`. The original authorization remains intact at its previous amount — you can still capture up to the original figure or void it entirely.
+
+<Callout type="warn">
+An increase re-triggers issuer risk scoring. If the cardholder's available credit has dropped since the original hold, or the increased amount crosses a velocity threshold, the adjustment may fail. Build a fallback that captures at the original amount or prompts the customer.
+</Callout>
+
+## Decrease an authorization
+
+To reduce the hold — for example, when an item is removed from a buy-now-ship-later order and you want to free up the cardholder's credit immediately — pass a `amount` that is lower than the current `authorizedAmount`.
+
+```typescript
+const adjusted = await vinr.payments.adjust('pay_3Nf8x2a', {
+  amount: 3200,
+});
+
+// adjusted.adjustedAmount   → 3200
+// adjusted.originalAmount   → 5000
+// adjusted.status           → "authorized"
+```
+
+Decrease support varies by card network. Visa and Mastercard support partial authorization reversals on most issuer BINs; American Express does not. VINR detects the network from the card BIN and handles the fallback automatically: if a network does not support decreases, VINR keeps the hold at the current amount and records the requested reduction as a pending adjustment that is applied at capture time (similar to capturing a partial amount). Your code does not need to branch on network — the response always reflects the effective authorized ceiling.
+
+<Callout type="info">
+Because some issuers will not reduce a hold until settlement, cardholder-visible pending amounts may not drop immediately even after a successful decrease call. This is network behavior outside VINR's control.
+</Callout>
+
+## Reversal
+
+A reversal cancels the authorization in full before any capture. Use it when the transaction will not proceed at all — the customer cancels after authorization but before fulfillment, or the inventory check fails.
+
+```typescript
+const reversed = await vinr.payments.reverse('pay_3Nf8x2a');
+
+// reversed.status      → "cancelled"
+// reversed.reversedAt  → "2026-05-31T14:22:00Z"
+```
+
+**Reversal vs. void vs. refund** — these are related but distinct operations:
+
+| Operation | When | Effect |
+|---|---|---|
+| Reversal | Pre-capture; authorized hold needs cancelling | Sends a reversal message to the issuer; hold typically drops from cardholder's pending balance within minutes |
+| Void | Pre-capture; same-day same-acquirer cancel | Simpler internal cancel — no scheme-level reversal message sent; suitable only when the acquirer confirms same-session eligibility |
+| Refund | Post-capture; funds have already settled | Returns captured funds; creates a `re_` object and takes 1–10 business days depending on rail |
+
+VINR exposes both `reverse` and `void` because acquirer contracts and scheme rules determine which is appropriate. In practice, prefer `reverse` for any pre-capture cancellation unless your integration guide specifies void conditions. See [Authorize & capture](/docs/payments/authorize-and-capture) for void usage and [Refunds](/docs/payments/refunds) for post-capture returns.
+
+<TypeTable
+  type={{
+    adjustedAmount: { type: "integer", description: "The current authorized ceiling in minor units after the most recent adjustment. This is the maximum amount you may capture.", default: "amount at creation" },
+    originalAmount: { type: "integer", description: "The amount from the initial authorization call, in minor units. Immutable after creation.", default: "—" },
+    status: { type: "'authorized' | 'cancelled' | 'completed'", description: "Current lifecycle state. Adjustments only apply while status is authorized.", default: "authorized" },
+    reversedAt: { type: "string (ISO 8601) | null", description: "Timestamp set when a reversal is accepted by the issuer. Null if the authorization is still active.", default: "null" },
+  }}
+/>
+
+## When to use each
+
+| Scenario | Trigger | Operation |
+|---|---|---|
+| Hotel adds incidental hold on check-in | Amount rises after initial auth | Adjust up |
+| Car rental adds fuel surcharge at return | Amount rises after initial auth | Adjust up |
+| Customer adds a tip after the meal | Amount rises post-auth, pre-capture | Adjust up |
+| Item removed from order before ship | Amount drops, cardholder credit should free up | Adjust down |
+| Order cancelled before fulfillment | Transaction will not proceed | Reverse |
+| Same-day cancellation on same acquirer session | Acquirer supports zero-cost void | Void |
+| Funds already captured, customer requests return | Post-settlement return | Refund |
+| Subscription upsell accepted before billing run | Invoice amount increases pre-capture | Adjust up |
+
+<Advanced title="Enterprise: partial reversals, acquirer limits, and industry data fields">
+
+**Partial reversal** — `vinr.payments.reverse` accepts an optional `amount` parameter to release only part of the hold rather than cancelling the entire authorization:
+
+```typescript
+const partial = await vinr.payments.reverse('pay_3Nf8x2a', {
+  amount: 1500,
+});
+
+// releases €15.00 of a €50.00 hold; €35.00 remains authorized
+// partial.adjustedAmount   → 3500
+// partial.reversedAt       → null   (full reversal not yet triggered)
+```
+
+Partial reversals behave identically to decreases at the scheme level — the same network support matrix applies. The distinction in the API is semantic: `adjust` signals intent to capture at the new amount, while `reverse` with an amount signals intent to release funds permanently with no corresponding capture.
+
+**Acquirer-specific limits** — some acquirer contracts cap the total upward adjustment multiplier (commonly 1.15× or 1.20× of the original amount for hotel and car rental merchants). VINR enforces the limit configured for your merchant category code (MCC) and returns `422` with `code: "adjustment_exceeds_acquirer_limit"` if you breach it. Contact your VINR account manager to review your MCC configuration if your use case regularly requires larger adjustments.
+
+**Industry data fields** — for hotel and car rental merchants on Visa and Mastercard, including structured industry data in the adjustment call improves authorization rates and reduces chargebacks by giving the issuer context for the change in amount:
+
+```typescript
+const adjusted = await vinr.payments.adjust('pay_3Nf8x2a', {
+  amount: 12000,
+  industryData: {
+    type: 'hotel',
+    folio: {
+      checkInDate: '2026-05-28',
+      checkOutDate: '2026-05-31',
+      roomNights: 3,
+      roomRate: 3500,
+      tax: 1500,
+      incidentals: 1000,
+    },
+  },
+});
+```
+
+For car rental, replace `type: 'hotel'` and the `folio` block with `type: 'car_rental'` and the `rentalAgreement` block (agreement number, pickup/return dates, daily rate, extra mileage, fuel charge). The IATA code for air travel merchants follows the same pattern under `type: 'travel'`. These fields map to Visa VAA and Mastercard Hotel/Car Rental data elements transmitted through the acquirer — your acquirer contract must include the relevant program for the fields to be forwarded.
+
+**Authorization expiry interaction** — adjusted authorizations inherit the `expiresAt` of the original hold; an increase does not reset the expiry clock. If you are near expiry and need to increase, check `expiresAt` first. If the hold is within 24 hours of expiry, void and re-authorize rather than adjusting to avoid a race condition where the increase is approved but the hold expires before capture.
+
+</Advanced>
+
+## Next steps
+
+<Cards>
+  <Card title="Authorize & capture" href="/docs/payments/authorize-and-capture" description="Place and capture card holds, including partial captures and voids." />
+  <Card title="Refunds" href="/docs/payments/refunds" description="Return captured funds fully or partially after settlement." />
+  <Card title="Payment lifecycle" href="/docs/payments/payment-lifecycle" description="Every payment status and the transitions that connect them." />
+</Cards>

@@ -1,0 +1,460 @@
+---
+title: "Salesforce Commerce Cloud"
+description: "Install and configure the VINR LINK cartridge for Salesforce Commerce Cloud (SFCC / Demandware)."
+persona: ["developer", "partner"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+VINR for Salesforce Commerce Cloud is delivered as a LINK cartridge certified by Salesforce. It supports both SFRA (Storefront Reference Architecture) and SiteGenesis storefronts, and is available from the Salesforce AppExchange or directly from the VINR merchant dashboard. A single cartridge installation covers all VINR online payment methods; in-person acceptance is available through the VINR OMS connector described in the [In person](#in-person) section below.
+
+<Callout type="info">
+  This is illustrative content. Plugin availability and exact menu paths may differ; refer to your VINR account manager for production details.
+</Callout>
+
+## Supported payment methods
+
+<TypeTable
+  type={{
+    "Cards (Visa, Mastercard, Amex, Discover)": {
+      type: "Online",
+      description: "Full card acceptance with 3DS2 authentication handled transparently by the cartridge. Supports one-click reuse via SFCC Customer Payment Instruments.",
+    },
+    "Apple Pay": {
+      type: "Online",
+      description: "Supported on Safari and SFRA-rendered checkout pages. Domain verification file served automatically by the cartridge.",
+    },
+    "Google Pay": {
+      type: "Online",
+      description: "Supported on Chrome and Android WebView. Merchant ID configuration in Business Manager custom site preferences.",
+    },
+    "PayPal": {
+      type: "Online",
+      description: "Redirect-based PayPal Express flow. Buyer is returned to checkout on approval or cancellation.",
+    },
+    "SEPA Direct Debit": {
+      type: "Online",
+      description: "EUR storefronts only. Mandate collection and status webhooks managed by the cartridge.",
+    },
+    "iDEAL": {
+      type: "Online",
+      description: "NL locale only. Bank selection rendered by the cartridge; redirect-based flow.",
+    },
+    "Bancontact": {
+      type: "Online",
+      description: "BE locale only. Redirect-based flow.",
+    },
+    "VINR Pay Later (BNPL)": {
+      type: "Online",
+      description: "Installment and pay-later options at checkout. Eligibility determined by VINR at runtime based on cart value and locale.",
+    },
+    "In-person (terminal)": {
+      type: "OMS integration",
+      description: "Terminal payments triggered from Salesforce Order Management. Requires the separate VINR OMS connector module.",
+    },
+  }}
+/>
+
+## Requirements
+
+Before installing the cartridge, confirm every item below is in place.
+
+<TypeTable
+  type={{
+    "Salesforce B2C Commerce instance": {
+      type: "Required",
+      description: "An active Salesforce B2C Commerce (formerly Demandware) instance at version 23.1 or later. Access to Business Manager (BM) is required for the administrator performing the installation.",
+    },
+    "SFRA or SiteGenesis storefront": {
+      type: "Required",
+      description: "SFRA 6.x+ is recommended. SiteGenesis storefronts are supported with the int_vinr_sg cartridge variant. Mixed architectures (headless SCAPI + classic BM) are covered in the Advanced section.",
+    },
+    "Node.js 18 or later": {
+      type: "Required",
+      description: "Required to run the cartridge build toolchain (npm scripts that compile ISML overrides and client-side JS). Only needed during installation and deployment, not at runtime.",
+    },
+    "WebDAV or UX Studio access": {
+      type: "Required",
+      description: "The cartridge is deployed to SFCC via WebDAV. Use UX Studio, the VS Code Prophet Debugger extension, or the SFCC CLI (sgmf-scripts) to upload.",
+    },
+    "VINR merchant account": {
+      type: "Required",
+      description: "A VINR merchant account with online payments enabled. Retrieve your API keys from the VINR dashboard under Developers → API keys.",
+    },
+    "Salesforce LINK marketplace access or VINR dashboard download": {
+      type: "Required",
+      description: "Download the cartridge package from Salesforce AppExchange (search 'VINR Payments') or from your VINR dashboard under Integrations → Plugins → Salesforce Commerce Cloud.",
+    },
+  }}
+/>
+
+## Install
+
+<Steps>
+<Step>
+**Download the VINR cartridge**
+
+Obtain the latest cartridge package from the Salesforce AppExchange listing (search "VINR Payments LINK Cartridge") or from your VINR dashboard under Integrations → Plugins → Salesforce Commerce Cloud. The download is a `.zip` containing `int_vinr_sfra` (for SFRA) and `int_vinr_sg` (for SiteGenesis).
+
+```shell
+unzip vinr-sfcc-cartridge-latest.zip
+cd vinr-sfcc-cartridge-latest
+npm install
+npm run build
+```
+</Step>
+<Step>
+**Upload the cartridge via WebDAV**
+
+Upload the built cartridge directory to your SFCC instance. Using the VS Code Prophet Debugger extension, add the cartridge root to your `dw.json` workspace config and trigger an upload. Using the SFCC CLI:
+
+```shell
+sgmf-scripts --uploadCartridge int_vinr_sfra
+```
+
+For SiteGenesis storefronts, replace `int_vinr_sfra` with `int_vinr_sg`. Confirm the upload succeeded in Business Manager → Administration → Site Development → Development Setup.
+</Step>
+<Step>
+**Add the cartridge to the site cartridge path**
+
+In Business Manager, navigate to Administration → Sites → Manage Sites → `{your-site}` → Settings. In the **Cartridges** field, add `int_vinr_sfra` to the path, positioned before `app_storefront_base`:
+
+```
+int_vinr_sfra:app_storefront_base:modules
+```
+
+For SiteGenesis: add `int_vinr_sg` before `app_storefront` in the same field. Save and apply.
+
+<Callout type="warn">
+Cartridge path order is load order. `int_vinr_sfra` must appear before `app_storefront_base` — reversing this order causes the cartridge controllers and templates to be shadowed by the base storefront and VINR payment methods will not appear at checkout.
+</Callout>
+</Step>
+<Step>
+**Import the cartridge metadata**
+
+Navigate to Administration → Site Development → Import & Export. Under **Import**, upload the `metadata/` package from the cartridge archive. This imports the VINR payment method definitions, custom site preferences, and job schedules into your Business Manager instance.
+
+Select the target site(s) when prompted. For multi-site setups, repeat the import for each site that will use VINR.
+</Step>
+<Step>
+**Configure the VINR API service credentials**
+
+Navigate to Administration → Operations → Services. Locate the **VINR API Service** profile (imported in the previous step). Click the service credential and enter:
+
+- **API URL**: `https://api.vinr.com/v1` (test) or `https://api.vinr.com/v1` (live — update when going live)
+- **API Key**: your VINR secret key from Dashboard → Developers → API keys
+- **Webhook Secret**: the signing secret for your SFCC webhook endpoint
+
+Save the credential. The service will now be available to the cartridge at runtime.
+</Step>
+</Steps>
+
+## Configure
+
+### Payment methods
+
+Navigate to Merchant Tools → Ordering → Payment Methods → VINR Payments. Each payment method imported by the cartridge metadata appears as a separate entry. For each method:
+
+- Set **Enabled** to `Yes` to activate it at checkout
+- Under **Assignments**, assign the method to the relevant site(s) and restrict by locale or currency where needed
+
+To control which payment methods are available per storefront locale (for example, showing iDEAL only on the NL locale), set the **Currencies** and **Countries** fields on each payment method entry rather than creating separate methods per locale.
+
+### Capture mode
+
+VINR supports two capture modes, configurable per site via Business Manager custom preferences:
+
+Navigate to Merchant Tools → Site Preferences → Custom Preferences → VINR Payment Settings.
+
+<TypeTable
+  type={{
+    "VINR_CaptureMode": {
+      type: "'immediate' | 'on_shipment'",
+      description: "Controls when captured funds are taken. 'immediate' captures at order placement. 'on_shipment' authorizes at checkout and captures when the order ships — the common SFCC pattern for warehouse-fulfillment retailers. Default: 'immediate'.",
+      default: "'immediate'",
+    },
+    "VINR_AuthorizationValidDays": {
+      type: "integer",
+      description: "Number of days an authorization is held before it expires when using 'on_shipment' capture mode. Must not exceed the VINR maximum authorization hold period (7 days for most card networks). Default: 5.",
+      default: "5",
+    },
+    "VINR_Enabled": {
+      type: "boolean",
+      description: "Master switch for all VINR payment methods on this site. Set to false to disable VINR globally without modifying individual payment method assignments.",
+      default: "true",
+    },
+  }}
+/>
+
+When `VINR_CaptureMode` is `on_shipment`, the cartridge registers a capture job that runs on a schedule. Confirm the **VINR Order Capture** job is active under Administration → Operations → Jobs before going live.
+
+### 3D Secure
+
+3DS2 authentication is handled automatically by the cartridge for all card payments. No additional configuration is required. The cartridge passes the SFCC session's browser fingerprint and device data to VINR, which completes the frictionless or challenge flow transparently.
+
+<Callout type="info">
+If your storefront uses a custom checkout controller that bypasses the VINR ISML templates, you must ensure the cartridge's 3DS device-data collection script is included on the payment step page. See the Advanced section for the SFRA controller extension pattern.
+</Callout>
+
+### Webhooks
+
+The cartridge registers a webhook receiver at:
+
+```
+https://yoursite.com/on/demandware.store/Sites-{site}-Site/default/VINR-Notify
+```
+
+Register this URL in your VINR dashboard under Developers → Webhooks. Copy the webhook signing secret into the `VINR API Service` credential in Business Manager (Administration → Operations → Services → VINR API Service → credential → Webhook Secret).
+
+SFCC order status is mapped from VINR payment events as follows:
+
+<TypeTable
+  type={{
+    "payment.created": {
+      type: "SFCC status: CREATED",
+      description: "Payment intent created at the start of checkout. Order is reserved but not yet authorized.",
+    },
+    "payment.authorized": {
+      type: "SFCC status: OPEN",
+      description: "Card authorized. Order moves to OPEN and is visible in Business Manager order search.",
+    },
+    "payment.completed": {
+      type: "SFCC status: COMPLETED",
+      description: "Funds captured. Order fulfillment is confirmed. Triggers the capture confirmation email in the standard SFRA flow.",
+    },
+    "payment.failed": {
+      type: "SFCC status: FAILED",
+      description: "Authorization or capture failed. Order is flagged for manual review in Business Manager.",
+    },
+    "payment.cancelled": {
+      type: "SFCC status: CANCELLED",
+      description: "Payment voided or order cancelled. Triggers the cancellation confirmation email.",
+    },
+    "refund.completed": {
+      type: "SFCC status: REPLACED (partial) or CANCELLED (full)",
+      description: "Refund settled. Business Manager order notes are updated with the refund amount and VINR refund reference.",
+    },
+  }}
+/>
+
+### Multi-site
+
+One cartridge installation supports multiple SFCC sites. Each site has its own set of custom site preferences under Merchant Tools → Site Preferences → Custom Preferences → VINR Payment Settings. Configure `VINR_Enabled`, `VINR_CaptureMode`, and payment method assignments independently per site.
+
+API key credentials are shared at the service level (Administration → Operations → Services) unless you require separate VINR merchant accounts per site — in that case, create separate service credentials and reference them from the per-site custom preference `VINR_ServiceCredentialId`.
+
+## Tokenization and saved cards
+
+The VINR cartridge integrates with the SFCC Customer Payment Instruments vault. When a customer is logged in and selects **Save for future use** at checkout, the cartridge stores the VINR `pm_` token as a Customer Payment Instrument against the SFCC customer profile. On subsequent visits, saved methods appear in the payment step without requiring card re-entry.
+
+<TypeTable
+  type={{
+    "vinr_token": {
+      type: "string",
+      description: "The VINR pm_ token stored on the SFCC Customer Payment Instrument. Safe to store — contains no cardholder data.",
+    },
+    "vinr_card_brand": {
+      type: "string",
+      description: "Card network (visa, mastercard, amex, discover) stored for display in the saved-cards list.",
+    },
+    "vinr_card_last4": {
+      type: "string",
+      description: "Last four digits of the card number, stored for display purposes only.",
+    },
+    "vinr_card_exp_month": {
+      type: "string",
+      description: "Two-digit expiry month stored for expiry display and pre-validation.",
+    },
+    "vinr_card_exp_year": {
+      type: "string",
+      description: "Four-digit expiry year.",
+    },
+  }}
+/>
+
+Saved tokens are compatible with Salesforce Order Management subscription orders. The cartridge exposes a `VINRPaymentHelper.chargeStoredToken(customerId, paymentInstrumentId, amount, currency)` script API that OMS order jobs can call to charge a stored instrument on a recurring schedule.
+
+For the full tokenization model and network token lifecycle, see [Tokenization](/docs/payments/tokenization).
+
+## In person
+
+Terminal payments can be triggered from Salesforce Order Management (OMS) using the VINR OMS connector — a separate module that is not included in the LINK cartridge. The OMS connector exposes a B2C Commerce order flow that routes a terminal payment request to a VINR reader assigned to the fulfillment location.
+
+To enable in-person payments via OMS:
+
+1. Contact your VINR account manager to obtain the VINR OMS connector package.
+2. Install and configure the connector following the connector's own setup guide.
+3. Assign VINR readers to SFCC locations in the VINR dashboard under Hardware → Terminals.
+4. In OMS, configure the VINR payment action on the order workflow where terminal collection should occur (typically at order pick-up or ship-from-store fulfillment).
+
+For terminal hardware setup, reader assignment, and the full in-person payment flow, see [In-person payments](/docs/payments/in-person).
+
+<Callout type="info">
+The VINR OMS connector is a separate licensed module. It is not required to accept online payments through the LINK cartridge.
+</Callout>
+
+## Go live
+
+<Steps>
+<Step>
+**Switch service credentials to live**
+
+In Business Manager, navigate to Administration → Operations → Services → VINR API Service → credential. Replace the test secret key with your live secret key (`sk_live_…`) from VINR Dashboard → Developers → API keys. Save the credential.
+</Step>
+<Step>
+**Set capture mode for production**
+
+Review `VINR_CaptureMode` under Merchant Tools → Site Preferences → Custom Preferences → VINR Payment Settings for each live site. Confirm the mode matches your fulfillment model. If using `on_shipment`, verify the VINR Order Capture job schedule under Administration → Operations → Jobs.
+</Step>
+<Step>
+**Clear SFCC caches**
+
+Navigate to Administration → Sites → Clear Cache and clear all cache tiers (template cache, content asset cache, and CDN edge cache if applicable). Stale cached responses from the test environment can cause checkout rendering issues on first live load.
+</Step>
+<Step>
+**Place a test order**
+
+Place a real order using a low-value live card. Confirm the payment method selection renders correctly, the authorization completes, and the order appears in Business Manager under Merchant Tools → Ordering → Orders.
+</Step>
+<Step>
+**Verify in Business Manager and VINR dashboard**
+
+Open the order in Business Manager and confirm the payment status is OPEN (authorized) or COMPLETED (captured, depending on your capture mode). Cross-reference the payment in VINR Dashboard → Payments — confirm the payment ID and amount match. Verify the webhook delivery log under Developers → Webhooks shows a successful `payment.authorized` or `payment.completed` delivery to your SFCC site.
+</Step>
+<Step>
+**Submit go-live request to Salesforce LINK team (if required)**
+
+If you intend to list your store on the Salesforce AppExchange or require Salesforce LINK certification for your deployment, submit a go-live request to the Salesforce LINK team through your Salesforce partner portal. Provide your VINR account manager contact details and your B2C Commerce instance URL. This step is only required for AppExchange listing — it is not required to accept live payments.
+</Step>
+</Steps>
+
+## Troubleshooting
+
+<TypeTable
+  type={{
+    "Cartridge not loading": {
+      type: "Symptom: 404 on checkout payment step or missing VINR payment methods",
+      description: "Check the cartridge path order in Administration → Sites → Manage Sites → {site} → Settings. int_vinr_sfra must appear before app_storefront_base (SFRA) or int_vinr_sg before app_storefront (SiteGenesis). If the order is reversed, VINR controllers and templates are shadowed by the base storefront.",
+    },
+    "Payment method not appearing at checkout": {
+      type: "Symptom: VINR payment option missing from checkout payment step",
+      description: "Check that the custom site preference VINR_Enabled is set to true for this site (Merchant Tools → Site Preferences → Custom Preferences → VINR Payment Settings). Also verify each payment method is assigned to the site in Merchant Tools → Ordering → Payment Methods → VINR Payments → Assignments. Finally confirm the metadata import completed without errors.",
+    },
+    "Webhook returning 401": {
+      type: "Symptom: VINR dashboard shows webhook delivery failures with HTTP 401",
+      description: "The webhook signing secret in the VINR API Service credential (Administration → Operations → Services) does not match the secret shown in VINR Dashboard → Developers → Webhooks → {endpoint} → Signing secret. Copy the secret from the dashboard and paste it into the Business Manager service credential, then re-save.",
+    },
+    "Orders not syncing to correct status": {
+      type: "Symptom: SFCC order status not updating after payment events",
+      description: "Check the SFCC Job Schedule for the VINR order sync job under Administration → Operations → Jobs. If the job is disabled or failing, order status updates from webhooks will not be processed. Review the job log for error details. Also confirm the webhook endpoint URL registered in VINR matches the SFCC site route: https://yoursite.com/on/demandware.store/Sites-{site}-Site/default/VINR-Notify.",
+    },
+    "on_shipment capture not running": {
+      type: "Symptom: Authorized orders not being captured after shipment",
+      description: "When VINR_CaptureMode is 'on_shipment', capture is triggered by the VINR Order Capture job. Navigate to Administration → Operations → Jobs and confirm the job is enabled and has run recently. Check the job log for API errors — a stale or invalid service credential will cause silent capture failures.",
+    },
+  }}
+/>
+
+<Accordions>
+<Accordion title="Advanced — SFRA controller extension pattern">
+
+To customize the VINR checkout flow without forking the cartridge, use the SFRA cartridge override mechanism. Create a new cartridge (for example, `int_vinr_custom`) positioned before `int_vinr_sfra` in the cartridge path, and override only the controllers or templates you need to change.
+
+```typescript
+// int_vinr_custom/cartridge/controllers/VINR.js
+'use strict';
+
+var server = require('server');
+var base = module.superModule;
+
+server.extend(base);
+
+server.prepend('PaymentInit', function (req, res, next) {
+  // Custom logic before VINR payment initialisation
+  var viewData = res.getViewData();
+  viewData.customMetadata = { source: 'mobile-app' };
+  res.setViewData(viewData);
+  next();
+});
+
+module.exports = server.exports();
+```
+
+Add `int_vinr_custom` before `int_vinr_sfra` in the cartridge path:
+
+```
+int_vinr_custom:int_vinr_sfra:app_storefront_base:modules
+```
+
+This pattern lets you apply store-specific logic to payment initialization, 3DS device-data collection, and post-payment order handling without modifying the certified cartridge, which allows you to receive cartridge updates without merge conflicts.
+
+</Accordion>
+<Accordion title="Advanced — Headless / PWA with SCAPI and VINR API">
+
+For headless SFCC storefronts using Salesforce Shopper APIs (SCAPI), the LINK cartridge is not used for the checkout UI. Instead, integrate VINR directly via the VINR API from your PWA or custom frontend, and use the SFCC OCAPI or SCAPI Order endpoints to record payment status on the order.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: basketTotal,
+  currency: basket.currency,
+  description: `SFCC basket ${basket.basketId}`,
+  returnUrl: `${process.env.STORE_URL}/checkout/confirm?basketId=${basket.basketId}`,
+  metadata: { sfccBasketId: basket.basketId },
+});
+
+// Store payment.id on the SFCC basket via OCAPI PATCH /baskets/{basketId}
+// then redirect the customer to payment.checkoutUrl
+```
+
+After VINR redirects back to your `returnUrl`, retrieve the payment status server-side and call the SFCC OCAPI order placement endpoint. Subscribe to VINR webhooks (`payment.completed`, `payment.failed`) to keep order status in sync after placement.
+
+This pattern bypasses the Business Manager payment method configuration; payment method enablement is controlled entirely in the VINR dashboard.
+
+</Accordion>
+<Accordion title="Advanced — Multi-currency storefronts">
+
+SFCC supports presentment currency (the currency shown to the shopper) and settlement currency (the currency in which VINR settles funds to your bank account) as separate concerns.
+
+Configure the presentment currency per site in Business Manager → Merchant Tools → Site Preferences → Currency. Pass the shopper's presentment currency in the `currency` field of the VINR payment create request. VINR handles the FX conversion and settles in your account's default settlement currency.
+
+To display the settlement amount alongside the presentment amount in Business Manager order details, the cartridge stores the VINR `settlementCurrency` and `settlementAmount` fields as order custom attributes (`vinr_settlement_currency` and `vinr_settlement_amount`). These are available in order reports and can be projected into your ERP reconciliation feed.
+
+For storefronts with multiple settlement currencies (for example, a EUR site and a GBP site under one VINR merchant account), configure separate VINR sub-accounts per currency in the VINR dashboard and reference the correct `VINR_ServiceCredentialId` site preference per site. See [Multi-currency](/docs/payments/multicurrency) for the settlement model.
+
+</Accordion>
+<Accordion title="Advanced — B2B Commerce and Order Management differences">
+
+Salesforce B2B Commerce (formerly CloudCraze) and B2C Commerce Order Management (OMS) have different extension points from SFRA. Key differences when integrating VINR:
+
+- **B2B Commerce** uses Aura or LWR components rather than ISML templates. The LINK cartridge does not apply directly. Use the VINR Elements JS library embedded in a custom LWC, or redirect to VINR Hosted Checkout from the B2B order summary page.
+- **Order Management (OMS)** payment actions are modeled as Apex or Flow invocable actions rather than SFCC controllers. The VINR OMS connector provides pre-built Flow actions for capture, refund, and void that map to VINR API calls. Custom OMS integrations can call the VINR API directly from an Apex `HttpRequest`.
+- **Subscription billing via OMS** requires a stored VINR token (`pm_` ID) on the OMS order. The cartridge stores this on the SFCC Customer Payment Instrument (see [Tokenization and saved cards](#tokenization-and-saved-cards)); the OMS connector reads it when scheduling recurring charge jobs.
+
+Contact your VINR account manager for the B2B Commerce component library and the OMS connector package — these are not available on the public AppExchange listing.
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card
+    title="WooCommerce plugin"
+    href="/docs/payments/plugins/woocommerce"
+    description="Install and configure the VINR payment gateway plugin for WooCommerce on WordPress."
+  />
+  <Card
+    title="Tokenization"
+    href="/docs/payments/tokenization"
+    description="How VINR replaces raw card numbers with tokens to reduce PCI scope and enable one-click reuse."
+  />
+  <Card
+    title="In-person go live"
+    href="/docs/payments/in-person/go-live"
+    description="Complete the go-live checklist before taking your first real card-present payment with VINR."
+  />
+</Cards>

@@ -1,0 +1,380 @@
+---
+title: Advanced flow
+description: Build your own payment UI and drive the full payment lifecycle directly against the VINR API — no hosted UI required.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+The advanced flow gives you complete control over both the payment UI and the payment lifecycle. You collect card data in your own form, tokenize it client-side, and then orchestrate every subsequent step — confirmation, 3DS authentication, and capture — from your server. Nothing is delegated to a hosted page or a pre-built component.
+
+This path is appropriate when Checkout and Elements cannot satisfy your UX requirements, when you need to compose payments into a larger custom flow, or when your platform must own the entire rendering layer. In exchange for that control you accept a significantly higher PCI compliance burden: because your frontend handles raw card data, you must be certified under **SAQ-D** (or an equivalent full ROC assessment).
+
+For a side-by-side comparison of all integration paths, see [Integration models](/docs/integration/integration-models).
+
+## Prerequisites
+
+Before you start, make sure you have the following in place.
+
+- **SAQ-D PCI compliance** — your organisation has completed, or is actively working through, an SAQ-D self-assessment questionnaire (or equivalent). Raw card numbers must never touch your servers; the tokenization step below is mandatory and must run exclusively in the browser.
+- **VINR SDK or direct HTTPS access** — install the TypeScript SDK (`npm install @vinr/sdk`) or issue signed requests directly to `https://api.vinr.com/v1`. All examples below use the SDK.
+- **Test keys from the Dashboard** — navigate to **Dashboard → Developers → API keys** and copy your `sk_test_` secret key and `pk_test_` publishable key. Use the publishable key in browser code; keep the secret key server-side only.
+
+```bash
+npm install @vinr/sdk
+```
+
+## Step 1: Tokenize card data
+
+Card tokenization converts raw card data into a reusable payment method token (`pm_...`) that you can pass safely to your server. This call must originate from your frontend — never from a server that logs requests, so that raw card values never appear in any log or network trace.
+
+<Tabs items={["TypeScript (browser)", "Plain fetch"]}>
+<Tab value="TypeScript (browser)">
+
+```typescript
+import { VinrClient } from '@vinr/sdk/browser';
+
+const vinr = new VinrClient({ publishableKey: process.env.NEXT_PUBLIC_VINR_PUBLISHABLE_KEY });
+
+const paymentMethod = await vinr.paymentMethods.create({
+  type: 'card',
+  card: {
+    number: cardNumberInput.value,
+    expMonth: parseInt(expMonthInput.value, 10),
+    expYear: parseInt(expYearInput.value, 10),
+    cvc: cvcInput.value,
+  },
+  billingDetails: {
+    name: nameInput.value,
+  },
+});
+
+// paymentMethod.id → "pm_01j9xkz8..."
+// Send paymentMethod.id to your server; never send raw card values.
+```
+
+</Tab>
+<Tab value="Plain fetch">
+
+```typescript
+const response = await fetch('https://api.vinr.com/v1/payment-methods', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${VINR_PUBLISHABLE_KEY}`,
+  },
+  body: JSON.stringify({
+    type: 'card',
+    card: {
+      number: cardNumberInput.value,
+      expMonth: parseInt(expMonthInput.value, 10),
+      expYear: parseInt(expYearInput.value, 10),
+      cvc: cvcInput.value,
+    },
+  }),
+});
+
+const { id: paymentMethodId } = await response.json();
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="warn">
+Never log or store raw card data. Zero raw card values — `number`, `cvc`, `expMonth`, `expYear` — should appear in console output, application logs, analytics events, or any persistent store. Once you have a `pm_...` token, discard the raw values immediately.
+</Callout>
+
+## Step 2: Create and confirm the payment
+
+On your server, create a payment and confirm it in a single call by passing `confirm: true` alongside the payment method token. The server-side SDK uses your secret key, which must never be exposed to the browser.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 4900,
+  currency: 'EUR',
+  paymentMethod: paymentMethodId,
+  confirm: true,
+  returnUrl: 'https://yoursite.com/orders/return',
+  metadata: { orderId: 'ord_88821' },
+});
+```
+
+The `status` field on the returned payment object tells you what to do next.
+
+<Tabs items={["completed", "requires_action", "failed"]}>
+<Tab value="completed">
+
+```typescript
+if (payment.status === 'completed') {
+  await fulfillOrder(payment.metadata.orderId);
+}
+```
+
+The payment was authorized and captured (or authorized if you set `captureMethod: 'manual'`). No further action is needed from the customer.
+
+</Tab>
+<Tab value="requires_action">
+
+```typescript
+if (payment.status === 'requires_action') {
+  const redirectUrl = payment.authentication.redirectUrl;
+  return res.json({ requiresAction: true, redirectUrl });
+}
+```
+
+The issuer requires 3DS authentication. See [Step 3](#step-3-handle-requires_action-3ds) below.
+
+</Tab>
+<Tab value="failed">
+
+```typescript
+if (payment.status === 'failed') {
+  console.error(payment.lastPaymentError?.code, payment.lastPaymentError?.message);
+  return res.status(402).json({ error: payment.lastPaymentError });
+}
+```
+
+The payment was declined. Surface the decline reason to the customer and invite them to try a different card or contact their bank.
+
+</Tab>
+</Tabs>
+
+## Step 3: Handle requires_action (3DS)
+
+When `status` is `requires_action`, the issuer has triggered a Strong Customer Authentication (3DS) challenge. You must redirect the customer — or invoke native 3DS in your mobile app — and then verify the outcome before fulfilling the order.
+
+<Steps>
+
+### Redirect the customer to the authentication URL
+
+Return the redirect URL to your frontend and navigate the customer there.
+
+```typescript
+if (payment.status === 'requires_action') {
+  res.json({
+    requiresAction: true,
+    redirectUrl: payment.authentication.redirectUrl,
+  });
+}
+```
+
+```typescript
+if (data.requiresAction) {
+  window.location.href = data.redirectUrl;
+}
+```
+
+### Handle the return URL
+
+After the customer completes (or abandons) the challenge, the issuer redirects back to your `returnUrl` with the payment ID in the query string. Retrieve the updated payment on your server to check the final status.
+
+```typescript
+const paymentId = new URL(req.url).searchParams.get('payment_id');
+const payment = await vinr.payments.retrieve(paymentId);
+
+if (payment.status === 'completed') {
+  await fulfillOrder(payment.metadata.orderId);
+} else if (payment.authentication.status === 'failed') {
+  return res.status(402).json({ error: 'Authentication failed' });
+}
+```
+
+### Alternatively, confirm via webhook
+
+Instead of polling the return URL, listen for `payment.completed` or `payment.failed` on your webhook endpoint. Webhook delivery is more reliable for server-side fulfilment because it is not dependent on the customer's browser completing the redirect.
+
+See [Step 5](#step-5-verify-via-webhook) and [Webhooks](/docs/integration/webhooks).
+
+</Steps>
+
+## Step 4: Capture (if manual)
+
+If you created the payment with `captureMethod: 'manual'`, the payment moves to `authorized` after confirmation and 3DS (if required). Funds are reserved on the card but not yet settled. Capture once you are ready to fulfil — typically after shipping physical goods or confirming a reservation.
+
+```typescript
+const captured = await vinr.payments.capture(payment.id);
+
+// captured.status          → "completed"
+// captured.amountCaptured  → 4900
+```
+
+You can capture a smaller amount than the original authorization. Unused funds are released automatically to the cardholder.
+
+```typescript
+const captured = await vinr.payments.capture(payment.id, {
+  amount: 3500,
+});
+
+// captured.amountCaptured  → 3500 (€35.00)
+// remaining €14.00 hold released
+```
+
+Authorizations expire after 7 days by default. If you do not capture within that window the payment moves to `expired` and the cardholder's hold is released; you cannot capture an expired authorization.
+
+For the full authorize-and-capture reference, including voids, see [Authorize & capture](/docs/payments/authorize-and-capture).
+
+## Step 5: Verify via webhook
+
+Webhook delivery is the authoritative signal for fulfilment. Do not fulfil an order based solely on the API response from Step 2 — always wait for the signed `payment.completed` event before releasing goods or services.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+import { headers } from 'next/headers';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+export async function POST(req: Request) {
+  const body = await req.text();
+  const signature = req.headers.get('x-vinr-signature')!;
+  const timestamp = req.headers.get('x-vinr-timestamp')!;
+
+  const event = vinr.webhooks.constructEvent(body, signature, timestamp);
+
+  if (event.type === 'payment.completed') {
+    const payment = event.data.object;
+    await fulfillOrder(payment.metadata.orderId);
+  }
+
+  return new Response('OK');
+}
+```
+
+<Callout type="info">
+Pass the raw request body string to `constructEvent` — not the parsed JSON. Re-serializing changes byte order and whitespace and will break the HMAC signature check.
+</Callout>
+
+For endpoint registration, event types, and the retry schedule, see [Webhooks](/docs/integration/webhooks).
+
+## Payment object reference
+
+Key fields on the payment object that drive advanced-flow logic.
+
+<TypeTable
+  type={{
+    status: {
+      type: "'authorized' | 'completed' | 'requires_action' | 'failed' | 'expired'",
+      description: "Current lifecycle state of the payment. Poll or listen to webhooks for transitions.",
+    },
+    "authentication.status": {
+      type: "'pending' | 'succeeded' | 'failed' | 'not_required'",
+      description: "3DS authentication outcome. Check this when status is requires_action.",
+    },
+    "authentication.redirectUrl": {
+      type: "string | null",
+      description: "Issuer-hosted challenge URL. Present only when authentication.status is pending.",
+    },
+    amountCapturable: {
+      type: "integer",
+      description: "Minor-unit amount still available to capture. Equals amount until a partial capture is issued.",
+    },
+    captureMethod: {
+      type: "'automatic' | 'manual'",
+      description: "Whether funds are captured immediately on authorization or held for a manual capture call.",
+      default: "automatic",
+    },
+  }}
+/>
+
+<Advanced>
+
+### Acquirer routing
+
+For merchants with multiple acquirer relationships, pass `acquirer` on the payment create request to pin a specific acquirer rather than letting VINR route automatically. Contact your VINR account manager to enable multi-acquirer routing on your account.
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 4900,
+  currency: 'EUR',
+  paymentMethod: paymentMethodId,
+  confirm: true,
+  routing: {
+    acquirer: 'acq_eu_primary',
+  },
+});
+```
+
+Automatic routing selects the acquirer with the highest expected authorization rate for the card BIN and currency pair, using real-time network health data.
+
+### Idempotency keys
+
+For any state-mutating request — especially payment creation — pass an idempotency key so that network timeouts and retries are safe. VINR deduplicates requests with the same key within a 24-hour window and returns the original response without re-executing the operation.
+
+```typescript
+const payment = await vinr.payments.create(
+  {
+    amount: 4900,
+    currency: 'EUR',
+    paymentMethod: paymentMethodId,
+    confirm: true,
+  },
+  {
+    idempotencyKey: `order-${orderId}-attempt-1`,
+  },
+);
+```
+
+Use a key that is meaningful to your domain (order ID + attempt counter is a common pattern) so you can audit which requests were deduplicated.
+
+### Handling network errors and retries
+
+On a network timeout or a 5xx response, retry the request with the **same idempotency key**. If VINR processed the original request before the connection dropped, the retry returns the original result — the payment is not duplicated.
+
+```typescript
+async function createPaymentWithRetry(params, idempotencyKey: string, maxAttempts = 3) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await vinr.payments.create(params, { idempotencyKey });
+    } catch (err) {
+      if (attempt === maxAttempts || !isRetryable(err)) throw err;
+      await new Promise((r) => setTimeout(r, 200 * attempt));
+    }
+  }
+}
+
+function isRetryable(err: unknown): boolean {
+  if (err instanceof VinrError) {
+    return err.statusCode === 429 || (err.statusCode >= 500 && err.statusCode < 600);
+  }
+  return err instanceof TypeError;
+}
+```
+
+Do not retry on 4xx errors (except 429) — they indicate a problem with the request itself that a retry will not fix.
+
+### 3RI — requestor-initiated authentication
+
+For merchant-initiated transactions (MITs) such as subscription renewals, instalment charges, and unscheduled COF charges, you can attach a network transaction ID from a previous customer-present authentication to satisfy SCA without requiring a new challenge.
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 4900,
+  currency: 'EUR',
+  paymentMethod: 'pm_stored_card',
+  confirm: true,
+  offSession: true,
+  mandateData: {
+    customerAcceptance: {
+      type: 'online',
+      onlineParams: {
+        networkTransactionId: priorNetworkTxId,
+      },
+    },
+  },
+});
+```
+
+3RI shifts liability to the issuer for the prior authentication and exempts the transaction from a new SCA challenge. Always store `payment.authentication.networkTransactionId` from the customer-present session so you can reference it on subsequent MITs.
+
+</Advanced>
+
+## Next steps
+
+<Cards>
+  <Card title="Integration models" href="/docs/integration/integration-models" description="Compare Checkout, Elements, and the advanced API flow side by side." />
+  <Card title="Authorize & capture" href="/docs/payments/authorize-and-capture" description="Reserve funds and capture after fulfilment using captureMethod: manual." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Register endpoints, verify signatures, and handle the retry schedule." />
+</Cards>

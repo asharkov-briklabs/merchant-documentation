@@ -1,0 +1,76 @@
+---
+title: Peak season readiness
+description: How VINR prepares its infrastructure and how your team can maximize conversion during the highest-volume sales periods.
+---
+
+Peak season — typically October through January for retail and e-commerce — is when a large fraction of annual revenue is captured in a compressed window. Outages, slow authorization rates, or misconfigured routing during this period have outsized revenue impact.
+
+This page explains how VINR's infrastructure handles peak loads and what actions your team should take before the season begins.
+
+## How VINR handles peak traffic
+
+VINR's payment processing infrastructure is built to absorb large, sudden spikes without pre-warming or manual intervention.
+
+### Architecture
+
+- **Active/active, stateless design** — All processing nodes are fully symmetric. Any node can handle any request. There is no primary/standby failover delay.
+- **Headroom maintained below 30% utilization** — At normal load, VINR's processing capacity is running below 30% of peak tested capacity. Seasonal spikes land in the headroom.
+- **Continuous load testing** — Automated load tests run year-round. Capacity planning is adjusted if tests reveal headroom shrinking below target.
+- **No scheduled maintenance during processing windows** — VINR does not perform disruptive maintenance during high-volume periods. Releases during peak season are limited to security patches and go through an accelerated review process.
+
+### Code freezes
+
+VINR enforces code freezes around major shopping events to eliminate deployment risk:
+
+| Event | Freeze window |
+|---|---|
+| Singles Day (11.11) | 3 days before → 2 days after |
+| Black Friday / Cyber Monday | 5 days before → 3 days after |
+| Christmas / Boxing Day | 22 Dec → 27 Dec |
+| New Year's | 30 Dec → 2 Jan |
+
+Non-critical infrastructure changes are not deployed during these windows. If you are building on VINR, plan your own releases around the same schedule.
+
+## Merchant preparation checklist
+
+The following actions are your team's responsibility. Complete them at least 2–3 weeks before your peak period begins.
+
+### Authorization and conversion
+
+- **Review your authorization rate baseline** — Pull a 30-day authorization rate report from the VINR dashboard. Flag any decline codes that appear at >0.5% frequency. Common actionable codes are documented in [Result codes](/docs/troubleshooting/result-codes).
+- **Enable smart routing** — VINR's multi-acquirer routing automatically selects the best-performing acquirer per BIN. Confirm it is enabled in your account settings.
+- **Enable account updater** — Stored card tokens are automatically updated when cardholders receive new cards. Reduces declines on recurring charges. Contact your account manager to enable.
+- **Test your retry logic** — Soft declines (insufficient funds, do-not-honor) are retriable. Ensure your system retries with appropriate back-off rather than immediately failing the order.
+
+### Payment methods
+
+- **Confirm local payment methods are live in target markets** — If you sell in markets with dominant local methods (UPI in India, iDEAL in the Netherlands, BLIK in Poland), verify they are configured and tested. See [Markets](/docs/industries-and-markets/markets).
+- **Enable Buy Now Pay Later (BNPL) where relevant** — BNPL methods can lift average order value. Enable and test before the season.
+
+### Offline and resilience
+
+- **Test offline payment mode** (in-person only) — VINR terminals can operate in offline mode during connectivity loss, queuing authorizations for when connectivity is restored. Verify your terminal software version supports offline mode and test the flow in staging.
+- **Pre-load terminal software updates** — Do not update terminal firmware during peak. Push updates in the month before the season begins.
+
+### Operations and monitoring
+
+- **Set up real-time authorization alerts** — Configure VINR webhook alerts to fire when authorization rates drop below your threshold. See [Webhooks](/docs/integration/webhooks).
+- **Set up volume anomaly alerts** — Alert on sudden drops in transaction volume (may indicate a front-end outage on your side).
+- **Pre-approve refund reserve** — High-volume periods generate proportionally higher refund requests in January. Ensure your settlement account has sufficient balance to cover projected refunds without triggering holds.
+- **Brief your dispute team** — Chargebacks spike in January as consumers review holiday charges. Ensure your team has evidence-submission processes in place and understands VINR's [dispute response tooling](/docs/payments/disputes).
+
+### Capacity on your side
+
+- **Load-test your checkout flow** — VINR can handle the payment processing; your checkout UI and order-management system must also handle the load. Run a load test that simulates your peak TPS estimate.
+- **CDN and caching** — Ensure static checkout assets are served from a CDN and that your session and inventory layers are designed to handle burst traffic.
+
+## Resources
+
+- [Result codes reference](/docs/troubleshooting/result-codes) — interpret decline codes and know which are retriable
+- [Disputes](/docs/payments/disputes) — evidence submission and chargeback response
+- [Webhooks](/docs/integration/webhooks) — configure authorization-rate and volume alerts
+- [VINR status page](https://status.vinr.com) — real-time infrastructure status during the season
+
+<Callout type="info">
+  VINR's peak season readiness webinar runs each September. Your account manager will send an invitation. The webinar covers the current season's volume forecast, new features relevant to peak, and a Q&A.
+</Callout>

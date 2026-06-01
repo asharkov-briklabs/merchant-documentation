@@ -1,0 +1,182 @@
+---
+title: Surcharging
+description: Pass card processing costs to customers where permitted by law.
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+A surcharge is an additional fee applied to a transaction to recover the cost of card acceptance. Instead of absorbing interchange and scheme fees into your pricing, you pass some or all of that cost directly to the customer at checkout. VINR calculates the surcharge automatically based on card type and your configured rate, adds it to the total before capture, and surfaces it on receipts and in settlement reporting.
+
+<Callout type="warn">
+Surcharging consumer cards is **prohibited in the EU and UK** under PSD2 and interchange fee regulation. It is also restricted or banned in several US states and other jurisdictions. Always verify the applicable rules with qualified legal counsel before enabling surcharging for any market.
+</Callout>
+
+## How surcharging works
+
+When surcharging is active, VINR inspects the card presented at checkout and resolves the applicable surcharge using your configuration:
+
+1. VINR identifies the card's network and, where available, whether it is a credit or debit card.
+2. The surcharge amount is computed — either as a fixed minor-unit value, as a percentage of the payment amount, or automatically at VINR's cost-recovery rate.
+3. The surcharge is added to the original amount to form the total charged to the customer.
+4. Both the original amount and the surcharge amount appear as separate line items on the hosted checkout, the payment receipt, and the settlement record.
+
+No code changes are needed to handle the math — VINR applies and tracks the surcharge on the payment object so your systems only need to read `surchargeAmount` from the response.
+
+## Enable surcharging
+
+**Dashboard:** go to Settings → Payment processing → Surcharging, toggle the feature on, and choose your default surcharge mode and rate. Changes take effect on new payments immediately.
+
+**SDK:** pass `surchargeConfig` when creating a payment to enable surcharging and control the mode for that specific charge.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 5000,
+  currency: 'USD',
+  description: 'Order #8821',
+  returnUrl: 'https://yoursite.com/orders/8821',
+  surchargeConfig: {
+    mode: 'automatic',
+  },
+  metadata: { orderId: '8821' },
+});
+
+// After the customer completes checkout:
+// payment.amount           → 5000   (original)
+// payment.surchargeAmount  → 147    (e.g. 2.95% of 5000, rounded to minor units)
+// payment.totalAmount      → 5147   (amount actually charged to the card)
+```
+
+The response object always includes `surchargeAmount` (integer, minor units) and `totalAmount` even when the resolved surcharge is zero — this keeps downstream reconciliation logic consistent.
+
+<Callout type="info">
+If you set `surchargeConfig` on a payment but the card is exempt from surcharging (for example, a debit card in a state that restricts surcharges to credit only), VINR sets `surchargeAmount` to `0` and charges only the original `amount`.
+</Callout>
+
+## Fixed vs percentage surcharge
+
+<TypeTable
+  type={{
+    mode: {
+      type: "'automatic' | 'fixed' | 'percentage'",
+      description: "How VINR calculates the surcharge. automatic uses VINR's cost-recovery rate for the card type. fixed applies a set minor-unit amount. percentage applies a decimal fraction of the payment amount.",
+      default: "automatic",
+    },
+    fixedAmount: {
+      type: "integer",
+      description: "Surcharge in minor units of the payment currency. Only used when mode is fixed.",
+      default: "—",
+    },
+    percentage: {
+      type: "number (0–1)",
+      description: "Fraction of the payment amount to add as a surcharge. For example, 0.03 means 3%. Only used when mode is percentage.",
+      default: "—",
+    },
+    maxAmount: {
+      type: "integer",
+      description: "Hard cap on the surcharge in minor units, regardless of mode. VINR will not surcharge above this value even if the computed amount is higher.",
+      default: "—",
+    },
+  }}
+/>
+
+Example using a percentage with a cap:
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 20000,
+  currency: 'USD',
+  description: 'Order #9902',
+  returnUrl: 'https://yoursite.com/orders/9902',
+  surchargeConfig: {
+    mode: 'percentage',
+    percentage: 0.04,
+    maxAmount: 500,
+  },
+});
+
+// payment.surchargeAmount  → 500   (4% of 20000 = 800, but capped at 500)
+// payment.totalAmount      → 20500
+```
+
+When `mode` is `automatic`, you do not need to set `fixedAmount` or `percentage` — VINR resolves the rate internally from your account's processing cost profile for that card type.
+
+## Receipts and disclosure
+
+Most jurisdictions that permit surcharging require pre-checkout disclosure. Customers must know the surcharge amount — or at minimum the surcharge rate — before they consent to the charge. VINR's hosted checkout handles this automatically:
+
+- The surcharge amount is displayed as a distinct line item on the payment summary page, before the customer submits.
+- The final receipt (email and hosted receipt page) repeats the breakdown: original amount, surcharge, and total.
+- The `surchargeAmount` and `totalAmount` fields on the payment object are available for inclusion in your own order confirmation emails or PDF invoices.
+
+<Callout type="warn">
+VINR surfaces the surcharge on the hosted checkout. If you build a **custom checkout UI** using VINR Elements or the raw API, you are responsible for presenting the disclosure before the customer confirms payment. This is a legal requirement in most surcharging-permitting jurisdictions.
+</Callout>
+
+You remain responsible for regional compliance, including any required signage (e.g. US card network rules requiring a posted notice), any caps on permissible surcharge rates, and any reporting obligations. VINR's tooling satisfies the technical disclosure requirement on the hosted checkout, not the broader compliance programme.
+
+<Accordions>
+<Accordion title="Enterprise: per-card-type rules, multicurrency, and refunds">
+
+### Per-card-type rules
+
+Enterprise accounts can configure surcharge rates at the card-type level rather than applying a single account-wide rate. Rules are evaluated in priority order: a matching card-type rule takes precedence over the account default.
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 10000,
+  currency: 'USD',
+  returnUrl: 'https://yoursite.com/orders/complete',
+  surchargeConfig: {
+    mode: 'percentage',
+    percentage: 0.03,
+    cardTypeOverrides: [
+      { cardCategory: 'debit', percentage: 0 },
+      { cardCategory: 'credit', percentage: 0.03 },
+    ],
+  },
+});
+```
+
+This example charges no surcharge on debit cards (matching many state-level restrictions) and 3% on credit cards. `cardCategory` may be `'credit'`, `'debit'`, or `'prepaid'`. Card category is resolved from BIN data; when it cannot be determined (e.g. virtual cards with masked BIN), VINR falls back to the top-level `percentage` or `mode`.
+
+### Multicurrency surcharge handling
+
+Surcharge amounts are always calculated in the **presentment currency** — the currency the customer is charged in. If you operate cross-border and settle in a different currency, `surchargeAmount` on the payment object reflects the presentment currency, while `fxDetails.settledAmount` captures the converted total in your settlement currency. The surcharge is included in the settled total; it is not converted or reported separately in FX breakdowns.
+
+When using percentage mode in zero-decimal currencies (e.g. JPY), VINR rounds the computed surcharge to the nearest whole unit. For three-decimal currencies (e.g. KWD), the result is rounded to the nearest thousandth.
+
+### Refund behaviour
+
+When a payment with a surcharge is refunded, the surcharge portion is refunded proportionally:
+
+- **Full refund:** the full `totalAmount` (original + surcharge) is returned to the customer. Both `amount` and `surchargeAmount` on the refund object reflect their respective portions.
+- **Partial refund:** the refund amount you specify is applied against the original payment amount first. If the partial refund equals or exceeds the original `amount`, the remainder covers the surcharge. The `surchargeAmountRefunded` field on the refund tracks how much of the surcharge was returned.
+
+```typescript
+const refund = await vinr.refunds.create({
+  payment: 'pay_3Nf8x2a',
+});
+
+// For a payment with amount: 5000 and surchargeAmount: 147 (totalAmount: 5147)
+// refund.amount                → 5000
+// refund.surchargeAmountRefunded → 147
+// refund.totalRefunded         → 5147
+```
+
+Processing fees on the surcharge portion are not separately refunded — VINR's standard fee refund policy (see [Refunds](/docs/payments/refunds)) applies to the total settled amount.
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Payment methods" href="/docs/payments/payment-methods" description="Cards, bank transfers, and stablecoins supported by VINR." />
+  <Card title="Multicurrency & FX" href="/docs/payments/multicurrency" description="Present and settle in multiple currencies." />
+  <Card title="PCI DSS" href="/docs/compliance/pci-dss" description="Your compliance obligations when handling card data." />
+</Cards>

@@ -1,0 +1,121 @@
+---
+title: Install the WooCommerce plugin
+description: Add VINR payments to your WooCommerce store in minutes — no custom code required.
+category: "payments"
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-06-01"
+---
+
+This guide walks you through downloading the VINR WooCommerce plugin, installing it in WordPress, connecting it to your VINR account, and placing a successful test order. By the end you'll have a working checkout that accepts cards, digital wallets, and any other payment methods enabled on your account.
+
+## Overview
+
+Download the plugin from your VINR dashboard, upload and activate it in WordPress, paste in your API credentials, then place a test order using a sandbox card. When everything looks good, swap in your live API key and you're open for business.
+
+## Before you start
+
+Make sure your environment meets the minimum requirements before installing:
+
+- **WooCommerce** 7.0 or later
+- **WordPress** 6.0 or later
+- **PHP** 8.0 or later
+- An **SSL certificate** on your store domain (required for live payments)
+- A [VINR merchant account](/docs/getting-started) (free to create)
+- Your **Test API Key** and **Merchant ID** from the VINR dashboard under Settings → Developers → API keys
+
+## Download the plugin
+
+1. Log in to your [VINR dashboard](https://dashboard.vinr.com).
+2. Navigate to **Integrations → Plugins → WooCommerce**.
+3. Click **Download**. You'll receive a file named `vinr-woocommerce-payments.zip`.
+
+<Callout type="warn">
+Always download the plugin from your VINR dashboard. Downloading from third-party sources can give you a version that is out of sync with your account's API contract, which causes authentication errors at runtime.
+</Callout>
+
+## Install and activate
+
+<Steps>
+
+### Upload the plugin
+
+In your WordPress admin, go to **Plugins → Add New → Upload Plugin**. Choose the `vinr-woocommerce-payments.zip` file you downloaded, then click **Install Now**.
+
+### Activate the plugin
+
+Click **Activate Plugin** on the confirmation screen.
+
+### Confirm the plugin appears in WooCommerce
+
+Go to **WooCommerce → Settings → Payments**. You should now see **VINR Payments** listed as a payment gateway.
+
+</Steps>
+
+## Enter your API credentials
+
+1. In WordPress admin, go to **WooCommerce → Settings → Payments → VINR Payments** and click **Manage**.
+2. Paste your **Test API Key** (it starts with `test_`) into the API Key field.
+3. Paste your **Merchant ID** into the Merchant ID field.
+4. Click **Save changes**.
+
+<Callout type="info">
+Use your test keys here for now. You'll replace them with live keys in the [Go live](#go-live) step below. Test keys are safe to use in a production WordPress installation — no real charges are processed while a test key is active.
+</Callout>
+
+## Enable payment methods
+
+On the same **VINR Payments → Manage** settings page, click the **Payment Methods** tab. Toggle on the methods you want to offer at checkout:
+
+- **Cards** (Visa, Mastercard, Amex)
+- **Apple Pay / Google Pay**
+- **SEPA Direct Debit**
+
+A method only appears in this list if it is enabled on your VINR account. If a method you expect is missing, enable it in the VINR dashboard under **Settings → Payment Methods**, then refresh this page.
+
+## Place a test order
+
+Add any product to your cart and proceed to checkout. At the payment step, select **VINR Payments** and enter the following test card:
+
+| Field | Value |
+|---|---|
+| Card number | `4242 4242 4242 4242` |
+| Expiry | Any future date |
+| CVC | Any 3 digits |
+
+Submit the order. Within a few seconds you should see:
+
+- The WooCommerce order status change to **Processing**.
+- A new payment appear in your VINR dashboard under **Payments** with status **Completed**.
+
+<Callout type="info">
+For a full list of test cards that simulate declines, 3D Secure challenges, and other scenarios, see [Testing](/docs/integration/testing).
+</Callout>
+
+## Go live
+
+When you're ready to accept real payments:
+
+<Steps>
+
+### Replace your test API key with your live key
+
+In WordPress admin, go to **WooCommerce → Settings → Payments → VINR Payments → Manage**. Replace the `test_` key with your live API key from the VINR dashboard.
+
+### Save and confirm
+
+Click **Save changes**, then place one real low-value order (for example, a £1 product) to confirm end-to-end that the live key is accepted and the payment appears in your VINR dashboard.
+
+### Set up webhooks
+
+For reliable order status updates (especially for redirect-based methods like SEPA), configure a webhook endpoint in the VINR dashboard pointing to `https://yourstore.com/?wc-api=vinr_payments`. See the [full plugin reference](/docs/payments/plugins/woocommerce) for webhook setup, tokenization, and troubleshooting.
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="WooCommerce plugin reference" href="/docs/payments/plugins/woocommerce" description="Webhook setup, tokenization, recurring payments, and troubleshooting." />
+  <Card title="Save and reuse cards" href="/docs/payments/tokenization" description="Let returning customers pay in one click with saved payment methods." />
+  <Card title="Go live checklist" href="/docs/payments/in-person/go-live" description="Confirm everything is in order before accepting real payments." />
+</Cards>

@@ -1,0 +1,176 @@
+---
+title: "In-person payments"
+description: "Accept card-present payments at the counter, on the go, and at unattended kiosks with VINR terminals."
+persona: ["developer", "business-owner"]
+priority: "P0"
+lastUpdated: "2026-05-31"
+---
+
+VINR in-person payments bring together three complementary layers: the **Terminal API** (available in both cloud-managed and local network modes), **Tap to Pay** for software-only acceptance on compatible mobile devices, and **pre-built POS integrations** for common point-of-sale systems. All three share the same `payment` object model and produce the same `payment.completed` webhook events as your online integrations — you do not need a separate data pipeline or reconciliation flow for in-person volume.
+
+## Solution types
+
+| Solution | Best for | Connectivity | Printer | Integration path |
+|---|---|---|---|---|
+| **Countertop terminal** (Nexgo CT20 / CT20P) | Fixed checkout lanes, reception desks | Ethernet or WiFi | Built-in receipt printer | Terminal API or standalone |
+| **Handheld terminal** (Nexgo N92 / N86Pro) | Table-side, queue-busting, field sales | 4G / WiFi / Bluetooth | Built-in printer (N92); N86Pro large-screen variant | Terminal API or standalone |
+| **Compact mPOS** (Ciontek CM30) | Pop-ups, delivery, lightweight mobile acceptance | Bluetooth / WiFi | No printer — pair with a Bluetooth receipt printer | Terminal API |
+| **Tap to Pay** | Lowest-hardware-cost mobile acceptance | Mobile data / WiFi (host device) | None — digital receipt only | VINR Mobile SDK |
+| **Standalone** | Countertop sales with no back-end integration | Per device | Per device | No code required — configure from the Dashboard |
+
+<Callout type="info">
+All VINR terminals — Nexgo N92, N86Pro, CT20, CT20P, and Ciontek CM30 — support contactless (NFC), chip+PIN, and magnetic stripe in every market where the device is certified.
+</Callout>
+
+## How it connects to your backend
+
+Your backend asks VINR to collect a payment; the terminal handles the card interaction; VINR delivers the result as a standard webhook. The same payment object you work with online is what arrives in your system.
+
+<Steps>
+<Step>
+**Create a terminal payment session**
+
+Call `vinr.terminal.sessions.create()` from your server with the amount, currency, and target terminal ID. VINR reserves the terminal and returns a session object.
+
+<Tabs items={["SDK", "REST"]}>
+<Tab value="SDK">
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const session = await vinr.terminal.sessions.create({
+  amount: 2500,
+  currency: 'EUR',
+  terminalId: 'term_8Rv3x...',
+  description: 'Table 12 — lunch',
+  metadata: { tableId: '12', serverId: 'emp_44' },
+});
+
+// session.id     → "ts_9Zp7k..."
+// session.status → "pending"
+```
+
+</Tab>
+<Tab value="REST">
+
+```bash
+curl -X POST https://api.vinr.com/v1/terminal/sessions \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 2500,
+    "currency": "EUR",
+    "terminalId": "term_8Rv3x...",
+    "description": "Table 12 — lunch"
+  }'
+```
+
+</Tab>
+</Tabs>
+</Step>
+
+<Step>
+**Terminal presents the transaction**
+
+VINR pushes the session to the terminal over the cloud connection (or local API if you use local mode). The device prompts the customer to tap, insert, or swipe.
+</Step>
+
+<Step>
+**Customer completes the card interaction**
+
+The terminal reads the card, performs online authorization with the issuer, and reports the result back to VINR.
+</Step>
+
+<Step>
+**VINR fires `payment.completed` (or `payment.failed`)**
+
+Your webhook endpoint receives the same event structure as an online payment. The `payment.terminalId` field identifies the device; all other fields — `id`, `amount`, `status`, `metadata` — are identical to online payments.
+
+```typescript
+app.post('/webhooks/vinr', (req, res) => {
+  const event = vinr.webhooks.constructEvent(
+    req.body,
+    req.headers['vinr-signature'] as string,
+    process.env.VINR_WEBHOOK_SECRET!,
+  );
+
+  if (event.type === 'payment.completed') {
+    const payment = event.data;
+    console.log('Collected', payment.amount, payment.currency, 'on terminal', payment.terminalId);
+  }
+
+  res.sendStatus(200);
+});
+```
+</Step>
+
+<Step>
+**Poll or subscribe for session status (optional)**
+
+If your POS needs a synchronous result rather than a webhook, poll `vinr.terminal.sessions.retrieve(session.id)` until `status` is `completed` or `failed`. The typical card interaction completes in under five seconds.
+</Step>
+</Steps>
+
+<Callout type="warn">
+Never treat a `pending` or `processing` session as collected. Always wait for `payment.completed` via webhook or a terminal session status of `completed` before fulfilling an order.
+</Callout>
+
+## What's supported
+
+Every VINR terminal supports the following acceptance capabilities out of the box. Feature availability can depend on your acquiring agreement and the market in which the device is deployed.
+
+- **Chip + PIN** — EMV contact card with cardholder PIN entry
+- **Contactless / NFC** — tap-to-pay for cards and mobile wallets up to the issuer's contactless limit
+- **Magnetic stripe** — fallback swipe acceptance where regulations permit
+- **Apple Pay and Google Pay** — in-store NFC wallet payments treated as contactless EMV tokens
+- **Tipping** — percentage or fixed tip amounts presented on the terminal screen before authorization
+- **Surcharging** — automatic card-type-based surcharge calculation (see [Surcharging](/docs/payments/surcharging) for legal requirements)
+- **Dynamic Currency Conversion (DCC)** — offer foreign cardholders the option to pay in their home currency
+- **Cashback** — dispense cash on debit transactions where the acquirer and jurisdiction allow
+- **MOTO** — Mail Order / Telephone Order key-entry for card-not-present transactions processed through a terminal
+- **Offline authorization** — store-and-forward for transactions taken during connectivity loss, subject to floor-limit rules
+- **Gift cards** — closed-loop gift card redemption via the VINR Gift Card module
+- **Installments** — split a purchase into equal installments at the point of sale where the issuer supports it
+
+<Accordions>
+<Accordion title="Advanced — Offline authorization and floor limits">
+
+When a terminal loses its network connection VINR falls back to offline authorization. The terminal applies a configurable floor limit: transactions at or below the limit are approved locally and queued; those above it are declined until connectivity is restored. Queued transactions are uploaded and submitted for authorization when the terminal reconnects.
+
+Floor limits are set per terminal in the Dashboard under **Hardware → Terminals → [device] → Offline settings**. The default is `0` (no offline approvals) until you explicitly raise it. Offline risk is borne by the merchant — transactions that later fail authorization are reversed and the funds are not settled.
+
+</Accordion>
+</Accordions>
+
+## Before you start
+
+To accept your first in-person payment you need a provisioned terminal and a decision on which Terminal API mode fits your architecture.
+
+- **Hardware** — review the full device specifications, supported markets, and ordering process in [Terminal hardware](/docs/payments/in-person/terminals).
+- **API mode** — choose between cloud mode (VINR routes sessions to the device over the internet) and local mode (your server communicates with the terminal directly on the local network) in [Terminal architecture](/docs/payments/in-person/architecture).
+
+<Callout type="info">
+Before going live with card-present acceptance, complete the steps in the [In-person go-live checklist](/docs/payments/in-person/go-live) — this includes certifying your terminal software version, confirming your PCI P2PE scope, and enabling live mode on each device.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card
+    title="Terminal hardware"
+    href="/docs/payments/in-person/terminals"
+    description="Device specifications, supported markets, and how to order and provision VINR terminals."
+  />
+  <Card
+    title="Accept a payment"
+    href="/docs/payments/in-person/accept-a-payment"
+    description="Step-by-step guide to creating a terminal session and handling the result in your backend."
+  />
+  <Card
+    title="Terminal architecture"
+    href="/docs/payments/in-person/architecture"
+    description="Choose between cloud mode and local mode, and understand the connection lifecycle."
+  />
+</Cards>

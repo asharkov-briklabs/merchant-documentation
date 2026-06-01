@@ -1,0 +1,204 @@
+---
+title: Terminal API architecture
+description: Cloud and local Terminal API modes — choose the right connectivity model for your POS.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+VINR terminals operate in two connectivity modes: **Cloud mode**, where your backend drives the terminal through the VINR API, and **Local mode**, where your POS application talks directly to the terminal over your local network. Both modes produce identical payment objects, emit the same webhooks, and support the same card entry methods — the difference is entirely in how instructions reach the device.
+
+## Cloud mode
+
+In Cloud mode your server never communicates with the terminal directly. You POST a payment intent to the VINR API and VINR's cloud infrastructure pushes the collect action to the terminal in real time.
+
+<Steps>
+<Step>
+Your backend creates a terminal payment and specifies the target terminal ID.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.terminal.payments.create({
+  amount: 2500,
+  currency: 'EUR',
+  terminalId: 'term_7Kx9mBq',
+  description: 'Table 12 — dinner',
+});
+```
+</Step>
+<Step>
+VINR validates the request and pushes the collect action to the terminal over a persistent TLS connection.
+</Step>
+<Step>
+The terminal prompts the cardholder and executes the transaction (NFC tap, chip+PIN, or magnetic stripe).
+</Step>
+<Step>
+Authorization result travels from the terminal back to VINR; VINR completes the payment object and fires the `terminal.payment.completed` webhook to your registered endpoint.
+</Step>
+</Steps>
+
+**Advantages**
+
+- No LAN access needed between your server and the terminal — works across the public internet.
+- Centralized control: cancel or redirect any terminal from your dashboard or API.
+- Simple integration: one POST from any backend language, no SDK required on the POS device.
+
+**Trade-offs**
+
+- Requires continuous internet connectivity on both sides.
+- Round-trip latency adds ~200–400 ms before the terminal screen activates.
+
+## Local mode
+
+In Local mode your POS application discovers the terminal on the same local network and sends payment commands directly to the device's HTTPS endpoint. VINR's cloud is only involved for the card authorization; it is not in the command path.
+
+<Steps>
+<Step>
+Your POS discovers available terminals using mDNS or a static IP assignment. Each terminal advertises a service named `_vinr-terminal._tcp` on port 8443.
+</Step>
+<Step>
+Your POS authenticates to the terminal using a per-device client certificate and sends the payment command.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const reader = await vinr.terminal.readers.discover({ network: 'local' });
+
+const payment = await vinr.terminal.payments.createLocal({
+  readerId: reader[0].id,
+  amount: 1800,
+  currency: 'EUR',
+  description: 'Counter sale #0091',
+});
+```
+</Step>
+<Step>
+The terminal executes the transaction. If it has internet access the authorization goes via the card network in real time; if it is offline the terminal queues the transaction for deferred authorization (where supported — see connectivity table below).
+</Step>
+<Step>
+Once the terminal reconnects or confirms authorization, VINR fires the `terminal.payment.completed` webhook to your backend.
+</Step>
+</Steps>
+
+**Advantages**
+
+- Lowest latency: the activate-screen round trip is sub-50 ms on a local network.
+- Resilient to intermittent internet outages — supported models can queue and defer authorization.
+- Suitable for high-throughput counters and kiosk environments.
+
+**Trade-offs**
+
+- Your POS device must be on the same LAN (or VLAN) as the terminal, or you must manage static IP routes.
+- Discovery and certificate provisioning add integration complexity.
+
+## Choosing a mode
+
+| Criterion | Cloud mode | Local mode |
+|---|---|---|
+| Internet required | Yes — always | For real-time auth; offline queuing possible |
+| Offline support | No | Yes (device-dependent) |
+| Integration complexity | Low | Medium |
+| Recommended for | Cloud POS, mobile staff, remote management | Fixed-lane retail, high-throughput counters, unreliable connectivity environments |
+
+<Callout type="info">
+You can register the same physical terminal in both modes simultaneously. Cloud mode is the default; Local mode activates when your POS calls the local discovery API. This is the foundation of Hybrid mode — see the advanced section below.
+</Callout>
+
+## Connectivity requirements
+
+Each supported device exposes a different set of radios. Choose hardware that matches your network infrastructure.
+
+<TypeTable
+  type={{
+    "Nexgo N92": { type: "4G / WiFi / Bluetooth", description: "Android handheld with built-in receipt printer. Supports Cloud and Local (WiFi/BT)." },
+    "Nexgo N86Pro": { type: "4G / WiFi / Bluetooth", description: "Android handheld with large screen. Supports Cloud and Local (WiFi/BT)." },
+    "Nexgo CT20": { type: "Ethernet / WiFi", description: "Desktop countertop with receipt printer. Wired Ethernet recommended for Local mode." },
+    "Nexgo CT20P": { type: "Ethernet / WiFi", description: "Desktop countertop with integrated PIN pad. Same network profile as CT20." },
+    "Ciontek CM30": { type: "Bluetooth / WiFi", description: "Compact Android mPOS, no printer. Primarily Local mode via BT or WiFi." },
+  }}
+/>
+
+All five devices support contactless (NFC), chip+PIN, and magnetic stripe regardless of connectivity mode.
+
+<Callout type="warn">
+Ethernet-connected devices (CT20, CT20P) do not have a 4G radio. Ensure a wired fallback path or secondary WiFi SSID is available before going live in Local mode without internet.
+</Callout>
+
+## Security
+
+- All traffic between your server and the VINR API uses **TLS 1.2 or higher**. Legacy cipher suites (RC4, 3DES) are rejected at the gateway.
+- All traffic between your POS and a terminal in Local mode uses **TLS 1.2 or higher** with **mutual TLS**: the terminal presents a VINR-issued per-device certificate and your POS validates it against a pinned CA bundle included in the SDK.
+- Your **API secret key never touches the terminal**. Terminals are provisioned with a separate device credential that cannot be used to call the VINR API directly. If a terminal is lost or stolen, revoke its device certificate from the dashboard without rotating your API key.
+- Webhook payloads are signed with an HMAC-SHA256 signature under `X-VINR-Signature`. Always verify the signature before acting on the event — see [Webhooks](/docs/integration/webhooks).
+
+<Accordions>
+<Accordion title="Advanced — hybrid mode, load balancing, mDNS discovery, and webhook retry">
+
+**Hybrid mode**
+
+Hybrid mode runs Local mode as the primary command path and falls back to Cloud mode when the LAN path is unavailable. The SDK handles failover transparently: if the local HTTPS call to the terminal times out after 2 seconds, the SDK re-issues the command via the cloud channel.
+
+```typescript
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.terminal.payments.create({
+  amount: 3200,
+  currency: 'EUR',
+  terminalId: 'term_7Kx9mBq',
+  description: 'Hybrid fallback example',
+  connectivity: {
+    mode: 'hybrid',
+    localTimeoutMs: 2000,
+  },
+});
+```
+
+When a fallback occurs, `payment.metadata.connectionMode` is set to `'cloud'` on the completed payment object so you can track fallback frequency in your logs.
+
+**Multi-terminal load balancing**
+
+For high-volume counters you can pass an array of terminal IDs. VINR selects the first idle terminal in the list; if all are busy it queues the command and resolves to the terminal that becomes free soonest.
+
+```typescript
+const payment = await vinr.terminal.payments.create({
+  amount: 1500,
+  currency: 'EUR',
+  terminalGroup: ['term_7Kx9mBq', 'term_4Rp2nLw', 'term_9Ys1cVt'],
+  description: 'Queue-routed payment',
+});
+```
+
+The resolved terminal ID is returned in `payment.terminalId` on the response.
+
+**mDNS reader discovery**
+
+In Local mode the SDK uses mDNS (`_vinr-terminal._tcp.local`) to find terminals on the subnet. If your network suppresses mDNS (common in segmented enterprise environments) you can seed a static IP list instead:
+
+```typescript
+const readers = await vinr.terminal.readers.discover({
+  network: 'local',
+  staticHosts: ['192.168.10.51', '192.168.10.52'],
+});
+```
+
+Static hosts bypass mDNS and connect directly over port 8443. Combine with DHCP reservations on your router to keep IPs stable.
+
+**Webhook retry behaviour**
+
+VINR retries failed webhook deliveries with exponential back-off: immediately, then after 1 min, 5 min, 30 min, 2 h, and 5 h. After six attempts with no 2xx response the event is marked `failed` and surfaced in the dashboard. You can replay individual events from the dashboard or via the API without re-running the payment. Ensure your webhook handler is idempotent on the event ID — retries deliver the same `id` on each attempt.
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Accept a payment" href="/docs/payments/in-person/accept-a-payment" description="Step-by-step guide to collecting your first in-person payment in Cloud or Local mode." />
+  <Card title="Terminals" href="/docs/payments/in-person/terminals" description="Hardware specs, provisioning steps, and device management for all supported terminal models." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Verify signatures, handle retries, and react to terminal payment events reliably." />
+</Cards>

@@ -1,0 +1,162 @@
+---
+title: "Standalone terminal"
+description: "Operate a VINR terminal independently — no POS system required."
+persona: ["developer", "business-owner"]
+priority: "P2"
+lastUpdated: "2026-05-31"
+---
+
+In standalone mode a VINR terminal operates entirely on its own: staff enter the sale amount directly on the device, the customer pays, and a receipt prints or is sent by SMS — no POS software, backend integration, or API call required. This is the fastest path to accepting card payments and suits low-volume counters, pop-up stalls, market stands, event tables, and any situation where a POS integration is impractical or where you need a fallback if the POS goes offline. All five VINR terminal models — Nexgo N92, Nexgo N86Pro, Nexgo CT20, Nexgo CT20P, and Ciontek CM30 — support standalone mode and handle contactless (NFC), chip + PIN, and magnetic stripe in this configuration.
+
+## Set up standalone mode
+
+<Steps>
+  <Step>
+    Log in to the VINR Dashboard and navigate to **Hardware → Terminals**. Select the terminal you want to configure.
+  </Step>
+  <Step>
+    Open the **Mode** tab and choose **Standalone**. Save the change. The terminal receives the updated configuration over its next cloud sync — this typically takes under 30 seconds when the device is online.
+  </Step>
+  <Step>
+    Under **Location**, assign the terminal to the physical location where it will be used. Location is required for reporting and tax-jurisdiction routing.
+  </Step>
+  <Step>
+    Optionally, enable **Staff PIN** under **Security**. When enabled, a staff member must enter a four-digit PIN before each transaction, providing an audit trail by staff member in the Dashboard.
+  </Step>
+</Steps>
+
+<Callout type="info">
+Switching a terminal between standalone and integrated mode does not affect its transaction history. Previously captured payments remain visible in the Dashboard regardless of mode changes.
+</Callout>
+
+## Taking a payment
+
+<Steps>
+  <Step>
+    The staff member wakes the terminal and, if a Staff PIN is configured, enters their PIN to unlock the sale screen.
+  </Step>
+  <Step>
+    Staff keys in the sale amount on the numeric keypad and presses **Charge**.
+  </Step>
+  <Step>
+    The terminal prompts the customer to present their card or device. The customer taps (NFC), inserts (chip + PIN), or swipes (magnetic stripe). The terminal selects the optimal entry method automatically.
+  </Step>
+  <Step>
+    On approval, the terminal displays a confirmation and either prints a receipt (Nexgo N92, Nexgo CT20, Nexgo CT20P) or offers an SMS/email receipt (Nexgo N86Pro, Ciontek CM30).
+  </Step>
+  <Step>
+    The transaction appears in **Dashboard → Payments** within seconds. The `terminal_payment.completed` webhook fires at the same time — your systems receive it even in standalone mode.
+  </Step>
+</Steps>
+
+## Tipping in standalone
+
+Tipping configuration for standalone mode lives in the same place as integrated mode: **Dashboard → Hardware → Terminals → [device] → Tipping**.
+
+When tipping is enabled, the terminal presents a tip prompt to the customer immediately after the amount is confirmed but before the card is presented. The customer selects a percentage or enters a custom amount. The final charged amount — base plus tip — is shown for confirmation before the card tap or insert.
+
+<TypeTable
+  type={{
+    enabled: {
+      type: "boolean",
+      description: "Turns the tip prompt on or off for this terminal.",
+      default: "false",
+    },
+    presets: {
+      type: "number[]",
+      description: "Up to three percentage presets shown as quick-select buttons (e.g. [15, 18, 20]).",
+      default: "[15, 18, 20]",
+    },
+    allowCustom: {
+      type: "boolean",
+      description: "Whether the customer can enter a free-form tip amount instead of choosing a preset.",
+      default: "true",
+    },
+    minimumAmount: {
+      type: "integer",
+      description: "Smallest sale amount in cents at which the tip prompt appears. Transactions below this threshold skip the tip screen.",
+      default: "0",
+    },
+  }}
+/>
+
+## Refunds in standalone
+
+You can initiate a refund from the terminal itself or from the Dashboard.
+
+**From the terminal:** Open the side menu, select **Transactions**, find the original sale, and tap **Refund**. The terminal prompts the customer to present the original card (a referenced refund). The refund is authorized over the network and a receipt is issued.
+
+**From the Dashboard:** Navigate to the transaction in **Payments**, open it, and click **Refund**. Enter the amount and confirm. An unreferenced refund is created — no card presentation is needed, and any terminal on the account can be used for receipt delivery if desired.
+
+<Callout type="warn">
+Card-scheme rules require that a referenced refund be processed on the same card used in the original purchase. If the customer no longer has the card, use an unreferenced refund from the Dashboard. Unreferenced refunds carry a slightly higher interchange cost on some schemes.
+</Callout>
+
+For full refund lifecycle details — including partial refunds, refund windows, and webhook events — see [In-person refunds](/docs/payments/in-person/refunds).
+
+## Reporting
+
+All standalone transactions feed into the same reporting pipeline as integrated payments.
+
+- **Dashboard → Payments** shows every transaction in real time, filterable by terminal, location, date, and amount.
+- **Dashboard → Reports** lets you export a CSV of transactions for any date range. The export includes terminal ID, location, entry method, card brand, last four digits, amount, tip, and settlement status.
+- Webhooks fire for every standalone transaction exactly as they do in integrated mode. If you have webhook endpoints registered under **Developers → Webhooks**, you will receive `terminal_payment.completed`, `terminal_payment.failed`, and `refund.created` events without any additional configuration.
+
+For scheduled exports and reconciliation automation, see [Reporting](/docs/operations/reporting) and [Reconciliation](/docs/operations/reconciliation).
+
+## Limitations vs integrated mode
+
+<Callout type="warn">
+Standalone mode trades integration richness for simplicity. If your business requires any of the following, plan for an integrated deployment instead — see [Accept a payment](/docs/payments/in-person/accept-a-payment).
+
+- **Order linkage** — transactions in standalone mode carry no order ID from your system. You cannot associate a payment with a specific order in VINR; reconciliation must be done by amount and timestamp.
+- **Custom metadata** — the `metadata` field available in the API is not populated in standalone mode. Any key-value data you attach to integrated payments cannot be set from the device keypad.
+- **Multi-tender** — split payments across two cards or a card plus cash are not supported in standalone mode.
+- **Programmatic tip adjustment** — in integrated mode you can adjust the tip amount at capture time via the API; in standalone mode the tip is set by the customer at the terminal and is final.
+</Callout>
+
+<Accordions>
+<Accordion title="Advanced — semi-standalone and kiosk modes">
+
+### Semi-standalone mode
+
+Semi-standalone bridges the gap between fully standalone and fully integrated. Your POS sends the amount and order reference to the terminal over a local network connection (TCP/IP), but the terminal handles the card interaction and receipt printing independently — no cloud round-trip is required for each transaction. This is well suited to legacy POS systems that cannot call the VINR cloud API directly but can push a simple amount string to a local socket.
+
+To enable semi-standalone, set the terminal mode to **Semi-standalone** in the Dashboard and configure the POS IP and port under **Hardware → Terminals → [device] → Connection**. Your POS must implement the VINR Local Terminal Protocol (LTP) — a lightweight JSON-over-TCP framing. The LTP specification is available in the [integration reference](/docs/integration).
+
+Transactions appear in the Dashboard and fire webhooks identically to cloud-integrated payments. The order reference supplied by the POS is stored on the payment object and available for reconciliation.
+
+### Kiosk mode
+
+Kiosk mode locks the terminal UI to a single-purpose payment screen with no staff controls visible. Staff cannot access the transaction history menu, change settings, or initiate refunds from the device. All management operations must be performed from the Dashboard or API.
+
+Kiosk mode is intended for unattended or semi-attended environments: self-checkout lanes, vending enclosures, ticketing kiosks, and queue-busting stations where a customer-facing screen operates without a staff member present.
+
+Enable kiosk mode under **Dashboard → Hardware → Terminals → [device] → Mode → Kiosk**. You can combine kiosk mode with tipping, custom idle-screen branding (logo and background color), and a configurable inactivity timeout that returns the device to the idle screen if no card is presented within a set number of seconds.
+
+<Callout type="info">
+Kiosk mode requires a terminal running VINR OS firmware 3.4 or later. The Nexgo N92, Nexgo N86Pro, Nexgo CT20, Nexgo CT20P, and Ciontek CM30 all support kiosk mode as of firmware 3.4.
+</Callout>
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card
+    title="Accept a payment (integrated)"
+    href="/docs/payments/in-person/accept-a-payment"
+    description="Connect your backend to a VINR terminal and handle payments programmatically with the SDK and webhooks."
+  />
+  <Card
+    title="Terminal models"
+    href="/docs/payments/in-person/terminals"
+    description="Compare the Nexgo N92, N86Pro, CT20, CT20P, and Ciontek CM30 to choose the right hardware for your environment."
+  />
+  <Card
+    title="In-person refunds"
+    href="/docs/payments/in-person/refunds"
+    description="Issue referenced and unreferenced refunds for card-present transactions, from the terminal or the Dashboard."
+  />
+</Cards>

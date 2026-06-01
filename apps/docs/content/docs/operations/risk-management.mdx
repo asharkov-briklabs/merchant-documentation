@@ -1,0 +1,193 @@
+---
+title: Risk & fraud
+description: Risk profiles, custom rules, machine-learning fraud detection, and post-authorization controls.
+persona: ["operations", "finance-manager", "developer"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+VINR's risk engine evaluates every payment before authorization using a combination of configurable rules, machine-learning models, and post-authorization checks. This page covers how to configure a risk profile, write custom rules, and interpret fraud signals in API responses.
+
+## How the risk engine works
+
+Each incoming payment passes through the risk engine in under 50 ms before the authorization request reaches the card network:
+
+1. **Data enrichment** — VINR appends device fingerprint, IP intelligence, velocity counters, and card history.
+2. **Rule evaluation** — Your profile's rules are scored in priority order.
+3. **ML model scoring** — A fraud-probability score (0–100) is computed from 200+ signals.
+4. **Decision** — `accept`, `review`, `challenge` (trigger 3DS), or `block`.
+
+The decision is attached to every payment as `riskDecision` and `riskScore`. High-risk `review` payments reach your bank authorized but are flagged in the dashboard.
+
+## Risk profiles
+
+A risk profile groups the rules and thresholds that apply to a set of payments. You can have multiple profiles and assign them per merchant account, payment method, or using the API at payment creation time.
+
+### Create a profile
+
+Go to **Dashboard → Risk → Profiles → New profile**.
+
+```typescript
+const profile = await vinr.risk.profiles.create({
+  name: 'EU card-not-present',
+  description: 'Standard e-commerce card profile',
+  defaultAction: 'accept',      // fallback when no rule matches
+  mlThreshold: 70,              // scores ≥70 → review
+  blockThreshold: 90,           // scores ≥90 → block
+});
+```
+
+### Assign a profile
+
+Assign a profile to a merchant account in **Dashboard → Settings → Risk profile**, or override per payment:
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 4900,
+  currency: 'EUR',
+  paymentMethod: { type: 'card', token: 'tok_...' },
+  riskProfileId: profile.id,
+});
+```
+
+## Custom rules
+
+Rules are boolean expressions evaluated before the ML model. They execute deterministically and are useful for strict, known-good or known-bad signals.
+
+<TypeTable type={{
+  field: { type: "string", description: "The payment field to evaluate. See risk field reference below." },
+  operator: { type: "string", description: "eq, neq, gt, lt, gte, lte, in, not_in, matches, contains" },
+  value: { type: "string | number | string[]", description: "The comparison value." },
+  action: { type: "'accept' | 'review' | 'challenge' | 'block'", description: "Action taken when the rule matches." },
+  priority: { type: "number", description: "Lower numbers run first. First match wins." },
+}} />
+
+```typescript
+await vinr.risk.rules.create({
+  profileId: profile.id,
+  name: 'Block high-risk BINs',
+  condition: { field: 'card.bin', operator: 'in', value: ['476543', '512345'] },
+  action: 'block',
+  priority: 10,
+});
+
+await vinr.risk.rules.create({
+  profileId: profile.id,
+  name: 'Challenge high-value CNP',
+  condition: {
+    all: [
+      { field: 'amount', operator: 'gt', value: 50000 },  // > EUR 500
+      { field: 'channel', operator: 'eq', value: 'ecom' },
+    ],
+  },
+  action: 'challenge',
+  priority: 20,
+});
+```
+
+### Risk lists
+
+Risk lists are reusable sets of values (card BINs, email domains, IPs, device IDs) that rules can reference. Maintain them once, reference them in many rules.
+
+```typescript
+const list = await vinr.risk.lists.create({ name: 'blocked-bins', type: 'card_bin' });
+await vinr.risk.lists.addItems(list.id, { items: ['476543', '512345', '601100'] });
+
+// Reference in a rule:
+await vinr.risk.rules.create({
+  profileId: profile.id,
+  name: 'Block from list',
+  condition: { field: 'card.bin', operator: 'in_list', value: list.id },
+  action: 'block',
+  priority: 5,
+});
+```
+
+## Machine-learning rules
+
+ML rules let you act on the model's fraud score without writing field-level logic. Configure score thresholds at the profile level, or create named ML rules for specific ranges:
+
+```typescript
+await vinr.risk.mlRules.create({
+  profileId: profile.id,
+  name: 'Soft review band',
+  scoreRange: { gte: 60, lt: 70 },
+  action: 'review',
+});
+```
+
+<Callout type="info">
+ML models are updated weekly using aggregated, anonymized signals across the VINR network. You cannot inspect model internals, but `riskFactors[]` in the payment response shows the top contributing signals for each decision.
+</Callout>
+
+### A/B experiments
+
+Test a rule or threshold change on a traffic slice before rolling it out fully:
+
+```typescript
+await vinr.risk.experiments.create({
+  name: 'Lower ML threshold pilot',
+  profileId: profile.id,
+  trafficSplit: 0.10,    // 10% of payments use the variant
+  variant: { mlThreshold: 65 },
+  startsAt: '2026-06-01T00:00:00Z',
+  endsAt:   '2026-06-14T23:59:59Z',
+});
+```
+
+The experiment dashboard shows accept rate, review rate, block rate, and chargeback rate for control vs. variant — sufficient to decide whether to promote or revert.
+
+## Post-authorization rules
+
+Post-authorization rules run after the card network responds, before VINR captures the payment. Use them to capture or void based on the authorization outcome:
+
+```typescript
+await vinr.risk.postAuthRules.create({
+  profileId: profile.id,
+  name: 'Void soft-declined high-value',
+  condition: {
+    all: [
+      { field: 'authResponse.code', operator: 'eq', value: 'soft_decline' },
+      { field: 'amount', operator: 'gt', value: 100000 },
+    ],
+  },
+  action: 'void',
+});
+```
+
+## Fraud results in API responses
+
+Every payment includes risk metadata you can use for downstream decisions:
+
+```typescript
+const payment = await vinr.payments.retrieve('pay_...');
+
+console.log(payment.risk.score);       // 0–100
+console.log(payment.risk.decision);    // 'accept' | 'review' | 'challenge' | 'block'
+console.log(payment.risk.factors);
+// [
+//   { signal: 'high_velocity_ip', impact: 'high' },
+//   { signal: 'mismatched_billing_country', impact: 'medium' },
+// ]
+```
+
+`review` payments are authorized; action is optional. `block` payments are declined before authorization — no network fee is incurred.
+
+## Monitor risk performance
+
+**Dashboard → Risk → Performance** shows, for any date range:
+
+- Fraud rate (chargebacks / total volume)
+- Block rate, review rate, challenge rate
+- False-positive estimate (blocked payments later confirmed legitimate)
+- Rule hit breakdown
+
+Export the rule hit report to CSV for offline analysis.
+
+## Next steps
+
+<Cards>
+  <Card title="Disputes & chargebacks" href="/docs/operations/disputes" description="Respond to and defend against chargebacks." />
+  <Card title="3D Secure" href="/docs/payments/3d-secure" description="Authentication challenges for high-risk payments." />
+  <Card title="Optimization" href="/docs/operations/optimization" description="Improve conversion without increasing fraud exposure." />
+</Cards>

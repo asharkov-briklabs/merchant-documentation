@@ -1,0 +1,292 @@
+---
+title: Tokens
+description: Network tokens and payment instrument tokens — store and manage tokenized card credentials.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+A token represents a network-tokenized card credential issued by the card scheme (Visa VTS or
+Mastercard MDES) on behalf of a stored payment method. VINR creates and maintains tokens
+automatically — you reference the parent `pm_` ID on payments and VINR silently routes through the
+live network token, improving authorization rates and keeping card data current via the card
+network's account updater service.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
+</Callout>
+
+## The token object
+
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the token, e.g. `tok_5Xm1`.
+  </Attribute>
+  <Attribute name="type" type="enum">
+    How the token was issued. `network_token` — provisioned by Visa VTS or Mastercard MDES.
+    `card_token` — a VINR-managed instrument token for card-present or recurring use without a
+    full network scheme token.
+  </Attribute>
+  <Attribute name="paymentMethodId" type="string">
+    The `pm_` ID of the payment method this token was created from.
+  </Attribute>
+  <Attribute name="networkToken" type="object">
+    Present when `type` is `network_token`. Contains the live token detail returned by the card
+    network.
+    <Attributes>
+      <Attribute name="status" type="enum">
+        Current scheme-reported state: `active`, `inactive`, or `pending` (provisioning in
+        progress).
+      </Attribute>
+      <Attribute name="network" type="enum">
+        The scheme that issued the token: `visa_vts` or `mastercard_mdes`.
+      </Attribute>
+      <Attribute name="tokenReferenceId" type="string">
+        The opaque token reference ID assigned by the card network. Treat this as an internal
+        identifier — use the VINR `tok_` ID in your own systems.
+      </Attribute>
+      <Attribute name="panExpiryMonth" type="integer">
+        Expiry month of the underlying card PAN, as reported by the network at provisioning time.
+      </Attribute>
+      <Attribute name="panExpiryYear" type="integer">
+        Four-digit expiry year of the underlying card PAN.
+      </Attribute>
+      <Attribute name="lastRefreshedAt" type="integer">
+        Unix timestamp of the most recent account updater refresh from the card network.
+      </Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="status" type="enum">
+    VINR-level token status: `active`, `inactive`, or `expired`. Reflects `networkToken.status`
+    but is also set to `inactive` when you call the deactivate endpoint directly.
+  </Attribute>
+  <Attribute name="createdAt" type="integer">
+    Unix timestamp when the token was created.
+  </Attribute>
+  <Attribute name="updatedAt" type="integer">
+    Unix timestamp when the token was last modified.
+  </Attribute>
+</Attributes>
+
+## The network token object
+
+VINR automatically provisions a network token with Visa VTS or Mastercard MDES whenever a card is
+stored with a `recurring` or `card_present` usage intent. **Merchants do not call a create
+endpoint** — the token is a side effect of creating or updating a payment method. Once provisioned,
+VINR transparently uses the network token on every payment that references the parent `pm_` ID,
+passing the cryptogram required by the scheme. You can inspect the resulting token objects via the
+endpoints below, and deactivate them when a card is lost or the customer requests removal.
+
+## Retrieve a token
+
+Fetch a single token by its `tok_` ID.
+
+<ApiExample
+  id="retrieve-token"
+  title="Retrieve a token"
+  method="GET"
+  path="/v1/tokens/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/tokens/tok_5Xm1 \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const token = await vinr.tokens.retrieve('tok_5Xm1');`,
+  }}
+  response={`{
+  "id": "tok_5Xm1",
+  "type": "network_token",
+  "paymentMethodId": "pm_9bR3",
+  "networkToken": {
+    "status": "active",
+    "network": "visa_vts",
+    "tokenReferenceId": "vts_ref_4xKpLmN8",
+    "panExpiryMonth": 12,
+    "panExpiryYear": 2027,
+    "lastRefreshedAt": 1748650000
+  },
+  "status": "active",
+  "createdAt": 1716300000,
+  "updatedAt": 1748650000
+}`}
+/>
+
+## List tokens for a payment method
+
+Returns all tokens provisioned for a given payment method. Use the `status` query parameter to
+filter to only `active` tokens.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `status` | enum | Filter by token status: `active`, `inactive`, or `expired`. |
+| `limit` | integer | Number of results to return. Default `10`, max `100`. |
+| `starting_after` | string | Cursor for forward pagination — the `tok_` ID of the last item from the previous page. |
+
+<ApiExample
+  id="list-tokens"
+  title="List tokens for a payment method"
+  method="GET"
+  path="/v1/payment-methods/{id}/tokens"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/payment-methods/pm_9bR3/tokens?status=active&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const tokens = await vinr.paymentMethods.listTokens('pm_9bR3', {
+  status: 'active',
+  limit: 10,
+});`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "tok_5Xm1",
+      "type": "network_token",
+      "paymentMethodId": "pm_9bR3",
+      "networkToken": {
+        "status": "active",
+        "network": "visa_vts",
+        "tokenReferenceId": "vts_ref_4xKpLmN8",
+        "panExpiryMonth": 12,
+        "panExpiryYear": 2027,
+        "lastRefreshedAt": 1748650000
+      },
+      "status": "active",
+      "createdAt": 1716300000,
+      "updatedAt": 1748650000
+    }
+  ],
+  "has_more": false
+}`}
+/>
+
+## Deactivate a token
+
+Deactivates a network token so it can no longer be used to authorize payments. Use this when a card
+is reported lost or stolen, or when a customer requests that their credentials be removed. Deactivating
+a token does **not** delete the parent payment method — the `pm_` object is retained and you may
+re-provision a replacement token by updating the payment method's usage intent. To fully remove the
+instrument, detach the payment method separately.
+
+<ApiExample
+  id="deactivate-token"
+  title="Deactivate a token"
+  method="POST"
+  path="/v1/tokens/{id}/deactivate"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/tokens/tok_5Xm1/deactivate \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const token = await vinr.tokens.deactivate('tok_5Xm1');`,
+  }}
+  response={`{
+  "id": "tok_5Xm1",
+  "type": "network_token",
+  "paymentMethodId": "pm_9bR3",
+  "networkToken": {
+    "status": "inactive",
+    "network": "visa_vts",
+    "tokenReferenceId": "vts_ref_4xKpLmN8",
+    "panExpiryMonth": 12,
+    "panExpiryYear": 2027,
+    "lastRefreshedAt": 1748650000
+  },
+  "status": "inactive",
+  "createdAt": 1716300000,
+  "updatedAt": 1748700000
+}`}
+/>
+
+## Token events
+
+| Event | Fired when |
+|---|---|
+| `payment_method.updated` | A network token is refreshed by the card network (account updater). The parent payment method's `updatedAt` is bumped and the token's `lastRefreshedAt` is updated. |
+| `token.deactivated` | A token transitions to `inactive`, either via the deactivate endpoint or a scheme-side revocation. |
+
+Subscribe to these events via [Webhook endpoints](/docs/api-reference/webhook-endpoints) to keep your
+records synchronized without polling.
+
+<Accordions>
+<Accordion title="Advanced — manual account updater refresh (Enterprise)">
+
+By default VINR triggers an account updater refresh automatically when a payment authorization
+fails with an expired-card decline code. Enterprise plans can also trigger a refresh on demand —
+useful when you know a customer has received a new card and want to update the token before their
+next scheduled payment rather than waiting for a failed authorization.
+
+**Contact your account manager to enable on-demand refresh.**
+
+```bash
+curl -X POST https://api.vinr.com/v1/tokens/tok_5Xm1/refresh \
+  -H "X-Api-Key: $VINR_SECRET_KEY"
+```
+
+```ts
+await vinr.tokens.refresh('tok_5Xm1');
+```
+
+The call is asynchronous — the token's `lastRefreshedAt` and the parent payment method's
+`updatedAt` are updated once the card network responds, and a `payment_method.updated` event is
+fired.
+
+</Accordion>
+<Accordion title="Advanced — token status lifecycle">
+
+A token moves through the following states:
+
+```
+pm_ created with recurring/card_present usage
+        │
+        ▼
+   pending  ──── scheme provisioning fails ────► inactive
+        │
+        ▼
+    active  ──── card reported lost/stolen ─────► inactive
+        │         or deactivate endpoint
+        ├──── card expires, scheme revokes ──────► expired
+        │
+        └──── account updater refreshes ──────── stays active
+                (lastRefreshedAt updated)
+```
+
+- **pending** — VINR has submitted the provisioning request to the card network; typically resolves
+  within a few seconds.
+- **active** — the token is live and will be used on the next payment referencing this `pm_`.
+- **inactive** — deactivated by you or by the scheme. A new token can be provisioned by updating
+  the payment method.
+- **expired** — the underlying PAN has expired and the scheme has not issued a replacement token.
+  Update the payment method with new card credentials.
+
+</Accordion>
+<Accordion title="Advanced — network coverage">
+
+| Network | Scheme | Status |
+|---|---|---|
+| Visa | Visa Token Service (VTS) | Available |
+| Mastercard | Mastercard Digital Enablement Service (MDES) | Available |
+| American Express | Amex SafeKey Token Service | Roadmap |
+
+Network tokenization is applied automatically for cards on supported networks. Cards on
+unsupported networks fall back to PAN-based routing with no change to your integration.
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+- [Tokenization overview](/docs/payments/tokenization) — how VINR uses network tokens to raise
+  authorization rates and keep card credentials current.
+- [Payment methods](/docs/api-reference/payment-methods) — create and manage the `pm_` objects
+  that tokens are attached to.
+- [Payments](/docs/api-reference/payments) — charge a stored payment method; VINR routes through
+  the network token transparently.

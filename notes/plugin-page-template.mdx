@@ -1,0 +1,162 @@
+---
+title: "[Platform Name]"
+description: "Install and configure the VINR payment plugin for [Platform Name]."
+category: "payments"
+persona: ["developer", "merchant"]
+priority: "P1"
+lastUpdated: "YYYY-MM-DD"
+---
+
+{/*
+  TEMPLATE — reference only. Lives in /notes so fumadocs does NOT build it.
+  To make it a live page:
+    1. Copy to apps/docs/content/docs/payments/plugins/<platform-slug>.mdx
+    2. Add its slug to content/docs/payments/plugins/meta.json
+    3. Fill in all [bracketed placeholders]
+    4. Run pnpm check-links to verify all /docs/... hrefs resolve
+
+  Every plugin page uses the same seven-section skeleton so readers who work
+  with multiple platforms can navigate by muscle memory. Don't add sections;
+  don't skip sections. Merge thin content into the closest section rather than
+  leaving a skeleton section empty.
+
+  Components available: Callout, Tabs/Tab, Steps, Accordions/Accordion,
+  Advanced, TypeTable, Cards/Card.
+*/}
+
+VINR's [Platform Name] plugin lets you accept cards, wallets, and local payment
+methods directly from your [Platform Name] storefront — no custom integration
+required.
+
+<Callout type="info">
+  This is illustrative content. Plugin availability and exact menu paths may
+  differ; refer to your VINR account manager for production details.
+</Callout>
+
+## Supported payment methods
+
+| Method | Online | In person |
+|--------|--------|-----------|
+| Cards (Visa, Mastercard, Amex) | ✓ | ✓ |
+| Apple Pay / Google Pay | ✓ | — |
+| SEPA Direct Debit | ✓ | — |
+| Local methods | ✓ | — |
+
+## Requirements
+
+- [Platform Name] version [X.X] or later
+- A VINR merchant account ([sign up](/docs/getting-started))
+- API credentials from your VINR dashboard
+
+## Install
+
+<Steps>
+
+### Download the plugin
+
+Download the latest VINR plugin for [Platform Name] from your VINR dashboard
+under **Integrations → Plugins**.
+
+### Upload and activate
+
+[Platform-specific installation steps go here — e.g. for WooCommerce: upload
+the `.zip` via Plugins → Add New → Upload Plugin, then click Activate.]
+
+### Enter your API credentials
+
+In the plugin settings, paste your **API Key** and **Merchant ID** from the
+VINR dashboard.
+
+</Steps>
+
+## Configure
+
+### Payment methods
+
+Enable or disable individual payment methods under **[Plugin Settings path] →
+Payment Methods**. Only methods enabled in your VINR account will appear.
+
+### Capture mode
+
+| Setting | Behaviour |
+|---------|-----------|
+| Automatic | Funds captured immediately on order placement |
+| Manual | Authorise on order; capture when you fulfil |
+
+### 3D Secure
+
+3DS is enforced automatically for SCA-regulated transactions. No additional
+configuration is required.
+
+<Advanced title="Advanced — webhook and order-status mapping">
+
+#### Webhook endpoint
+
+The plugin registers a webhook at `https://yourstore.com/vinr/webhook`
+automatically. To verify it's active, check **[Plugin Settings path] →
+Webhooks** and confirm the endpoint status shows **Active**.
+
+#### Order status mapping
+
+| VINR payment status | [Platform Name] order status |
+|---------------------|------------------------------|
+| `authorized` | Processing |
+| `captured` | Completed |
+| `failed` | Failed |
+| `refunded` | Refunded |
+
+You can override the mapping under **[Plugin Settings path] → Order Statuses**.
+
+</Advanced>
+
+## Tokenization and saved cards
+
+When a customer checks **Save my card**, VINR stores a token against their
+account. On repeat purchases the plugin passes the token — no card data touches
+your server. See [Tokenization](/docs/payments/tokenization) for the underlying
+model.
+
+## In person *(if applicable)*
+
+If you have VINR terminals paired to this store, enable **In-person payments**
+under **[Plugin Settings path] → Terminal**. See
+[In-person payments](/docs/payments/in-person) for terminal setup.
+
+## Go live
+
+<Steps>
+
+### Switch to live credentials
+
+Replace sandbox API keys with your live credentials in the plugin settings.
+
+### Place a test order
+
+Use a real card for a small amount to confirm the end-to-end flow.
+
+### Enable your payment methods
+
+In the VINR dashboard under **Payment Methods**, activate the methods you want
+live for this storefront.
+
+</Steps>
+
+<Callout type="warn">
+  Remove any sandbox / test API keys before going live. Transactions made with
+  test keys will not settle.
+</Callout>
+
+## Troubleshooting
+
+**Payment declined at checkout** — Verify your API key is correct and the
+payment method is enabled in both the VINR dashboard and the plugin settings.
+
+**Webhook not receiving events** — Confirm the webhook URL is reachable from
+the public internet and check **[Plugin Settings path] → Webhooks** for
+delivery errors.
+
+**Plugin not appearing after activation** — Check [Platform Name] error logs
+for PHP or dependency conflicts. Ensure you're running [Platform Name] [X.X]+.
+
+For further help see [Troubleshooting](/docs/troubleshooting) or contact VINR
+support.

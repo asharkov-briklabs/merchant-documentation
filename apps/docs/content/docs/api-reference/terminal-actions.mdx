@@ -1,0 +1,237 @@
+---
+title: "Terminal actions"
+description: "Remote management actions — reboot, update, and lock VINR terminals."
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+Terminal actions let you remotely manage VINR terminals from your server. You can reboot a terminal, push a software update, or lock a device from accepting payments — all without physical access to the hardware.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
+</Callout>
+
+## The terminal action object
+
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the terminal action, e.g. `tact_7Yp2`.
+  </Attribute>
+  <Attribute name="terminalId" type="string">
+    The ID of the terminal this action targets, e.g. `term_4Kx9`.
+  </Attribute>
+  <Attribute name="action" type="enum">
+    The action to perform. One of `reboot`, `update`, or `lock`.
+  </Attribute>
+  <Attribute name="status" type="enum">
+    Current lifecycle status. One of `queued`, `processing`, `completed`, or `failed`.
+  </Attribute>
+  <Attribute name="result" type="object nullable">
+    Present once the action reaches a terminal state.
+    <Attributes>
+      <Attribute name="completedAt" type="integer">
+        Unix timestamp of when the action completed successfully.
+      </Attribute>
+      <Attribute name="failureReason" type="string nullable">
+        Human-readable description of why the action failed. `null` on success.
+      </Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="createdAt" type="integer">
+    Unix timestamp of when the action was created.
+  </Attribute>
+</Attributes>
+
+## Create a terminal action
+
+Send a `POST` request with the desired `action` to queue a management command on a specific terminal. The response always returns the action object with `status: "queued"`.
+
+<Callout type="info">
+Actions are delivered over the terminal's persistent cloud connection. If the terminal is offline at
+the time of the request, the action will queue and execute automatically when the device reconnects.
+Poll the action using [Retrieve a terminal action](#retrieve-a-terminal-action) or listen for the
+`terminal_action.completed` webhook event to confirm completion.
+</Callout>
+
+<ApiExample
+  id="create-terminal-action"
+  title="Create a terminal action"
+  method="POST"
+  path="/v1/terminals/:id/actions"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/terminals/term_4Kx9/actions \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d action=reboot`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const action = await vinr.terminals.actions.create('term_4Kx9', {
+  action: 'reboot',
+});`,
+  }}
+  response={`{
+  "id": "tact_7Yp2",
+  "terminalId": "term_4Kx9",
+  "action": "reboot",
+  "status": "queued",
+  "result": null,
+  "createdAt": 1748649600
+}`}
+/>
+
+## Retrieve a terminal action
+
+Fetch a single terminal action by its ID to check the current `status` and inspect the `result` once the action completes.
+
+<ApiExample
+  id="retrieve-terminal-action"
+  title="Retrieve a terminal action"
+  method="GET"
+  path="/v1/terminal/actions/:id"
+  request={{
+    curl: `curl https://api.vinr.com/v1/terminal/actions/tact_7Yp2 \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const action = await vinr.terminalActions.retrieve('tact_7Yp2');`,
+  }}
+  response={`{
+  "id": "tact_7Yp2",
+  "terminalId": "term_4Kx9",
+  "action": "reboot",
+  "status": "completed",
+  "result": {
+    "completedAt": 1748649720,
+    "failureReason": null
+  },
+  "createdAt": 1748649600
+}`}
+/>
+
+## List terminal actions
+
+Returns a paginated list of terminal actions. Filter by `terminalId`, `action` type, or `status`. Results are ordered with the most recent action first.
+
+<ApiExample
+  id="list-terminal-actions"
+  title="List terminal actions"
+  method="GET"
+  path="/v1/terminal/actions"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/terminal/actions?terminalId=term_4Kx9&status=completed&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const actions = await vinr.terminalActions.list({
+  terminalId: 'term_4Kx9',
+  status: 'completed',
+  limit: 10,
+});`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "tact_7Yp2",
+      "terminalId": "term_4Kx9",
+      "action": "reboot",
+      "status": "completed",
+      "result": {
+        "completedAt": 1748649720,
+        "failureReason": null
+      },
+      "createdAt": 1748649600
+    }
+  ],
+  "has_more": false
+}`}
+/>
+
+### Query parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `terminalId` | string | Filter to actions for a specific terminal. |
+| `action` | enum | Filter by action type: `reboot`, `update`, or `lock`. |
+| `status` | enum | Filter by status: `queued`, `processing`, `completed`, or `failed`. |
+| `limit` | integer | Number of results to return (1–100, default 20). |
+| `starting_after` | string | Cursor for forward pagination — pass the last action ID from the previous page. |
+
+## Action reference
+
+| Action | Effect | Notes |
+|--------|--------|-------|
+| `reboot` | Restarts the terminal OS | Active payments are cancelled before reboot |
+| `update` | Downloads and applies the latest VINR software | Terminal reboots after update; schedule during off-hours |
+| `lock` | Disables the terminal from accepting payments | Reversible via reboot or dashboard unlock |
+
+<Accordions>
+<Accordion title="Advanced — bulk actions and the terminal_action.completed webhook">
+
+### Bulk actions
+
+To dispatch the same action to every terminal at a location in one call, `POST` to the location's
+terminal-actions endpoint. VINR creates one `terminal_action` object per terminal and returns the
+list.
+
+```bash
+curl -X POST https://api.vinr.com/v1/locations/loc_9Bz3/terminal-actions \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -d action=update
+```
+
+```ts
+const actions = await vinr.locations.terminalActions.create('loc_9Bz3', {
+  action: 'update',
+});
+```
+
+Each terminal action in the response has its own `id` and independent `status`. Poll or listen for
+webhooks individually to track per-terminal progress.
+
+### terminal_action.completed webhook
+
+VINR sends a `terminal_action.completed` event to your configured webhook endpoint when an action
+reaches `completed` or `failed`. The event payload wraps the terminal action object:
+
+```json
+{
+  "id": "evt_1Rq7",
+  "type": "terminal_action.completed",
+  "created": 1748649720,
+  "data": {
+    "object": {
+      "id": "tact_7Yp2",
+      "terminalId": "term_4Kx9",
+      "action": "reboot",
+      "status": "completed",
+      "result": {
+        "completedAt": 1748649720,
+        "failureReason": null
+      },
+      "createdAt": 1748649600
+    }
+  }
+}
+```
+
+Use the `result.failureReason` field to surface actionable errors in your dashboard or alerting
+pipeline when `status` is `failed`.
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Terminal management" href="/docs/payments/in-person/terminal-management" />
+  <Card title="Terminals API reference" href="/docs/api-reference/terminals" />
+  <Card title="Terminal payments" href="/docs/api-reference/terminal-payments" />
+</Cards>

@@ -1,0 +1,325 @@
+---
+title: "Mobile solutions"
+description: "Pair the Ciontek CM30 or use Tap to Pay to take payments on iOS and Android."
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+The Ciontek CM30 Bluetooth reader paired with the VINR iOS or Android SDK turns any smartphone into a full card-present terminal — supporting contactless (NFC), chip+PIN, and magnetic stripe. Combined with [Tap to Pay](/docs/payments/in-person/tap-to-pay) for zero-hardware scenarios, the mobile stack covers pop-up stalls, event ticketing, field sales, and queue-busting in any environment where a fixed countertop terminal is impractical.
+
+## CM30 Bluetooth reader
+
+The Ciontek CM30 is a compact Android mPOS device that connects to a merchant's phone over Bluetooth or WiFi. It is battery-powered, pocket-sized, and PCI PTS 5.x certified. Because it has no built-in printer, receipts are delivered digitally — see [Receipts on mobile](#receipts-on-mobile) below.
+
+<TypeTable
+  type={{
+    connectivity: { type: "Bluetooth 5.0 / WiFi 2.4 GHz", description: "Pairs with iOS and Android devices. WiFi mode enables direct network connectivity without a host phone." },
+    "card entry": { type: "NFC / chip+PIN / magnetic stripe", description: "Full EMV Level 1 & 2 certified. Contactless supports Visa, Mastercard, Amex, Apple Pay, Google Pay." },
+    battery: { type: "1 800 mAh Li-ion", description: "Approximately 8 hours of active use or 400 transactions per charge. Charges over USB-C." },
+    printer: { type: "None", description: "Use email, SMS, or QR-code receipt delivery instead." },
+    dimensions: { type: "85 × 55 × 14 mm / 95 g", description: "Fits in a shirt pocket." },
+  }}
+/>
+
+<Steps>
+### Enable Bluetooth on the host device
+
+On iOS, open **Settings → Bluetooth** and ensure Bluetooth is on. On Android, pull down the notification shade and toggle Bluetooth on.
+
+### Power on the CM30
+
+Press and hold the power button for two seconds until the LED indicator turns solid blue. The device broadcasts as `VINR-CM30-XXXX` where `XXXX` is the last four characters of the serial number.
+
+### Pair via the VINR SDK
+
+Do not pair through the OS Bluetooth settings. Instead, call `VINRTerminal.discoverReaders` (iOS) or `VinrTerminal.discoverReaders` (Android) — the SDK handles the secure pairing handshake and key negotiation automatically.
+
+### Confirm connection
+
+The LED turns solid green and the SDK fires the `readerConnected` event with the reader object. The device is now ready to accept payment sessions.
+</Steps>
+
+<Callout type="info">
+Keep the CM30 within 10 metres of the host device during transactions. Walls and metal fixtures reduce effective range. For fixed-counter use cases where greater reliability matters, consider the [Nexgo CT20 or CT20P](/docs/payments/in-person/terminals).
+</Callout>
+
+## VINR iOS SDK
+
+Add the SDK via Swift Package Manager. In Xcode, go to **File → Add Package Dependencies** and enter:
+
+```
+https://github.com/vinr/vinr-ios-sdk
+```
+
+Select the `VinrSDK` library and add it to your app target.
+
+<Tabs items={["Swift"]}>
+<Tab value="Swift">
+
+```swift
+import VinrSDK
+
+let terminal = VINRTerminal(secretKey: ProcessInfo.processInfo.environment["VINR_SECRET_KEY"]!)
+
+terminal.discoverReaders(connectionConfig: .bluetooth) { result in
+    switch result {
+    case .success(let readers):
+        guard let cm30 = readers.first(where: { $0.model == .cm30 }) else { return }
+
+        terminal.connectReader(cm30) { connectResult in
+            switch connectResult {
+            case .success:
+                let params = VINRPaymentParams(
+                    amount: 2500,
+                    currency: "USD",
+                    reference: "order_8821"
+                )
+
+                terminal.createPayment(params: params) { createResult in
+                    switch createResult {
+                    case .success(let intent):
+                        terminal.collectPayment(intent: intent) { collectResult in
+                            switch collectResult {
+                            case .success(let confirmedIntent):
+                                print("Payment succeeded:", confirmedIntent.id)
+                            case .failure(let error):
+                                print("Collection failed:", error.localizedDescription)
+                            }
+                        }
+                    case .failure(let error):
+                        print("Create failed:", error.localizedDescription)
+                    }
+                }
+
+            case .failure(let error):
+                print("Connect failed:", error.localizedDescription)
+            }
+        }
+
+    case .failure(let error):
+        print("Discovery failed:", error.localizedDescription)
+    }
+}
+```
+
+</Tab>
+</Tabs>
+
+For scenarios where no hardware is available, the SDK also supports [Tap to Pay on iPhone](/docs/payments/in-person/tap-to-pay), which uses the device's NFC antenna directly without a companion reader.
+
+## VINR Android SDK
+
+Add the SDK to your module-level `build.gradle`:
+
+```kotlin
+dependencies {
+    implementation("com.vinr:sdk:latest.release")
+}
+```
+
+Declare the required permissions in `AndroidManifest.xml`:
+
+```xml
+<uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+```
+
+<Tabs items={["Kotlin"]}>
+<Tab value="Kotlin">
+
+```kotlin
+import com.vinr.sdk.Vinr
+import com.vinr.sdk.terminal.VinrTerminal
+import com.vinr.sdk.terminal.ConnectionConfig
+import com.vinr.sdk.terminal.PaymentParams
+
+val vinr = Vinr(secretKey = System.getenv("VINR_SECRET_KEY"))
+val terminal = VinrTerminal(vinr)
+
+terminal.discoverReaders(ConnectionConfig.Bluetooth) { result ->
+    result.onSuccess { readers ->
+        val cm30 = readers.firstOrNull { it.model == ReaderModel.CM30 } ?: return@onSuccess
+
+        terminal.connectReader(cm30) { connectResult ->
+            connectResult.onSuccess {
+                val params = PaymentParams(
+                    amount = 2500L,
+                    currency = "USD",
+                    reference = "order_8821"
+                )
+
+                terminal.createPayment(params) { createResult ->
+                    createResult.onSuccess { intent ->
+                        terminal.collectPayment(intent) { collectResult ->
+                            collectResult.onSuccess { confirmedIntent ->
+                                println("Payment succeeded: ${confirmedIntent.id}")
+                            }.onFailure { error ->
+                                println("Collection failed: ${error.message}")
+                            }
+                        }
+                    }.onFailure { error ->
+                        println("Create failed: ${error.message}")
+                    }
+                }
+            }.onFailure { error ->
+                println("Connect failed: ${error.message}")
+            }
+        }
+    }.onFailure { error ->
+        println("Discovery failed: ${error.message}")
+    }
+}
+```
+
+</Tab>
+</Tabs>
+
+## Handle connection states
+
+The SDK emits connection lifecycle events that your app should handle to give operators clear feedback and to recover from transient drops automatically.
+
+<Tabs items={["Swift", "Kotlin"]}>
+<Tab value="Swift">
+
+```swift
+terminal.delegate = self
+
+extension YourClass: VINRTerminalDelegate {
+    func terminal(_ terminal: VINRTerminal, didUpdateReaderConnectionStatus status: VINRReaderConnectionStatus) {
+        switch status {
+        case .connected(let reader):
+            print("Reader connected — battery:", reader.batteryLevel ?? "unknown")
+        case .disconnected(let reader, let reason):
+            print("Reader disconnected:", reason)
+            terminal.reconnectReader(reader, retryPolicy: .exponentialBackoff(maxAttempts: 5)) { _ in }
+        case .batteryLow(let reader):
+            showOperatorAlert("CM30 battery is low. Please charge the reader soon.")
+        }
+    }
+}
+```
+
+</Tab>
+<Tab value="Kotlin">
+
+```kotlin
+terminal.setConnectionListener(object : VinrConnectionListener {
+    override fun onReaderConnected(reader: Reader) {
+        println("Reader connected — battery: ${reader.batteryLevel ?: "unknown"}")
+    }
+
+    override fun onReaderDisconnected(reader: Reader, reason: DisconnectReason) {
+        println("Reader disconnected: $reason")
+        terminal.reconnectReader(reader, RetryPolicy.ExponentialBackoff(maxAttempts = 5)) {}
+    }
+
+    override fun onBatteryLow(reader: Reader) {
+        showOperatorAlert("CM30 battery is low. Please charge the reader soon.")
+    }
+})
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="warn">
+Do not suppress `disconnected` events. A missed disconnect can leave a payment session in a hung state. Always trigger a reconnect attempt or surface the status to the operator so they can intervene.
+</Callout>
+
+## Receipts on mobile
+
+The CM30 has no built-in printer. VINR automatically offers digital receipt delivery at the end of every transaction:
+
+- **Email** — the customer enters their email address on the host device screen; VINR sends a branded receipt immediately.
+- **SMS** — the customer enters a mobile number; receipt delivery is near-instant in supported regions.
+- **QR code** — the terminal displays a QR code linking to a hosted receipt page; no contact details required.
+
+All three methods are enabled by default. You can configure which options appear — and customise receipt branding — in the Dashboard under **Settings → Receipts**, or via the [receipts and engagement](/docs/payments/in-person/receipts-and-engagement) configuration API.
+
+<Callout type="info">
+Receipt delivery preferences set at the reader level persist across sessions. If a returning customer previously chose email, the SDK pre-populates the field on subsequent transactions at the same terminal.
+</Callout>
+
+## Offline queue
+
+The CM30 can queue up to 10 transactions locally when the host device loses internet connectivity. Queued transactions are processed in order as soon as connectivity is restored; the SDK fires a `queueFlushed` event with an array of confirmed payment IDs.
+
+<TypeTable
+  type={{
+    "max queued transactions": { type: "10", description: "Transactions beyond the limit are declined with error code OFFLINE_QUEUE_FULL until the queue drains." },
+    "max offline duration": { type: "24 hours", description: "Transactions queued longer than 24 hours are voided on reconnect. The operator receives an alert." },
+    "offline amount limit": { type: "Configurable per account", description: "Default is $200 per transaction. Contact VINR support to raise the limit based on your chargeback profile." },
+    "sync trigger": { type: "Automatic on reconnect", description: "No manual flush is needed. The SDK detects connectivity restoration and flushes the queue transparently." },
+  }}
+/>
+
+<Callout type="warn">
+Offline transactions carry elevated fraud risk because authorisation is deferred. VINR applies velocity checks and amount caps, but you assume liability for declined or disputed offline payments that exceeded your configured limits. Review your offline settings with your account manager before enabling high-value offline acceptance.
+</Callout>
+
+<Accordions>
+<Accordion title="Advanced — custom UI overlays, multi-reader management, and headless kiosk mode">
+
+### Custom UI overlays
+
+By default the SDK renders its own payment UI — card entry prompts, PIN screens, and receipt collection. To replace these with fully custom views, initialise the terminal in headless mode:
+
+```swift
+let terminal = VINRTerminal(
+    secretKey: ProcessInfo.processInfo.environment["VINR_SECRET_KEY"]!,
+    uiMode: .headless
+)
+```
+
+In headless mode the SDK fires granular state events (`awaitingCard`, `awaitingPin`, `processingPayment`, `requiresReceipt`) and you are responsible for rendering corresponding UI. The card data path is unchanged — all PCI-sensitive handling still occurs inside the SDK's secure context.
+
+### Multi-reader management
+
+A single app instance can manage up to four CM30 readers simultaneously — useful for pop-up stalls running parallel queues or event venues with multiple admission gates.
+
+```swift
+terminal.discoverReaders(connectionConfig: .bluetooth, limit: 4) { result in
+    result.success?.forEach { reader in
+        terminal.connectReader(reader) { _ in }
+    }
+}
+```
+
+Each reader gets an independent connection and payment session. Route sessions to specific readers by passing `readerId` to `createPayment`. The SDK tracks battery and connection state per reader independently.
+
+```kotlin
+val params = PaymentParams(
+    amount = 1500L,
+    currency = "USD",
+    reference = "queue_b_txn_42",
+    readerId = "cm30_serial_B7F2"
+)
+terminal.createPayment(params) { result -> }
+```
+
+### Headless SDK kiosk mode
+
+For unattended kiosk deployments — vending machines, self-checkout stands, ticketing booths — initialise both headless UI and kiosk mode together:
+
+```swift
+let terminal = VINRTerminal(
+    secretKey: ProcessInfo.processInfo.environment["VINR_SECRET_KEY"]!,
+    uiMode: .headless,
+    operatorMode: .kiosk(autoReconnect: true, offlineQueueEnabled: true)
+)
+```
+
+Kiosk mode enables persistent background Bluetooth scanning so the reader reconnects automatically after a device reboot, disables the manual disconnect UI affordance, and increases the offline queue limit to 25 transactions (subject to account-level approval).
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Tap to Pay" href="/docs/payments/in-person/tap-to-pay" description="Accept contactless payments on iPhone or Android with no companion hardware required." />
+  <Card title="Accept a payment" href="/docs/payments/in-person/accept-a-payment" description="Detailed walkthrough of creating a terminal payment session and handling the result." />
+  <Card title="Terminals" href="/docs/payments/in-person/terminals" description="Compare all VINR-certified terminal models including the full Nexgo countertop and handheld range." />
+</Cards>

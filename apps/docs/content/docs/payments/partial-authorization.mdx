@@ -1,0 +1,195 @@
+---
+title: Partial authorization
+description: Handle issuer-approved amounts that are less than what you requested, and decide whether to accept, decline, or cover the gap.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+When a customer pays with a prepaid or gift card that does not have enough balance to cover the full charge, their issuer may choose to approve as much as the card can cover rather than declining outright. The result is a **partial authorization**: the requested amount is `5000` (€50.00) but the issuer approves only `3200` (€32.00). As the merchant you must decide whether to accept that partial approval, collect the remaining €18.00 through another payment method, or decline and ask the customer for a different card entirely.
+
+Partial authorization is distinct from [partial payments](/docs/payments/partial-payments), where the customer deliberately splits a transaction across multiple methods from the start.
+
+## When partial authorizations occur
+
+Partial auths are most common on:
+
+- **Prepaid debit cards** — the card balance is a hard ceiling; the issuer cannot approve beyond it.
+- **Gift cards** — the stored value may be less than the purchase total.
+- **Daily spend limits** — some cards have per-day authorization caps set by the issuer or the cardholder.
+
+The scenario is most prevalent in **in-person / POS** environments where split-tender (combining cash plus card, for example) is a standard checkout flow. It can also occur in online transactions, particularly for marketplace or top-up scenarios where customers reload prepaid instruments.
+
+<Callout type="info">
+Not all issuers support partial authorization. When the card network does not support it, an insufficient-balance card returns a full decline instead of a partial approval.
+</Callout>
+
+## Enable partial authorization acceptance
+
+By default VINR requests the exact amount you pass and treats any lesser approval as a decline. To tell the issuer that you are willing to accept a partial approval, set `partialAuthorization.accept` to `true` when creating the payment.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 5000,                 // €50.00 requested
+  currency: 'EUR',
+  description: 'Order #7214',
+  returnUrl: 'https://yoursite.com/orders/7214',
+  partialAuthorization: {
+    accept: true,               // opt in to receiving a partial approval
+  },
+  metadata: { orderId: '7214' },
+});
+```
+
+Without `accept: true`, VINR instructs the network to decline if the full amount cannot be authorized. Opt in only if your checkout flow can handle collecting the remainder.
+
+<Callout type="warn">
+Do not opt in unless you have implemented a split-tender flow. Accepting a partial auth without collecting the remainder means you fulfil the order at a loss.
+</Callout>
+
+## Handling the response
+
+After the customer completes the hosted flow, compare `payment.amountApproved` with `payment.amount`. If they differ, the issuer granted a partial authorization.
+
+```typescript
+const payment = await vinr.payments.retrieve('pay_8Xk4r9b');
+
+if (payment.partialAuthorization?.status === 'granted') {
+  const approved = payment.partialAuthorization.amountApproved; // e.g. 3200
+  const requested = payment.amount;                             // e.g. 5000
+  const gap = requested - approved;                            // e.g. 1800
+
+  console.log(`Partial auth granted: ${approved} of ${requested} approved.`);
+  console.log(`Remaining gap: ${gap} minor units.`);
+}
+```
+
+You have two options from here:
+
+**Option A — accept the partial amount and collect the gap.** Keep the partial authorization and open a second payment for the remainder using another method. See [Split tender](#split-tender-covering-the-gap) below.
+
+**Option B — void the partial auth and request a new method.** If your checkout cannot handle a second payment instrument, void the authorization and prompt the customer for a card with sufficient balance.
+
+```typescript
+if (payment.partialAuthorization?.status === 'granted' && !canSplitTender) {
+  await vinr.payments.void(payment.id);
+  // redirect customer to choose a different payment method
+}
+```
+
+## Split tender (covering the gap)
+
+Split tender means the order total is covered across two payment instruments: the partial authorization handles what the first card can cover, and a second payment handles the remainder.
+
+```typescript
+const firstPayment = await vinr.payments.retrieve('pay_8Xk4r9b');
+const approved = firstPayment.partialAuthorization!.amountApproved; // 3200
+const gap = firstPayment.amount - approved;                         // 1800
+
+// Capture only the approved amount on the first instrument
+await vinr.payments.capture(firstPayment.id, { amount: approved });
+
+// Create a second payment for the gap, linked to the same order
+const secondPayment = await vinr.payments.create({
+  amount: gap,                   // 1800 — the remaining €18.00
+  currency: firstPayment.currency,
+  description: 'Order #7214 — remainder',
+  returnUrl: 'https://yoursite.com/orders/7214',
+  metadata: {
+    orderId: '7214',
+    relatedPayment: firstPayment.id,
+  },
+});
+
+// redirect the customer to secondPayment.checkoutUrl to pay the gap
+```
+
+For a full treatment of orchestrating multiple payment objects against a single order, see [Partial payments](/docs/payments/partial-payments).
+
+<Callout type="info">
+If the second payment fails or the customer abandons it, void the first (or refund it if it was already captured) to avoid partial fulfilment.
+</Callout>
+
+## partialAuthorization fields
+
+<TypeTable
+  type={{
+    accept: {
+      type: "boolean",
+      description: "Pass true to signal to the issuer that a partial approval is acceptable. When false or omitted, VINR requests the full amount only.",
+      default: "false",
+    },
+    amountApproved: {
+      type: "integer",
+      description: "The amount in minor units that the issuer actually authorized. Present on the payment object when status is granted. May be less than payment.amount.",
+    },
+    amountDeclined: {
+      type: "integer",
+      description: "The difference between payment.amount and amountApproved — the portion of the request the issuer could not cover.",
+    },
+    status: {
+      type: "'none' | 'granted' | 'not_supported'",
+      description: "none: full amount was authorized normally. granted: issuer returned a partial approval. not_supported: the card network does not support partial authorization and a full decline was returned instead.",
+      default: "none",
+    },
+  }}
+/>
+
+<Callout type="info">
+`amountApproved` and `amountDeclined` are only populated when `status` is `granted`. When `status` is `none` (full approval), read `payment.amount` directly.
+</Callout>
+
+## Advanced
+
+<Accordions>
+
+<Accordion title="Completing split tender across two methods in a single order">
+
+When an order spans two payment instruments you must track both payment IDs in your order record and listen for lifecycle events on each independently.
+
+```typescript
+// Store both payment IDs against the order
+await db.orders.update('7214', {
+  payments: [firstPayment.id, secondPayment.id],
+  amountCovered: approved,
+  amountPending: gap,
+});
+
+// Webhook handler
+const event = vinr.webhooks.verify(rawBody, req.headers['x-vinr-signature']);
+
+if (event.type === 'payment.completed') {
+  const order = await db.orders.findByPaymentId(event.data.id);
+  await reconcilePaymentAgainstOrder(order, event.data);
+}
+```
+
+An order is only safe to fulfil when **all** linked payments have reached `completed` status. Never ship on a partial-auth payment alone — wait for the second payment to complete.
+
+If the second payment ultimately fails after the first has been captured, issue a refund on the captured amount via [`vinr.refunds.create`](/docs/payments/refunds) and notify the customer.
+
+</Accordion>
+
+<Accordion title="Reporting partial auths in reconciliation">
+
+Partially authorized payments appear as two separate line items in your [reconciliation export](/docs/operations/reconciliation): one for each captured amount. Link them using the shared `metadata.orderId` rather than the payment IDs, which differ.
+
+For finance reporting, the column `partialAuthorization.status` is available on raw payment exports from the Dashboard and from the `/v1/payments` list endpoint. Filter on `granted` to identify all split-tender orders in a period and verify that every paired `relatedPayment` also settled.
+
+Partial authorizations do not affect interchange rate categories — the fee is calculated on the captured amount, not the originally requested amount.
+
+</Accordion>
+
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Partial payments" href="/docs/payments/partial-payments" description="Let customers intentionally split a purchase across multiple payment methods." />
+  <Card title="Authorize & capture" href="/docs/payments/authorize-and-capture" description="Reserve funds now and capture them later, with support for partial captures." />
+  <Card title="Refunds" href="/docs/payments/refunds" description="Return captured funds if split tender fails or the order cannot be fulfilled." />
+</Cards>

@@ -1,0 +1,278 @@
+---
+title: "Click & collect"
+description: "Accept payment online at checkout, then let the customer collect in store — with optional in-store upsell."
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+Click & collect (Buy Online, Pick Up In Store — BOPIS) lets customers pay at your online checkout and collect their order at a physical location. VINR handles both legs: the online authorization is held until a staff member confirms the customer has collected, at which point the funds are captured. If the customer wants to add an item while they are in store, VINR can charge the same shopper token without them presenting a card again.
+
+## Online payment
+
+Create the payment exactly as you would for any online order, with two additions: tag the fulfillment type in `metadata` and set `captureMethod: 'manual'` so funds are reserved but not moved until the customer collects.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 7500,
+  currency: 'EUR',
+  captureMethod: 'manual',
+  description: 'Order #8821 — click & collect',
+  returnUrl: 'https://yourstore.com/orders/8821/confirmation',
+  shopperReference: 'cust_abc123',
+  metadata: {
+    orderId: '8821',
+    fulfillment: 'click_and_collect',
+    pickupLocationId: 'loc_london_oxford_st',
+    pickupWindowStart: '2026-06-01T10:00:00Z',
+    pickupWindowEnd: '2026-06-01T18:00:00Z',
+  },
+});
+```
+
+After the shopper completes the hosted checkout, the payment moves to `authorized` and VINR emits a `payment.authorized` webhook. Use that event to trigger your stock-reservation logic and queue the collection-ready notification — do not poll the payments API.
+
+<Callout type="info">
+`shopperReference` is optional at authorization time, but supplying it stores the payment method against the shopper profile. This enables the in-store upsell flow described later without the customer presenting their card again.
+</Callout>
+
+## Capture at collection
+
+When a staff member confirms the customer has collected their order, capture the authorization. Call capture as close to the handover moment as possible — the authorization window is seven days.
+
+<Tabs items={["Full capture", "Partial capture"]}>
+<Tab value="Full capture">
+
+```typescript
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const captured = await vinr.payments.capture('pay_8821auth', {
+  metadata: { staffId: 'staff_jsmith', collectedAt: new Date().toISOString() },
+});
+```
+
+</Tab>
+<Tab value="Partial capture">
+
+```typescript
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const captured = await vinr.payments.capture('pay_8821auth', {
+  amount: 5000,
+  metadata: {
+    staffId: 'staff_jsmith',
+    collectedAt: new Date().toISOString(),
+    partialReason: 'item_unavailable',
+  },
+});
+```
+
+Pass a smaller `amount` when only part of the order is available. The remainder of the hold is released automatically; the customer is never charged for what they did not receive.
+
+</Tab>
+</Tabs>
+
+A successful capture emits `payment.completed`. Use this event to update your order management system and close the collection ticket.
+
+## In-store upsell at collection
+
+If the customer wants to add an item while they are at the counter, you can charge the saved token from the original authorization — they do not need to tap or insert their card again.
+
+```typescript
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const upsell = await vinr.payments.create({
+  amount: 1200,
+  currency: 'EUR',
+  captureMethod: 'automatic',
+  shopperReference: 'cust_abc123',
+  paymentMethodType: 'saved_token',
+  description: 'In-store upsell — Order #8821',
+  metadata: {
+    orderId: '8821',
+    fulfillment: 'click_and_collect_upsell',
+    pickupLocationId: 'loc_london_oxford_st',
+    staffId: 'staff_jsmith',
+  },
+});
+```
+
+If no token is on file — or the customer prefers to pay differently — accept a new contactless tap on the terminal instead. See [Shopper recognition](/docs/payments/omnichannel/shopper-recognition) for the full token-reuse lifecycle.
+
+<Callout type="info">
+Upsell payments are independent charges, not adjustments to the original authorization. Each appears as a separate line item in [reconciliation](/docs/operations/reconciliation).
+</Callout>
+
+## Handling no-shows
+
+If the customer never collects, void the authorization before it expires rather than waiting for the hold to lapse on its own. Voids release the funds to the cardholder immediately and produce no settlement entry or fee.
+
+<Steps>
+<Step>
+Monitor your order management system for orders approaching their `pickupWindowEnd` without a confirmed collection.
+</Step>
+<Step>
+Send the customer a reminder at least 24 hours before the window closes.
+</Step>
+<Step>
+If there is still no collection, call void before the authorization expires (seven-day window from creation).
+
+```typescript
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+await vinr.payments.void('pay_8821auth', {
+  metadata: { reason: 'no_show', staffId: 'staff_jsmith' },
+});
+```
+
+</Step>
+<Step>
+Mark the order as cancelled in your system and release reserved stock. VINR emits `payment.voided` on success.
+</Step>
+</Steps>
+
+<Callout type="warn">
+Do not cancel the authorization by refunding it or by taking no action and letting it expire. Always call `void` explicitly — a void produces no fee and releases the hold the same day, whereas an expired authorization may take 3–5 banking days to clear from the cardholder's statement.
+</Callout>
+
+For the full authorize-and-void reference, see [Authorize & capture](/docs/payments/authorize-and-capture).
+
+## Notifications
+
+VINR is responsible for payment events; your backend is responsible for customer communications.
+
+<Steps>
+<Step>
+Listen for `payment.authorized` on your webhook endpoint. This fires as soon as the shopper completes online checkout.
+</Step>
+<Step>
+On receipt, reserve stock in your warehouse or store system and enqueue a collection-ready SMS or email to the customer.
+</Step>
+<Step>
+Listen for `payment.completed` (fires on capture) to close the order and trigger any loyalty or receipt logic.
+</Step>
+<Step>
+Listen for `payment.voided` to release reserved stock and send a cancellation confirmation.
+</Step>
+</Steps>
+
+Configure webhook endpoints and event subscriptions in your [VINR Dashboard](https://dashboard.vinr.com) or via the [Webhooks API](/docs/integration/webhooks). VINR retries failed deliveries with exponential back-off for up to 72 hours.
+
+## Metadata fields
+
+<TypeTable
+  type={{
+    fulfillment: {
+      type: "'click_and_collect' | 'click_and_collect_upsell'",
+      description: "Tags the payment as a BOPIS order or an in-store upsell on a BOPIS order.",
+      required: true,
+    },
+    pickupLocationId: {
+      type: "string",
+      description: "Your internal identifier for the collection point. Used for store-level reporting and routing.",
+      required: true,
+    },
+    pickupWindowStart: {
+      type: "string (ISO 8601)",
+      description: "Earliest time the customer may collect. Informational — VINR does not enforce the window.",
+    },
+    pickupWindowEnd: {
+      type: "string (ISO 8601)",
+      description: "Latest time the customer may collect. Use this to schedule no-show void logic.",
+    },
+    staffId: {
+      type: "string",
+      description: "Set at capture or void time to record which staff member confirmed the handover or cancellation.",
+    },
+  }}
+/>
+
+<Accordions>
+<Accordion title="Advanced — age verification, partial collection, and multi-location routing">
+
+**Age verification at collection**
+
+For age-restricted goods, prompt your terminal to display an ID-check screen before completing the handover. Pass `ageVerification: true` in the capture call metadata; your terminal application must handle the UI prompt and record the outcome.
+
+```typescript
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const captured = await vinr.payments.capture('pay_8821auth', {
+  metadata: {
+    staffId: 'staff_jsmith',
+    collectedAt: new Date().toISOString(),
+    ageVerification: 'passed',
+    ageVerificationMethod: 'passport',
+  },
+});
+```
+
+VINR stores the metadata verbatim on the payment object. Retrieval through the Dashboard or API is available for compliance audits.
+
+**Partial collection**
+
+If some items are unavailable at the time of collection, capture only the value of the items that are handed over. The remainder of the authorization is released without any action on your part.
+
+```typescript
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const captured = await vinr.payments.capture('pay_8821auth', {
+  amount: 4500,
+  metadata: {
+    staffId: 'staff_jsmith',
+    collectedAt: new Date().toISOString(),
+    partialReason: 'item_unavailable',
+    unavailableSkus: ['SKU-99182'],
+  },
+});
+```
+
+If you later fulfill the unavailable items from a separate location, create a new payment for the outstanding amount. The original authorization cannot be re-captured once a partial capture is taken.
+
+**Multi-location order routing**
+
+When a single online basket is fulfilled across multiple stores, create one authorization per fulfilling location at checkout. Tag each with its own `pickupLocationId`. Each authorization is captured independently as the customer collects from each location. This keeps settlement, reporting, and liability correctly attributed at the store level without splitting the shopper's checkout experience.
+
+```typescript
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const [authLondon, authManchester] = await Promise.all([
+  vinr.payments.create({
+    amount: 4000,
+    currency: 'EUR',
+    captureMethod: 'manual',
+    shopperReference: 'cust_abc123',
+    metadata: {
+      orderId: '8821',
+      fulfillment: 'click_and_collect',
+      pickupLocationId: 'loc_london_oxford_st',
+    },
+  }),
+  vinr.payments.create({
+    amount: 3500,
+    currency: 'EUR',
+    captureMethod: 'manual',
+    shopperReference: 'cust_abc123',
+    metadata: {
+      orderId: '8821',
+      fulfillment: 'click_and_collect',
+      pickupLocationId: 'loc_manchester_arndale',
+    },
+  }),
+]);
+```
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Return in store" href="/docs/payments/omnichannel/return-in-store" description="Let customers bring online purchases back to any physical location." />
+  <Card title="Shopper recognition" href="/docs/payments/omnichannel/shopper-recognition" description="Reuse saved tokens across channels without a card-present tap." />
+  <Card title="Authorize & capture" href="/docs/payments/authorize-and-capture" description="Full reference for manual capture, voids, and authorization expiry." />
+</Cards>

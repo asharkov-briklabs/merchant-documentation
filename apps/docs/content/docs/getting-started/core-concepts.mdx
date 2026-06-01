@@ -1,0 +1,151 @@
+---
+title: Core concepts
+description: The object model, event system, and three-product architecture behind every VINR integration.
+persona: ["developer", "business-owner"]
+priority: "P0"
+lastUpdated: "2026-05-31"
+---
+
+Every VINR integration — whether you're taking a one-off payment or running a subscription-plus-loyalty loop — is built on the same small set of ideas. This page explains them once so the rest of the documentation makes sense.
+
+## Three products, one platform
+
+VINR exposes three products through a single API and a single SDK. You can use any one of them independently, or combine all three.
+
+<Cards>
+  <Card title="Payments" href="/docs/payments" description="One-time and saved-method charges, refunds, disputes, and payouts. The foundation everything else builds on." />
+  <Card title="Billing" href="/docs/billing" description="Products, prices, subscriptions, invoices, and revenue recognition. Handles the full recurring-revenue lifecycle." />
+  <Card title="Engagement" href="/docs/engagement" description="Loyalty accounts, points, rewards, and campaigns. Layers onto Payments and Billing or runs standalone." />
+</Cards>
+
+The three products share one customer object. A `cust_` you create for a first payment is the same record you attach a subscription and a loyalty account to — no duplicate data, no re-collecting card details, no second identity for the same person.
+
+<Callout type="info">
+You do not need to use all three products. Many integrations start with Payments alone and add Billing or Engagement later. The `cust_` object is backward-compatible — you can attach a subscription to a customer who has only ever made one-off payments.
+</Callout>
+
+## Objects and IDs
+
+Every resource in VINR is an object with a typed, prefixed ID. The prefix tells you exactly what you're looking at — in logs, in dashboard URLs, and in webhook payloads.
+
+| Prefix | Object | Description |
+|---|---|---|
+| `cust_` | Customer | A person or business. Shared across all three products. |
+| `pay_` | Payment | A single charge attempt. May require 3DS before confirming. |
+| `pm_` | Payment method | A saved card or bank account attached to a customer. |
+| `re_` | Refund | A full or partial reversal of a `pay_`. |
+| `dp_` | Dispute | A chargeback raised by the cardholder's bank. |
+| `po_` | Payout | Funds settled to your bank account. |
+| `prod_` | Product | A thing you sell. Has one or more `price_` objects. |
+| `price_` | Price | An amount, currency, and billing interval. |
+| `sub_` | Subscription | A customer subscribed to a price. Drives the invoice lifecycle. |
+| `inv_` | Invoice | A billing statement. Paid automatically or sent to the customer. |
+| `mbu_` | Metered billing usage | A usage record for consumption-based pricing. |
+| `loy_` | Loyalty account | A points balance attached to a `cust_`. |
+| `ptx_` | Points transaction | An earn or burn event against a loyalty account. |
+| `rwd_` | Reward | A redeemable item in a loyalty catalog. |
+| `rdm_` | Redemption | A customer exchanging points for a reward. |
+| `evt_` | Event | A webhook event delivered to your endpoint. |
+| `we_` | Webhook endpoint | A registered URL that receives `evt_` objects. |
+
+<Callout type="warn">
+Object IDs are not portable across environments. A `cust_` created in sandbox does not exist in live. Re-create reference data when you move to production.
+</Callout>
+
+## The event model
+
+VINR is event-driven. Every meaningful state change — a payment completing, an invoice generating, a customer earning points — emits an `evt_` object delivered to your registered webhook endpoint. **Do not poll the API for state changes; react to events instead.**
+
+A webhook payload always has the same shape:
+
+```typescript
+{
+  id: "evt_01j2k...",
+  type: "payment.completed",
+  created: 1717200000,
+  data: { /* the full object that changed */ }
+}
+```
+
+Your endpoint must verify the `x-vinr-signature` header before trusting the payload, then return `2xx` within 30 seconds. VINR retries unacknowledged deliveries with exponential backoff for up to 72 hours.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+export async function POST(req: Request) {
+  const payload = await req.text();
+  const signature = req.headers.get('x-vinr-signature');
+
+  const event = vinr.webhooks.verify(payload, signature);
+
+  switch (event.type) {
+    case 'payment.completed':
+      await fulfillOrder(event.data.metadata.orderId);
+      break;
+    case 'invoice.paid':
+      await grantAccess(event.data.customerId);
+      break;
+    case 'loyalty.points.earned':
+      await notifyCustomer(event.data.customerId, event.data.amount);
+      break;
+  }
+
+  return new Response('OK', { status: 200 });
+}
+```
+
+Make every handler **idempotent**: store the processed `evt_` id and short-circuit duplicates. VINR may redeliver the same event on retry.
+
+### Key events by product
+
+| Event | When it fires |
+|---|---|
+| `payment.completed` | A charge was successfully captured |
+| `payment.failed` | A charge attempt was declined or errored |
+| `payment.refunded` | A `re_` was applied to a `pay_` |
+| `invoice.created` | A billing cycle generated a new invoice |
+| `invoice.paid` | An invoice was collected successfully |
+| `invoice.payment_failed` | An invoice charge attempt failed (triggers dunning) |
+| `subscription.deleted` | A subscription was cancelled or expired |
+| `loyalty.points.earned` | A `ptx_` earn was recorded |
+| `loyalty.points.redeemed` | A customer redeemed points for a reward |
+| `payout.paid` | Funds were settled to your bank account |
+| `dispute.created` | A chargeback was opened against a `pay_` |
+
+## Environments
+
+Every VINR account has two isolated environments. They share nothing — not keys, not objects, not money.
+
+| | Sandbox | Live |
+|---|---|---|
+| API base URL | `https://sandbox.api.vinr.com` | `https://api.vinr.com` |
+| Key prefix | `sk_test_…` / `pk_test_…` | `sk_live_…` / `pk_live_…` |
+| Money | Simulated — no real funds | Real funds and payouts |
+| Test cards | Required | Rejected |
+| KYB required | No | Yes |
+
+The SDK switches base URL automatically based on which key you provide — a `sk_test_…` key can never touch the live API. If you call the REST API directly, keep the host and key in sync; a live key against the sandbox host returns `401`.
+
+<Callout type="info">
+Switch environments using the toggle in the top-left of the dashboard. Each environment has its own API keys, webhook endpoints, and webhook secrets.
+</Callout>
+
+## Authentication
+
+VINR uses two API keys per environment:
+
+- **Secret key** (`sk_test_…` / `sk_live_…`) — server-side only. Used to create payments, read customer data, and verify webhooks. Never expose this in client-side code or commit it to version control.
+- **Public key** (`pk_test_…` / `pk_live_…`) — safe for browser use. Initializes the embedded Elements UI. It cannot make server-side API calls.
+
+Pass the secret key via the `X-Api-Key` header (REST) or the SDK constructor. See [Authentication](/docs/getting-started/authentication) for scoped keys, rotation, and key management best practices.
+
+## Next steps
+
+<Cards>
+  <Card title="Quick Start" href="/docs/getting-started/quick-start" description="Make your first payment in five minutes using the concepts above." />
+  <Card title="Integration overview" href="/docs/getting-started/integration-overview" description="Choose your integration depth: hosted, embedded, or API-direct." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Signature verification, retries, and idempotent event handling in depth." />
+  <Card title="Authentication" href="/docs/getting-started/authentication" description="Scoped keys, rotation, and keeping credentials secure." />
+</Cards>

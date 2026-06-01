@@ -1,0 +1,183 @@
+---
+title: Integration models
+description: Compare VINR's three integration surfaces — Checkout, Elements, and API-only — and choose the right one for your use case.
+category: "integration"
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-05-31"
+---
+
+VINR offers three integration surfaces: Hosted Checkout, Elements, and API-only. Choosing the right one determines how much you build versus how much control you have over the payment experience. Most merchants start with Checkout and never need more.
+
+## The three models
+
+| Model | What VINR hosts | PCI scope | Time to first payment | Best for |
+|---|---|---|---|---|
+| **Checkout** | Complete payment page (UI, 3DS, error handling) | SAQ-A | Under an hour | Standard commerce, quick time-to-market |
+| **Elements** | Sensitive form fields only (card number, expiry, CVC) | SAQ-A EP | Half a day | Custom checkout UX on your own domain |
+| **API-only** | Nothing — you build the full UI | SAQ-D | Days to weeks | Platforms, marketplaces, enterprise integrations |
+
+## Checkout
+
+VINR hosts the entire payment form. You create a session from your backend, redirect the customer to `checkout.vinr.com`, and verify the result when they return. VINR handles card entry, Apple Pay, Google Pay, Click-to-Pay, 3DS challenges, and all error states.
+
+<Steps>
+
+### Create a Checkout session
+
+POST to `/checkout/session` with the order amount, currency, and redirect URLs. The response contains a `checkoutUrl`.
+
+```ts
+const { sessionId, checkoutUrl } = await fetch(
+  `${process.env.INTENT_API_URL}/checkout/session`,
+  {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Api-Key': process.env.VINR_API_KEY!,
+    },
+    body: JSON.stringify({
+      amount: 5000,
+      currency: 'EUR',
+      successUrl: 'https://yoursite.com/success',
+      cancelUrl: 'https://yoursite.com/cancel',
+    }),
+  }
+).then(r => r.json());
+```
+
+### Redirect the customer
+
+```ts
+window.location.href = checkoutUrl;
+```
+
+VINR renders the payment form on a VINR-owned domain. Your servers never see raw card data.
+
+### Verify on return
+
+When the customer lands on `successUrl?sessionId=...`, fetch the session result before fulfilling the order.
+
+```ts
+const result = await fetch(
+  `${process.env.INTENT_API_URL}/checkout/session/${sessionId}/result`,
+  { headers: { 'X-Api-Key': process.env.VINR_API_KEY! } }
+).then(r => r.json());
+
+if (result.status === 'completed') {
+  await fulfillOrder(result);
+}
+```
+
+</Steps>
+
+Read the full [Checkout integration guide](/docs/integration/checkout).
+
+## Elements
+
+VINR UI components are embedded directly in your page. You own the page layout, step flow, and branding — VINR owns the sensitive fields (card number, expiry, CVC). Card data is entered in VINR-hosted iframes, encrypted in the browser, and returned as a token your backend can charge. Because raw card data never touches your JavaScript or servers, SAQ-A EP (rather than full SAQ-D) applies.
+
+The example below shows the minimum code to mount a card element inside a React component:
+
+```tsx
+import { useRef } from 'react';
+import { useAsparyxSDK, useAsparyxElement, useTokenReceived } from '@vinr/elements';
+
+export default function CardForm({ intent }: { intent: Intent }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const { sdk, status } = useAsparyxSDK({
+    merchantId: intent.accountId,
+    publicKey: intent.publicKey,
+    secureFormsUrl: 'https://elements.vinr.com',
+    enabled: !!intent,
+  });
+
+  useAsparyxElement(sdk, 'full-payment', {
+    container: containerRef,
+    amount: intent.amount,
+    currency: intent.currency,
+  });
+
+  useTokenReceived(sdk, async (data) => {
+    await fetch('/api/process-payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        intentId: intent.id,
+        paymentMethod: { card: { payload: data.payload.card.payload } },
+        billingDetails: data.payload.billingDetails,
+      }),
+    });
+  });
+
+  return (
+    <>
+      <div ref={containerRef} style={{ minHeight: 550 }} />
+      <button
+        disabled={status !== 'ready'}
+        onClick={() => sdk?.submit(intent.amount, intent.currency)}
+      >
+        Pay
+      </button>
+    </>
+  );
+}
+```
+
+Read the full [Elements integration guide](/docs/integration/elements).
+
+## API-only (Advanced flow)
+
+You build the entire UI, collect card data, and tokenize it yourself before passing the payload to VINR. This gives you the highest degree of control over every pixel and interaction, but it also gives you the highest PCI scope: SAQ-D, which requires a full annual assessment and quarterly network scans. Most merchants should exhaust Checkout and Elements before reaching for this model.
+
+API-only is the right choice when:
+
+- You are a payment platform or marketplace that needs to route funds across multiple sub-merchants.
+- You have an existing card-vault or tokenization system you want to connect to VINR.
+- Your enterprise compliance team mandates end-to-end control over all payment data flows.
+
+Read the full [API-only integration guide](/docs/integration/advanced-flow).
+
+## Decision matrix
+
+<TypeTable
+  type={{
+    checkout: {
+      description: "VINR-hosted page — SAQ-A, automatic 3DS, no frontend code. Limited UI customization.",
+      type: "Checkout",
+    },
+    elements: {
+      description: "Embedded React SDK — SAQ-A EP, automatic 3DS via SDK, full layout control, mobile-ready.",
+      type: "Elements",
+    },
+    apiOnly: {
+      description: "Full custom UI — SAQ-D, 3DS must be orchestrated by your code, unlimited customization.",
+      type: "API-only",
+    },
+  }}
+/>
+
+| | Checkout | Elements | API-only |
+|---|---|---|---|
+| **PCI scope** | SAQ-A | SAQ-A EP | SAQ-D |
+| **3DS handling** | Automatic | Automatic (via SDK) | Your responsibility |
+| **Custom UI** | No | Full layout control | Unlimited |
+| **Mobile support** | Browser redirect | React Native SDK available | You build it |
+| **Typical time to integrate** | < 1 hour | Half a day | Days to weeks |
+
+## Changing models later
+
+You can migrate from Checkout to Elements, or from Elements to API-only, without changing your backend payment logic. The `pay_...` payment IDs, webhook event names, and result status values are identical across all three models. The only thing that changes is the frontend integration code and your PCI scope obligations.
+
+<Callout type="warn">
+Changing integration model changes your PCI scope. Moving from Checkout (SAQ-A) to Elements (SAQ-A EP) or API-only (SAQ-D) requires re-assessing your compliance posture. Talk to your compliance team before migrating in production.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Checkout" href="/docs/integration/checkout" description="Redirect to a VINR-hosted payment page — no frontend code required, SAQ-A scope." />
+  <Card title="Elements" href="/docs/integration/elements" description="Embed card fields in your React app while VINR handles all sensitive data, SAQ-A EP scope." />
+  <Card title="API-only" href="/docs/integration/advanced-flow" description="Build a fully custom payment UI for platforms and enterprise integrations." />
+</Cards>

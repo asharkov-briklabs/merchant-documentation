@@ -19,6 +19,7 @@ import { PageActions } from "../../components/page-actions";
 import { Attributes, Attribute } from "../../components/attributes";
 import { PageFeedback } from "../../components/page-feedback";
 import { MdxHeading } from "../../components/mdx-heading";
+import { Advanced } from "../../components/advanced";
 import type { ReactNode } from "react";
 
 export default async function Page(props: {
@@ -58,7 +59,7 @@ export default async function Page(props: {
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
       <DocsBody>
-        <MDX components={{ ...defaultMdxComponents, Step, Steps, Tab, Tabs, Accordion, Accordions, TypeTable, File, Files, Folder, ImageZoom, Attributes, Attribute, h2: ({ id, children }: { id?: string; children?: ReactNode }) => (<MdxHeading id={id} pageTitle={page.data.title} markdownPath={markdownPath}>{children}</MdxHeading>) }} />
+        <MDX components={{ ...defaultMdxComponents, Step, Steps, Tab, Tabs, Accordion, Accordions, TypeTable, File, Files, Folder, ImageZoom, Attributes, Attribute, Advanced, h2: ({ id, children }: { id?: string; children?: ReactNode }) => (<MdxHeading id={id} pageTitle={page.data.title} markdownPath={markdownPath}>{children}</MdxHeading>) }} />
         <PageFeedback url={page.url} />
       </DocsBody>
     </DocsPage>

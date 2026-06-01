@@ -1,0 +1,177 @@
+---
+title: Disputes & chargebacks
+description: Dispute flow, defense requirements, reason codes, and the Disputes API.
+persona: ["operations", "finance-manager"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+A dispute (chargeback) is initiated by a cardholder through their issuing bank. When opened, VINR debits the disputed amount from your balance, notifies you, and gives you a window to submit evidence. This page explains the dispute lifecycle, how to respond, and how to use the Disputes API.
+
+## Dispute lifecycle
+
+```
+Opened → Evidence due → Under review → Won / Lost
+                                     ↘ Accepted (no contest)
+```
+
+| Stage | What happens | Time limit |
+|---|---|---|
+| **Opened** | Issuer files dispute; funds debited; `dispute.opened` webhook fired. | — |
+| **Evidence due** | You upload evidence to contest the dispute. | Varies by network (7–20 days) |
+| **Under review** | Issuer reviews evidence; no further action from you. | 30–75 days |
+| **Won** | Funds returned to your balance; `dispute.won` webhook fired. | — |
+| **Lost** | Decision final; `dispute.lost` webhook fired. | — |
+| **Accepted** | You accepted the chargeback; `dispute.accepted` webhook fired. | — |
+
+<Callout type="warn">
+Missing the evidence deadline forfeits the dispute automatically. Subscribe to `dispute.opened` and `dispute.evidence_due` webhooks, and set up Dashboard notifications so nothing slips through.
+</Callout>
+
+## Dispute reason codes
+
+Reason codes identify the cardholder's claim. Defense requirements differ by code.
+
+| Code | Claim | Key evidence |
+|---|---|---|
+| `consumer_dispute.not_as_described` | Product/service differs from description | Clear product description, photos, delivery confirmation |
+| `consumer_dispute.not_received` | Goods/services not received | Proof of delivery, tracking, customer communication |
+| `consumer_dispute.cancelled` | Subscription cancelled but charged | Cancellation policy, confirmation email, timestamp |
+| `consumer_dispute.duplicate` | Charged more than once | Transaction log showing single charge, refund if applicable |
+| `fraud.card_not_present` | Cardholder claims they didn't authorize | 3DS authentication result, AVS match, device fingerprint |
+| `fraud.card_present` | Cardholder disputes in-person charge | EMV chip data, signed receipt, terminal log |
+| `credit_not_processed` | Refund promised but not received | Refund record or proof refund was processed |
+
+Full code reference is available in the [API reference](/api-reference).
+
+## Responding to a dispute
+
+<Steps>
+
+### Review the claim
+
+In **Dashboard → Operations → Disputes**, open the dispute. Read the cardholder's statement and reason code carefully — the evidence you submit must directly address their specific claim.
+
+### Gather evidence
+
+Collect what you need based on the reason code table above. The `evidence` object accepts structured fields (preferred) and/or file attachments.
+
+### Submit
+
+You have one submission window. Make it complete — you cannot add evidence after submission.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+await vinr.disputes.update('dis_...', {
+  evidence: {
+    customerName: 'Maria Santos',
+    customerEmailAddress: 'maria@example.com',
+    productDescription: 'Annual SaaS subscription — confirmed in onboarding email',
+    accessActivityLog: 'Customer logged in 47 times between purchase and dispute date',
+    refundPolicy: 'No refunds after 14-day trial per Terms of Service section 8',
+    // Attach files as base64 or upload separately via vinr.files.create()
+    receiptUrl: 'https://cdn.example.com/receipts/inv_2026_04.pdf',
+  },
+  submit: true,   // false to save as draft, true to submit immediately
+});
+```
+
+### Accept (optional)
+
+If a dispute is clearly valid (e.g. a genuine duplicate charge), accept it immediately rather than contesting. This keeps your dispute rate clean — a contested loss counts the same as an accepted dispute.
+
+```typescript
+await vinr.disputes.accept('dis_...');
+```
+
+</Steps>
+
+## Uploading evidence files
+
+Large evidence (PDFs, screenshots) should be uploaded as files first, then referenced in the evidence object:
+
+```typescript
+import { readFileSync } from 'fs';
+
+const file = await vinr.files.create({
+  purpose: 'dispute_evidence',
+  file: {
+    data: readFileSync('tracking-screenshot.png'),
+    name: 'tracking-screenshot.png',
+    type: 'image/png',
+  },
+});
+
+await vinr.disputes.update('dis_...', {
+  evidence: { shippingDocumentation: file.id },
+  submit: true,
+});
+```
+
+## Dispute webhooks
+
+Subscribe to these events to drive automated workflows:
+
+| Event | When |
+|---|---|
+| `dispute.opened` | Dispute created; funds debited. Act immediately. |
+| `dispute.evidence_due` | 48-hour reminder before the evidence deadline. |
+| `dispute.updated` | Status changed (e.g. issuer requests more information). |
+| `dispute.won` | Funds returned; dispute closed in your favor. |
+| `dispute.lost` | Dispute closed against you; funds not returned. |
+| `dispute.accepted` | You accepted the dispute; resolved. |
+
+```typescript
+// Webhook handler
+const event = vinr.webhooks.verify(payload, signature);
+
+if (event.type === 'dispute.opened') {
+  const dis = event.data;
+  await alertOpsTeam({
+    id: dis.id,
+    amount: dis.amount,
+    currency: dis.currency,
+    reason: dis.reason,
+    evidenceDueBy: dis.evidenceDueBy,   // ISO 8601
+  });
+}
+```
+
+## Preventing disputes
+
+Most disputes are preventable. High-impact interventions:
+
+- **3D Secure** — Shifts liability to the issuer for `fraud.*` reason codes. Enable on high-value or high-risk transactions.
+- **Clear billing descriptors** — Cardholder confusion ("I don't recognize this charge") drives `consumer_dispute.*` disputes. Use a recognizable name.
+- **Prompt refunds** — Process refunds within 5 business days to head off `credit_not_processed` disputes.
+- **Cancel subscriptions instantly** — A customer who cancelled but was charged 30 days later is almost certain to dispute. Honor cancellations immediately.
+- **Send receipts** — A receipt email gives you evidence *and* reduces post-purchase doubt.
+
+<Callout type="info">
+Card networks monitor your dispute rate. Visa and Mastercard have early-warning programs that trigger at 0.65%; exceeding 1% for two consecutive months places your account in a monitoring program with fees and potential suspension risk.
+</Callout>
+
+## Chargeback Uploader (bulk)
+
+For platforms or high-volume merchants, upload evidence files in bulk using the Chargeback Uploader. Prepare a ZIP archive following the [upload format spec](/api-reference#chargeback-uploader), then:
+
+```typescript
+await vinr.disputes.bulkUpload({
+  file: readFileSync('evidence-bundle.zip'),
+  // Evidence is matched to disputes by payment ID from the manifest file inside the ZIP
+});
+```
+
+## Test a dispute scenario
+
+Use test card `4000000000000259` (any future expiry, any CVC) to trigger an automatic dispute in test mode. The dispute is created approximately 7 seconds after the charge is captured, giving you a sandbox to test your webhook handler and evidence submission flow end-to-end.
+
+## Next steps
+
+<Cards>
+  <Card title="Risk & fraud" href="/docs/operations/risk-management" description="Prevent disputes upstream with rules and 3DS challenges." />
+  <Card title="3D Secure" href="/docs/payments/3d-secure" description="Shift liability and reduce fraud chargebacks." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Wire up dispute.opened and evidence_due alerts." />
+</Cards>

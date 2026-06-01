@@ -2,5 +2,5 @@
   "root": true,
   "title": "Integration",
   "icon": "Blocks",
-  "pages": ["index", "checkout", "elements", "mobile-sdks", "webhooks", "testing"]
+  "pages": ["index", "integration-models", "checkout", "elements", "advanced-flow", "mobile-sdks", "webhooks", "testing"]
 }

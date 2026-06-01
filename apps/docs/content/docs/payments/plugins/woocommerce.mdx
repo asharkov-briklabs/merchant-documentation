@@ -1,0 +1,258 @@
+---
+title: "WooCommerce"
+description: "Install and configure the VINR payment plugin for WooCommerce."
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+The VINR plugin for WooCommerce lets WordPress stores accept cards, digital wallets, BNPL, and local payment methods through a single integration. Download the plugin directly from the VINR dashboard, drop it into any WooCommerce 7.0+ store running PHP 8.0+, and your checkout is connected to the full VINR payment stack — including tokenized repeat purchases, 3D Secure, and optional in-person terminals — without touching a line of server-side code.
+
+<Callout type="info">
+  This is illustrative content. Plugin availability and exact menu paths may differ; refer to your VINR account manager for production details.
+</Callout>
+
+## Supported payment methods
+
+| Method | Online | In-person |
+|---|---|---|
+| Visa / Mastercard / Amex | ✓ | ✓ |
+| Apple Pay / Google Pay | ✓ | — |
+| SEPA Direct Debit | ✓ | — |
+| Local payment methods | ✓ | — |
+| Installments / BNPL | ✓ | ✓ |
+
+## Requirements
+
+Before installing the plugin, confirm the following:
+
+- WooCommerce **7.0 or higher**
+- WordPress **6.0 or higher**
+- PHP **8.0 or higher** (8.2+ recommended)
+- A valid SSL certificate on your storefront domain
+- An active VINR merchant account — see [Account setup](/docs/getting-started/account-setup) if you have not completed onboarding
+- **API Key** and **Merchant ID** from the VINR dashboard (Settings → API Credentials)
+
+## Install
+
+<Steps>
+
+<Step>
+**Download the plugin**
+
+Log in to the VINR dashboard, navigate to **Integrations → Plugins → WooCommerce**, and download the latest `.zip` archive.
+</Step>
+
+<Step>
+**Upload and activate in WordPress**
+
+In your WordPress admin panel go to **Plugins → Add New → Upload Plugin**, select the `.zip` you just downloaded, click **Install Now**, and then click **Activate Plugin**.
+</Step>
+
+<Step>
+**Open the plugin settings**
+
+Navigate to **WooCommerce → Settings → Payments**, locate **VINR Payments** in the list, and click **Manage**.
+</Step>
+
+<Step>
+**Enter your credentials**
+
+Paste your **API Key** and **Merchant ID** from the VINR dashboard into the corresponding fields and click **Save changes**. The plugin will verify the credentials and show a green connection status if successful.
+</Step>
+
+</Steps>
+
+## Configure
+
+### Payment methods
+
+Navigate to **WooCommerce → Settings → Payments → VINR Payments → Payment Methods**. Each method enabled on your VINR account appears as a toggle here. Methods that are not activated in your VINR account are hidden — contact your account manager to enable additional methods at the account level before toggling them on in the plugin.
+
+### Capture mode
+
+<Tabs items={["Authorize & capture (default)", "Authorize only"]}>
+<Tab value="Authorize & capture (default)">
+
+The payment is authorized and funds are captured immediately at checkout. This is the right mode for most stores that ship or fulfill digitally at the point of purchase.
+
+**Setting path:** WooCommerce → Settings → Payments → VINR Payments → Manage → **Capture mode → Automatic**
+
+</Tab>
+<Tab value="Authorize only">
+
+The payment is authorized at checkout and captured later — for example, when the WooCommerce order transitions to a fulfillment status. Use this when you ship physical goods and want to capture funds only after you confirm stock and dispatch.
+
+**Setting path:** WooCommerce → Settings → Payments → VINR Payments → Manage → **Capture mode → Manual**
+
+With manual capture, VINR holds the authorization for up to **7 days**. If you do not capture within that window, the authorization is released and the customer is not charged.
+
+</Tab>
+</Tabs>
+
+### 3D Secure
+
+3D Secure is enforced automatically by VINR for any transaction that requires Strong Customer Authentication under PSD2. No plugin configuration is needed — VINR detects whether SCA applies and triggers the 3DS2 challenge flow transparently before the order is placed.
+
+<Callout type="info">
+  Use VINR test cards tagged `3DS_REQUIRED` in the VINR dashboard to verify your checkout handles a challenge flow correctly before go-live. See [3D Secure](/docs/payments/3d-secure) for the full list of test card numbers and expected outcomes.
+</Callout>
+
+### Webhooks
+
+The plugin registers a webhook listener automatically at:
+
+```
+https://yourstore.com/wc-api/vinr_payments
+```
+
+Verify the endpoint is registered in the VINR dashboard under **Developers → Webhooks**. The URL must be publicly accessible — local `localhost` addresses will not receive events.
+
+WooCommerce order statuses map to VINR payment states as follows:
+
+| VINR payment state | WooCommerce order status |
+|---|---|
+| `authorized` | Processing |
+| `captured` | Completed |
+| `failed` | Failed |
+| `refunded` | Refunded |
+
+## Tokenization and saved cards
+
+The plugin surfaces WooCommerce's native **"Save payment method"** checkbox at checkout. When a customer opts in, VINR vaults the card and returns a token; no raw card data ever touches your server. On subsequent checkouts the customer selects a saved card from the dropdown and completes payment without re-entering details.
+
+Saved tokens are also compatible with the **WooCommerce Subscriptions** plugin. VINR handles the recurring charge against the stored token on each renewal date, so subscription orders process without customer interaction.
+
+For full token lifecycle details — including how to list, remove, and reuse tokens via the API — see [Tokenization](/docs/payments/tokenization).
+
+## In person
+
+If your VINR account includes terminal access, you can accept card-present payments at a physical point of sale alongside your online store.
+
+Enable in-person acceptance under **WooCommerce → Settings → Payments → VINR Payments → In-person** and select the terminal(s) assigned to your location. This feature requires either a compatible WooCommerce POS plugin or a custom POS integration that calls the VINR Terminal API.
+
+See [In-person payments](/docs/payments/in-person) for terminal setup, reader pairing, and offline mode behaviour.
+
+## Go live
+
+<Steps>
+
+<Step>
+**Switch to live API credentials**
+
+In **WooCommerce → Settings → Payments → VINR Payments → Manage**, replace the test API Key and Merchant ID with your live credentials from the VINR dashboard. Save changes.
+</Step>
+
+<Step>
+**Place a real test order**
+
+Use a live card for a small amount (for example, 1.00 in your store currency) to confirm the end-to-end flow works in production.
+</Step>
+
+<Step>
+**Verify both dashboards**
+
+Confirm the order appears in **WooCommerce → Orders** with the expected status and in the **VINR dashboard → Payments** with the correct amount and captured state.
+</Step>
+
+<Step>
+**Enable your payment methods**
+
+In the VINR dashboard under **Settings → Payment Methods**, confirm every method you want to offer is toggled on for live mode. Methods left in test mode will not appear to real customers.
+</Step>
+
+<Step>
+**Remove sandbox notices**
+
+If you displayed any test-mode banners or notices on your storefront during development, remove or disable them before accepting customer traffic.
+</Step>
+
+</Steps>
+
+## Troubleshooting
+
+<Accordions>
+
+<Accordion title="Payment methods not appearing at checkout">
+
+1. Confirm the methods are enabled in the VINR dashboard under **Settings → Payment Methods** — methods disabled at the account level are never surfaced to the plugin.
+2. Confirm the plugin is using **live API keys** if you are in production; test API keys only return test-mode methods.
+3. Check that each method is toggled on in **WooCommerce → Settings → Payments → VINR Payments → Payment Methods**.
+
+</Accordion>
+
+<Accordion title="Webhook not receiving events">
+
+1. Open the VINR dashboard under **Developers → Webhooks** and confirm the endpoint URL matches `https://yourstore.com/wc-api/vinr_payments` exactly, including the scheme.
+2. Verify the URL is publicly reachable — use a service like `curl -I https://yourstore.com/wc-api/vinr_payments` or a webhook testing tool. Local and staging environments behind a firewall will not receive events.
+3. Check that no security plugin (firewall, bot-protection, rate limiter) is blocking POST requests to the `/wc-api/` path.
+
+</Accordion>
+
+<Accordion title="Orders stuck in Processing">
+
+1. Review the **Capture mode** setting. If you are in **Manual** capture mode, orders remain in Processing until you explicitly capture them — either through a fulfillment action or the VINR dashboard.
+2. Open the VINR dashboard and check the corresponding payment's status. If it shows `authorized` the capture has not been triggered; if it shows `failed` after authorization, check for a network or timeout issue.
+3. Inspect **WooCommerce → Status → Logs → vinr-payments** for any error messages recorded at the time of the order.
+
+</Accordion>
+
+<Accordion title="Plugin not activating">
+
+1. Confirm your server meets the minimum requirements: **PHP 8.0+** and **WooCommerce 7.0+**. Both are checked on activation; a version mismatch produces an admin notice and deactivates the plugin.
+2. Check the PHP error log (or **WooCommerce → Status → Logs**) for a fatal error message — common causes are a conflicting plugin that declares the same class name or a `mbstring`/`curl` PHP extension that is disabled.
+3. If you uploaded the `.zip` via SFTP rather than the WordPress uploader, confirm the extracted folder is named `vinr-payments` (not `vinr-payments-1.x.x`) inside `wp-content/plugins/`.
+
+</Accordion>
+
+</Accordions>
+
+<Accordions>
+
+<Accordion title="Advanced — WooCommerce Blocks, multi-site, HPOS, and debug logging">
+
+**WooCommerce Blocks (Block Checkout)**
+
+The VINR plugin is fully compatible with the WooCommerce Block Checkout introduced in WooCommerce 8.3. Payment integration is implemented via the WooCommerce Blocks Payment Gateway API — no classic shortcode fallback is required. If you use a block theme and the block checkout editor, VINR payment methods appear automatically in the payment block without additional configuration.
+
+**Multi-site / network installs**
+
+The plugin can be network-activated on a WordPress Multisite install. Each sub-site uses its own set of API credentials, set independently under **WooCommerce → Settings → Payments → VINR Payments → Manage** on that site. Shared network credentials are not supported — provision a separate API key per site in the VINR dashboard.
+
+**HPOS (High Performance Order Storage)**
+
+The plugin declares compatibility with WooCommerce's High Performance Order Storage (HPOS) backend. If you have HPOS enabled under **WooCommerce → Settings → Advanced → Features**, VINR payment metadata is read and written using the `WC_Order` CRUD API rather than direct `wp_postmeta` queries. No additional configuration is required.
+
+**Debug logging**
+
+To capture verbose plugin output for a support ticket or local investigation, enable logging in **WooCommerce → Settings → Payments → VINR Payments → Manage → Debug log → On**. Logs are written to:
+
+```
+WooCommerce → Status → Logs → vinr-payments
+```
+
+Each log entry is prefixed with a severity level (`INFO`, `WARNING`, `ERROR`) and a request ID that matches the corresponding entry in the VINR dashboard. Disable debug logging after you finish investigating — it records request and response bodies which may contain customer-identifiable metadata.
+
+</Accordion>
+
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card
+    href="/docs/payments/plugins/adobe-commerce"
+    title="Adobe Commerce plugin"
+    description="Install and configure the VINR payment plugin for Adobe Commerce (Magento 2)."
+  />
+  <Card
+    href="/docs/payments/tokenization"
+    title="Tokenization"
+    description="Understand how VINR tokens work, how to list saved methods, and how to build one-click checkout."
+  />
+  <Card
+    href="/docs/payments/in-person/go-live"
+    title="In-person go-live"
+    description="Step-by-step checklist to start taking live card-present payments with VINR terminals."
+  />
+</Cards>

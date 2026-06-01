@@ -1,0 +1,176 @@
+---
+title: Auto-rescue
+description: Automatically recover failed payments before the customer sees a decline.
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+When a payment hits a soft decline or a routing failure, VINR does not immediately surface that failure to the customer. Instead, it enters an auto-rescue cycle — retrying or rerouting the charge silently within the same checkout session. Only if every recovery attempt is exhausted does the customer see a result. The feature is on by default and requires no integration work beyond what you already do to create a payment.
+
+## What auto-rescue handles
+
+Auto-rescue acts on failures that have a meaningful chance of succeeding on a second attempt. It never retries hard declines, where the issuer has given a definitive refusal.
+
+| Failure type | Example codes | Retried? |
+|---|---|---|
+| Soft decline — insufficient funds | `insufficient_funds` | Yes |
+| Soft decline — issuer unavailable | `issuer_unavailable` | Yes |
+| Soft decline — temporary refusal | `do_not_honor_retry` | Yes |
+| Network timeout | — | Yes |
+| Acquirer routing failure | — | Yes, via alternate acquirer |
+| Hard decline — stolen card | `stolen_card` | No |
+| Hard decline — fraud signal | `fraud` | No |
+| Hard decline — card blocked | `do_not_honor` | No |
+| Hard decline — invalid card | `invalid_account` | No |
+
+<Callout type="warn">
+Hard declines are never retried. Attempting to authorize a card the issuer has flagged as stolen or fraudulent wastes your authorization budget and can trigger network penalties. Auto-rescue only acts on codes that carry an implicit "try again" signal.
+</Callout>
+
+## How it works
+
+Within a single checkout session, VINR may make up to three authorization attempts (configurable). Attempts use **exponential back-off** with a small jitter to avoid hammering an issuer that is experiencing load:
+
+```
+Attempt 1 → failure → wait ~1 s → Attempt 2 → failure → wait ~4 s → Attempt 3 → final result
+```
+
+If `rerouteOnFailure` is enabled (the default), attempts after the first may be routed to an alternate acquirer. VINR selects the alternate based on historical approval rate data for the card BIN, currency, and amount range. From the customer's perspective, the checkout page enters a brief "processing" state for the duration of the rescue cycle. Your webhook receives the final outcome — succeeded or failed — once the cycle is complete.
+
+<Callout type="info">
+Auto-rescue operates entirely server-side. You do not need to poll or handle intermediate events. The `payment.completed` or `payment.failed` webhook fires exactly once, after the final attempt.
+</Callout>
+
+## Enable and configure
+
+Auto-rescue is enabled by default on every payment. To adjust its behaviour, pass an `autoRescue` object to `payments.create`.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 4900,
+  currency: 'EUR',
+  customer: 'cust_9aQ2',
+  returnUrl: 'https://yoursite.com/payment/complete',
+  autoRescue: {
+    enabled: true,
+    maxAttempts: 3,
+    rerouteOnFailure: true,
+  },
+});
+
+// payment.id     → "pay_3Nf8x2a..."
+// payment.status → "pending"
+```
+
+To disable auto-rescue entirely for a specific payment — for example when you want to handle retry logic yourself — set `enabled: false`.
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 4900,
+  currency: 'EUR',
+  customer: 'cust_9aQ2',
+  returnUrl: 'https://yoursite.com/payment/complete',
+  autoRescue: { enabled: false },
+});
+```
+
+## Monitoring rescue attempts
+
+When auto-rescue makes one or more intermediate attempts before reaching a final result, VINR emits a `payment.rescue_attempted` event for each retry. Subscribe to it to track recovery rates and identify patterns in your decline codes.
+
+```typescript
+const event = vinr.webhooks.verify(payload, signature);
+
+if (event.type === 'payment.rescue_attempted') {
+  const { attemptNumber, previousDeclineCode, newStatus } = event.data.object;
+
+  console.log(`Attempt ${attemptNumber} after decline: ${previousDeclineCode}`);
+  console.log(`Status after this attempt: ${newStatus}`);
+}
+```
+
+The event payload fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `attemptNumber` | `integer` | Which attempt this represents (`2` for the first retry, `3` for the second, and so on). |
+| `previousDeclineCode` | `string` | The decline code returned by the preceding attempt. |
+| `newStatus` | `string` | The payment status immediately after this attempt: `completed`, `pending`, or `failed`. |
+| `payment` | `object` | The full payment object at the time of the event. |
+
+<Callout type="info">
+`payment.rescue_attempted` is informational. You do not need to take any action in response to it. Wait for `payment.completed` or `payment.failed` before fulfilling or abandoning the order.
+</Callout>
+
+## When auto-rescue does not help
+
+Auto-rescue only applies to **on-session** payments where the customer is present in the checkout flow. It does not cover:
+
+- **Hard declines.** Codes such as `stolen_card`, `fraud`, `do_not_honor`, and `invalid_account` are definitive. VINR surfaces these immediately without retrying.
+- **Off-session subscription charges.** When VINR bills a stored payment method without the customer present, there is no checkout session to extend. Failed off-session charges are handled through dunning — a separate retry-and-notify process tied to your subscription lifecycle. See [Recurring payments](/docs/payments/recurring-payments) for how to handle those failures and how [Billing subscriptions](/docs/billing/subscriptions) can own the dunning schedule for you.
+- **Authentication failures.** If a payment fails because 3DS authentication was not completed, retrying the authorization without re-challenging the customer will not help. Redirect the customer to complete authentication instead.
+
+<TypeTable
+  type={{
+    enabled: { type: "boolean", description: "Whether auto-rescue is active for this payment.", default: "true" },
+    maxAttempts: { type: "integer", description: "Total number of authorization attempts, including the first. Minimum 1, maximum 5.", default: "3" },
+    rerouteOnFailure: { type: "boolean", description: "Route retry attempts through an alternate acquirer when the primary acquirer fails.", default: "true" },
+  }}
+/>
+
+<Callout type="warn">
+Increasing `maxAttempts` beyond `3` extends the time the customer spends on the "processing" screen. Evaluate the tradeoff between recovery rate and perceived latency for your checkout flow before raising the ceiling.
+</Callout>
+
+## Advanced
+
+<Accordions>
+
+<Accordion title="Custom retry rules per payment method type">
+
+Enterprise accounts can configure retry behaviour separately for each payment method type rather than relying on the global `autoRescue` defaults. This is useful when, for example, you want aggressive retries on card payments but a single attempt for bank debits (where a retry incurs a fee from the scheme).
+
+Contact your account manager to configure payment-method-level retry profiles. The profiles are applied on your account and override the per-payment `autoRescue` object for the matched method type.
+
+</Accordion>
+
+<Accordion title="Acquirer routing priority lists">
+
+When `rerouteOnFailure` is enabled, VINR selects an alternate acquirer from its routing network automatically. Enterprise accounts can supply a **routing priority list** — an ordered set of acquirer handles (e.g. `["acquirer_eu_1", "acquirer_eu_2", "acquirer_global"]`) that constrains which acquirers are eligible and in what order they are tried.
+
+Priority lists are set at the account level in the dashboard under **Settings → Routing**, or via the Management API. The per-payment `autoRescue` config cannot override the list, but it can disable rerouting entirely by setting `rerouteOnFailure: false`.
+
+</Accordion>
+
+<Accordion title="Integrating with your own dunning logic">
+
+If you run a custom dunning system for subscriptions, you may want to distinguish a first-attempt failure from a failure that already survived auto-rescue. Check the `autoRescue.totalAttempts` field on the payment object — a value greater than `1` means VINR already exhausted its on-session retries before returning the failure to you. Use that signal to skip your own immediate retry and move directly to the next dunning step (e.g. waiting 24 hours before the next off-session charge).
+
+```typescript
+const failed = await vinr.payments.retrieve('pay_3Nf8x2a');
+
+if (failed.autoRescue.totalAttempts > 1) {
+  // Auto-rescue already tried. Escalate to dunning step 2.
+  await scheduleDunningStep(2, failed.customer);
+} else {
+  // First attempt only. Standard dunning step 1.
+  await scheduleDunningStep(1, failed.customer);
+}
+```
+
+</Accordion>
+
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Recurring payments" href="/docs/payments/recurring-payments" description="Manage off-session charges, mandates, and dunning for subscriptions." />
+  <Card title="Fraud prevention" href="/docs/payments/fraud-prevention" description="Risk scoring and rules that run before auto-rescue." />
+  <Card title="Declines and failures" href="/docs/troubleshooting/declines-and-failures" description="Decode decline codes and decide how to respond." />
+</Cards>

@@ -1,0 +1,112 @@
+---
+title: Markets
+description: Compliance and payment-method guides for specific geographic markets where VINR operates.
+---
+
+Each market has its own regulatory environment, preferred payment methods, and technical requirements. This section covers what you need to know to operate compliantly in specific regions.
+
+<Callout type="info">
+  This section is growing. Additional market guides for Southeast Asia, Latin America, and other regions are planned.
+</Callout>
+
+## India
+
+India's payments ecosystem is regulated by the Reserve Bank of India (RBI) and governed by several frameworks that affect how you store cards, process recurring charges, and accept local payment methods.
+
+### UPI (Unified Payments Interface)
+
+UPI is the dominant real-time payment method in India, operated by the National Payments Corporation of India (NPCI). VINR supports UPI acceptance for online transactions.
+
+- Customers authenticate via their UPI-linked bank app
+- Settlements occur in near-real time
+- Refunds must be initiated within 30 days of the original transaction
+
+To enable UPI, contact your VINR account manager.
+
+### Card-on-file and recurring charges
+
+The RBI's card-on-file tokenization framework requires that card credentials are not stored in merchant systems — they must be stored as tokens with the card network or an RBI-authorized token service provider.
+
+VINR's [tokenization](/docs/payments/tokenization) is compliant with this framework. When processing subsequent recurring charges, VINR automatically sends the required additional factor of authentication (AFA) where the RBI mandates it.
+
+### e-NACH for recurring debits
+
+For high-value or long-tenor recurring mandates (utility bills, loan EMIs), e-NACH (electronic National Automated Clearing House) provides a bank-account debit mechanism that bypasses card rails. Contact VINR support to discuss e-NACH enablement.
+
+---
+
+## Japan
+
+Japan's card market is governed by several industry self-regulatory frameworks that affect how merchants store card data and process recurring charges.
+
+### Credit Card Security Guidelines (CCSG)
+
+The Japan Consumer Credit Association (JCA) and the Japan Credit Card Association (JCCA) mandate that merchants who store card data do so only via tokenization — direct card number storage is prohibited for most merchants.
+
+VINR's tokenization is compliant with these guidelines. Ensure that your integration does not log or persist raw PANs at any layer of your stack.
+
+### SCTA and PSA compliance
+
+The **Settlement and Clearing Terms Act (SCTA)** and **Payment Services Act (PSA)** govern fund settlement and the licensing of payment service providers in Japan. VINR operates as a licensed PSP under these frameworks.
+
+Key obligations for merchants:
+- Provide clear pre-authorization disclosures to cardholders
+- Issue receipts that meet local formatting requirements
+- Handle refunds within the timeframes stipulated by your acquiring agreement
+
+### Local payment methods
+
+Japan has a rich ecosystem of local payment methods beyond cards:
+- **Convenience store payments** (konbini) — cash payments at 7-Eleven, Lawson, FamilyMart, etc.
+- **Pay-easy** — online bank transfer via the Pay-easy network
+- **IC card payments** — Suica, Pasmo, and other transit-integrated e-money
+
+Contact your VINR account manager to discuss which local payment methods are available for your use case.
+
+---
+
+## European Union (PSD2 / SCA)
+
+The EU's Payment Services Directive 2 (PSD2) mandates **Strong Customer Authentication (SCA)** for most online card payments within the European Economic Area (EEA).
+
+### How SCA works
+
+SCA requires authentication using at least two of three factors:
+- Something the customer **knows** (PIN, password)
+- Something the customer **has** (phone, hardware token)
+- Something the customer **is** (biometric)
+
+In practice, this means card payments are typically challenged with 3D Secure (3DS2).
+
+### SCA exemptions
+
+Not every transaction requires a full SCA challenge. VINR automatically applies exemptions where eligible:
+
+| Exemption | Condition |
+|---|---|
+| Low-value | Transaction under €30 and cumulative limit not exceeded |
+| Merchant-initiated (MIT) | Subsequent charges after an SCA-authenticated initial charge |
+| Low-risk | Transaction risk analysis (TRA) by VINR's acquiring bank |
+| Fixed-amount subscription | Recurring charge of the same amount |
+
+VINR handles exemption flagging on your behalf. For details, see [3D Secure](/docs/payments/3d-secure) and [Recurring payments](/docs/payments/recurring-payments).
+
+---
+
+## United States
+
+The US card market operates under network rules from Visa, Mastercard, American Express, and Discover. There is no single federal SCA mandate, but several state and federal laws affect data handling and payment processing.
+
+### Card acceptance
+
+VINR supports all four major US card networks. Surcharging (passing card fees to the consumer) is permitted at the federal level but prohibited in some states — see [Surcharging](/docs/payments/surcharging) for a state-by-state breakdown.
+
+### ACH payments
+
+The Automated Clearing House (ACH) network enables bank-account debits and credits. ACH is widely used for B2B payments, payroll, and recurring consumer billing.
+
+VINR supports ACH debit for recurring charges and one-time bank transfers. ACH debit requires a signed authorization from the account holder — VINR's hosted mandate flow handles this.
+
+### Data privacy
+
+Several US states (California CCPA, Virginia CDPA, Colorado CPA, and others) impose data-subject rights and breach-notification obligations. Card numbers and sensitive authentication data processed through VINR are subject to PCI DSS — VINR's infrastructure is PCI-certified; see [Compliance](/docs/compliance) for your shared-responsibility scope.

@@ -1,0 +1,389 @@
+---
+title: "Receipts & shopper engagement"
+description: "Print, email, or SMS receipts and use the terminal screen to capture shopper data."
+persona: ["developer", "business-owner"]
+priority: "P2"
+lastUpdated: "2026-05-31"
+---
+
+VINR terminals do more than process payments — they deliver receipts across print, email, and SMS channels and turn the idle screen into a branded surface for capturing shopper data. This page covers how to configure receipt delivery, customise receipt content, and use terminal prompts to collect email addresses and loyalty numbers at the point of sale.
+
+## Receipt types
+
+After a successful transaction the terminal presents a receipt-delivery prompt. The shopper selects their preferred channel, or the merchant can pre-configure a default and skip the prompt entirely.
+
+<TypeTable
+  type={{
+    Paper: {
+      type: "channel",
+      description: "Printed immediately on the Nexgo N92 (built-in thermal printer) or Nexgo CT20 / CT20P (counter printer). Not available on the Nexgo N86Pro or Ciontek CM30 — shopper is offered digital channels instead.",
+    },
+    Email: {
+      type: "channel",
+      description: "Sent to the address entered by the shopper on the terminal screen, or to a stored address from a linked loyalty account. Delivered within seconds of authorisation.",
+    },
+    SMS: {
+      type: "channel",
+      description: "Sent to the mobile number entered by the shopper. Requires the SMS add-on to be enabled for your account in the dashboard under Settings → Receipts.",
+    },
+    None: {
+      type: "channel",
+      description: "Shopper declines a receipt. The payment completes normally. The transaction record remains available in the dashboard and via the API.",
+    },
+  }}
+/>
+
+The terminal prompt flow works as follows:
+
+<Steps>
+  <Step>
+    Transaction is authorised. The terminal displays a **Receipt?** screen.
+  </Step>
+  <Step>
+    The shopper selects **Print**, **Email**, **SMS**, or **No receipt**. Channels not available for the device (e.g. Print on a Ciontek CM30) are hidden automatically.
+  </Step>
+  <Step>
+    If **Email** or **SMS** is chosen and no address or number is on file, the terminal keyboard opens for the shopper to enter their details.
+  </Step>
+  <Step>
+    The receipt is delivered and the terminal returns to its idle screen.
+  </Step>
+</Steps>
+
+## Configure receipt settings
+
+Default receipt behaviour is set per-terminal in **Dashboard → Terminals → [select terminal] → Receipt settings**. You can also set it programmatically when creating or updating a terminal payment.
+
+<Tabs items={["Node.js", "Python", "cURL"]}>
+  <Tab value="Node.js">
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 2500,
+  currency: 'USD',
+  reference: 'order_8821',
+  receipt: {
+    channels: ['email', 'paper'],
+    requireEmail: false,
+  },
+});
+```
+  </Tab>
+  <Tab value="Python">
+```python
+import vinr
+import os
+
+client = vinr.Vinr(secret_key=os.environ["VINR_SECRET_KEY"])
+
+terminal_payment = client.terminal.payments.create(
+    terminal_id="term_01HZ5QXYZ",
+    amount=2500,
+    currency="USD",
+    reference="order_8821",
+    receipt={
+        "channels": ["email", "paper"],
+        "require_email": False,
+    },
+)
+```
+  </Tab>
+  <Tab value="cURL">
+```bash
+curl https://api.vinr.com/v1/terminal/payments \
+  -u "$VINR_SECRET_KEY:" \
+  -d terminal_id=term_01HZ5QXYZ \
+  -d amount=2500 \
+  -d currency=USD \
+  -d reference=order_8821 \
+  -d "receipt[channels][]=email" \
+  -d "receipt[channels][]=paper" \
+  -d "receipt[require_email]=false"
+```
+  </Tab>
+</Tabs>
+
+`channels` controls which delivery options are shown to the shopper. Set `requireEmail: true` to make the email collection step mandatory before the transaction can complete — useful when you need every transaction tied to an email address.
+
+## Receipt content
+
+Every VINR receipt includes a fixed set of auto-populated fields sourced from the payment and terminal records.
+
+**Auto-populated fields**
+
+- Merchant trading name and registered address
+- Terminal ID and terminal location label
+- Transaction amount, currency, and tip (if collected)
+- Card scheme, masked PAN (last four digits), and entry method
+- Authorisation code and date/time (UTC)
+- VINR payment reference
+
+**Custom fields via `receiptData`**
+
+Pass a `receiptData` map on the payment to append merchant-defined lines. The fields appear as a labelled section at the bottom of the receipt, above the footer.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 4800,
+  currency: 'USD',
+  reference: 'order_9041',
+  receipt: {
+    channels: ['email', 'paper'],
+  },
+  receiptData: {
+    'Order number': 'ORD-9041',
+    'Served by': 'Alex',
+    'Table': '12',
+  },
+});
+```
+
+<TypeTable
+  type={{
+    "receiptData": {
+      type: "Record<string, string>",
+      description: "Key–value pairs appended to the receipt as labelled lines. Maximum 10 entries. Keys and values are plain strings; no HTML or Markdown. Keys are truncated at 40 characters, values at 80 characters.",
+    },
+    "receipt.channels": {
+      type: "('paper' | 'email' | 'sms')[]",
+      description: "Which delivery channels to offer the shopper. Omit to use the terminal's account-level default. Paper is silently removed for devices without a printer.",
+    },
+    "receipt.requireEmail": {
+      type: "boolean",
+      description: "When true, the terminal blocks transaction completion until the shopper enters an email address. Defaults to false.",
+    },
+  }}
+/>
+
+## Terminal display
+
+The terminal idle screen — shown between transactions — can display your logo and brand colours. A well-branded idle screen reduces shopper hesitation and reinforces trust at the counter.
+
+Configure the idle screen in **Dashboard → Terminals → Branding**. Changes propagate to all terminals in your account within five minutes.
+
+<Steps>
+  <Step>
+    Open **Dashboard → Terminals → Branding**.
+  </Step>
+  <Step>
+    Upload a logo in PNG format, minimum 300 × 300 px, maximum 1 MB. Transparent backgrounds are supported. The logo is automatically scaled for each device's screen size.
+  </Step>
+  <Step>
+    Set a **primary colour** using the hex picker. This colour is used for the background of the idle screen and for button highlights on the Nexgo N92 and Nexgo N86Pro.
+  </Step>
+  <Step>
+    Click **Save and deploy**. A preview renders immediately in the browser. Live terminals update in the background — no reboot required.
+  </Step>
+</Steps>
+
+<Callout type="info">
+The Ciontek CM30 displays the idle screen on the merchant's paired phone or tablet, not on the device itself. Upload a widescreen (16:9) variant of your logo for best results on phone screens.
+</Callout>
+
+## Input prompts
+
+Use `terminalPayment.prompts` to collect structured data from shoppers during the payment flow — before or after the card interaction. Common uses are capturing an email address for a digital receipt or collecting a loyalty card number.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 3200,
+  currency: 'USD',
+  reference: 'order_9102',
+  prompts: [
+    {
+      id: 'email',
+      label: 'Email for receipt',
+      type: 'email',
+      required: false,
+      timing: 'before',
+    },
+    {
+      id: 'loyalty_number',
+      label: 'Loyalty card number',
+      type: 'text',
+      required: false,
+      timing: 'before',
+    },
+  ],
+});
+```
+
+Prompt responses are available on the completed payment object under `payment.terminalData.prompts`, keyed by the `id` you supplied.
+
+```typescript
+const payment = await vinr.terminal.payments.retrieve(terminalPayment.id);
+
+const email = payment.terminalData?.prompts?.email;
+const loyaltyNumber = payment.terminalData?.prompts?.loyalty_number;
+```
+
+<TypeTable
+  type={{
+    "prompts[].id": {
+      type: "string",
+      description: "Unique identifier for the prompt within this payment. Used as the key in terminalData.prompts on the completed payment.",
+    },
+    "prompts[].label": {
+      type: "string",
+      description: "Text shown to the shopper on the terminal screen. Maximum 60 characters.",
+    },
+    "prompts[].type": {
+      type: "'text' | 'email' | 'numeric' | 'phone'",
+      description: "Controls the keyboard layout shown. 'email' shows an email keyboard. 'numeric' shows a number pad. 'phone' shows a phone number pad.",
+    },
+    "prompts[].required": {
+      type: "boolean",
+      description: "When true the shopper cannot skip this prompt. Use sparingly — mandatory prompts add friction and require explicit consent disclosure.",
+    },
+    "prompts[].timing": {
+      type: "'before' | 'after'",
+      description: "Whether the prompt appears before or after the card tap/insert. 'before' is common for loyalty numbers; 'after' is common for email receipts.",
+    },
+  }}
+/>
+
+<Callout type="warn">
+Data collected via prompts is personal data under GDPR, CCPA, and equivalent regulations. You must have a lawful basis for collection, display a clear purpose statement at the point of capture, and handle the data in accordance with your privacy policy. VINR stores prompt responses for 90 days to support dispute resolution; you are the data controller for any downstream use.
+</Callout>
+
+## Loyalty integration
+
+Collect a loyalty card number at the terminal using a `numeric` prompt, then look up or create the shopper's loyalty account server-side before the transaction completes — or post-payment via webhook.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 5500,
+  currency: 'USD',
+  reference: 'order_9215',
+  prompts: [
+    {
+      id: 'loyalty_number',
+      label: 'Loyalty card number (optional)',
+      type: 'numeric',
+      required: false,
+      timing: 'before',
+    },
+  ],
+  receipt: {
+    channels: ['paper', 'email'],
+  },
+});
+```
+
+After the payment completes, retrieve the loyalty number from the webhook payload and call the loyalty API to award points. See [Loyalty accounts](/docs/engagement/loyalty-accounts) for the full points-award workflow.
+
+To display the earned points balance on the printed or digital receipt, include a `receiptData` entry populated with the result from the loyalty award call:
+
+```typescript
+const loyaltyResult = await vinr.loyalty.accounts.awardPoints({
+  accountId: loyaltyAccountId,
+  points: 55,
+  reference: terminalPayment.id,
+});
+
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 5500,
+  currency: 'USD',
+  reference: 'order_9215',
+  receiptData: {
+    'Points earned': String(loyaltyResult.pointsAwarded),
+    'Points balance': String(loyaltyResult.newBalance),
+  },
+});
+```
+
+<Accordions>
+  <Accordion title="Advanced — Custom receipt templates, QR-code digital receipts, and multi-language support">
+
+**Custom receipt templates**
+
+For full control over receipt layout — fonts, logo placement, section order — use the Receipt Templates API. Templates are defined as JSON layout documents and assigned to a terminal or terminal group. Contact VINR support to enable the Receipt Templates beta for your account.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const template = await vinr.terminal.receiptTemplates.create({
+  name: 'Custom checkout receipt',
+  layout: {
+    header: { logo: true, merchantName: true },
+    body: { sections: ['transaction', 'custom_fields', 'loyalty'] },
+    footer: { returnPolicy: 'All sales final. Contact support@example.com.' },
+  },
+});
+
+await vinr.terminal.update('term_01HZ5QXYZ', {
+  receiptTemplateId: template.id,
+});
+```
+
+**QR-code digital receipts**
+
+When the `qrReceipt` feature flag is enabled for your account, printed receipts include a QR code the shopper can scan to open a hosted digital version of the receipt. The digital receipt URL is also returned on the payment object at `payment.receiptUrl`. Enable this in **Dashboard → Settings → Receipts → QR receipt**.
+
+**Multi-language support**
+
+Receipt content is rendered in the terminal's configured locale by default. To override the receipt language per-transaction — for example in a tourist-facing environment — pass `receipt.locale` on the payment:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 2000,
+  currency: 'EUR',
+  reference: 'order_9300',
+  receipt: {
+    channels: ['email'],
+    locale: 'fr',
+  },
+});
+```
+
+Supported locales: `en`, `fr`, `de`, `es`, `it`, `nl`, `pt`, `pl`. The auto-populated fields (merchant name, amounts, auth codes) are translated; `receiptData` keys and values are printed as supplied.
+
+  </Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card
+    href="/docs/payments/in-person/accept-a-payment"
+    title="Accept a payment"
+    description="Create a terminal payment session, present it to the terminal, and verify the result via webhook."
+  />
+  <Card
+    href="/docs/engagement/loyalty-accounts"
+    title="Loyalty accounts"
+    description="Create loyalty accounts, award points on purchases, and build redemption flows at the terminal."
+  />
+  <Card
+    href="/docs/payments/in-person/terminal-management"
+    title="Terminal management"
+    description="Register terminals, manage locations, push software updates, and monitor device health."
+  />
+</Cards>

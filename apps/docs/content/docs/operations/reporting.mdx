@@ -130,6 +130,156 @@ for await (const row of vinr.reports.rows(runs.data[0].id)) {
 Reports are generated from settled, immutable data, so a run for a closed period always returns identical results. This makes them safe to re-pull for audits without risk of drift.
 </Callout>
 
+## Financial reports
+
+Financial reports are the authoritative source for reconciling VINR activity against your general ledger. Each covers one settlement period and is immutable once generated.
+
+### Settlement reconciliation
+
+The settlement reconciliation report ties every captured payment to the net amount that landed in your bank account after fees, refunds, and adjustments. It is the primary tool for closing your books each period.
+
+Two granularities are available:
+
+| Granularity | Use |
+|---|---|
+| **Transaction-level** | One row per payment — precise, large files for high-volume merchants. |
+| **Batch-level** | One row per settlement batch — compact, suitable for lower-volume or daily summary workflows. |
+
+```typescript
+const run = await vinr.reports.create({
+  type: 'balance_transactions',
+  interval: { start: '2026-05-01', end: '2026-05-31' },
+  granularity: 'transaction',   // or 'batch'
+  format: 'csv',
+});
+```
+
+Each row includes: payment id, capture date, gross amount, processing fee, interchange fee, scheme fee, net amount, settlement batch id, and payout id — enough to reconcile from gross revenue to the bank deposit line.
+
+### Invoice reconciliation
+
+The invoice reconciliation report (type `invoices`) matches every finalized invoice to the payments that settled it — including partial payments, overpayments, and credit note applications. Finance teams use it to close accounts receivable.
+
+```typescript
+const run = await vinr.reports.create({
+  type: 'invoices',
+  interval: { start: '2026-05-01', end: '2026-05-31' },
+  columns: ['id', 'number', 'customer', 'amountDue', 'amountPaid', 'tax', 'status'],
+  format: 'csv',
+});
+```
+
+The `payment_accounting` variant of this report is formatted for direct import into common accounting systems (QuickBooks, Xero, NetSuite) — contact support to enable it for your account.
+
+## Operational reports
+
+Operational reports cover specific transaction types and authentication events, useful for debugging, compliance, and product analytics.
+
+### 3D Secure authentication report
+
+The 3DS authentication report gives a per-transaction view of authentication outcomes — authentication result, ECI code, exemption type applied, and challenge outcome. Use it to measure your SCA challenge rate and tune the [Authenticate](/docs/operations/optimization#authenticate) module.
+
+```typescript
+const run = await vinr.reports.create({
+  type: '3ds_authentication',
+  interval: { start: '2026-05-01', end: '2026-05-31' },
+  columns: ['paymentId', 'authResult', 'eci', 'exemption', 'challengeOutcome'],
+  format: 'csv',
+});
+```
+
+| Column | Values |
+|---|---|
+| `authResult` | `authenticated`, `not_authenticated`, `exempted`, `not_required` |
+| `exemption` | `low_value`, `low_risk`, `trusted_beneficiary`, `none` |
+| `challengeOutcome` | `passed`, `failed`, `abandoned`, `n/a` |
+
+The conversion report (type `3ds_conversion`) aggregates by BIN and shows authentication-to-capture conversion rates — the key metric for identifying issuers that over-challenge.
+
+### Balance transfers report
+
+Covers all internal transfers in a period: source account, destination account, amount, currency, status, and reason. Use it to audit platform fund flows or reconcile sub-merchant balances.
+
+```typescript
+const run = await vinr.reports.create({
+  type: 'balance_transfers',
+  interval: { start: '2026-05-01', end: '2026-05-31' },
+  format: 'csv',
+});
+```
+
+### Dynamic Currency Conversion report
+
+If DCC is enabled, the DCC report shows each transaction where a conversion was offered, whether the cardholder accepted, the original and presented currencies, and the exchange rate applied. Required for scheme compliance reporting.
+
+```typescript
+const run = await vinr.reports.create({
+  type: 'dcc_transactions',
+  interval: { start: '2026-05-01', end: '2026-05-31' },
+  format: 'csv',
+});
+```
+
+### Received payment details
+
+The received payments report covers all authorizations received in the window, including declined and voided transactions — not just captured payments. Useful for authorization rate analysis and debugging soft-decline patterns.
+
+```typescript
+const run = await vinr.reports.create({
+  type: 'received_payments',
+  interval: { start: '2026-05-01', end: '2026-05-31' },
+  columns: ['id', 'created', 'authCode', 'status', 'failureCode', 'amount', 'currency'],
+  format: 'csv',
+});
+```
+
+## Closing your fiscal period
+
+At month-end, the recommended close sequence is:
+
+<Steps>
+
+### Pull the account receivable position
+
+The AR position dashboard (**Dashboard → Finance → Month-end close**) shows open invoices, pending settlements, and any balance adjustments that haven't cleared. Review before generating final reports.
+
+### Generate the balance transactions report
+
+Run the `balance_transactions` report for the full month at transaction granularity. This is the ledger-of-record for the period.
+
+### Cross-check payout reconciliation
+
+List all payouts that arrived in the period and verify each one's `net` total matches the sum of its associated balance transactions. Any gap indicates a pending transaction that crossed the period boundary — check `pending` balance transactions dated before the close.
+
+### Export and archive
+
+Download the final CSV and the per-payout transaction lists. VINR retains reports for 7 years; you should also archive locally per your retention policy.
+
+```typescript
+// List payouts that settled in May
+const payouts = await vinr.payouts.list({
+  arrivalDate: { gte: '2026-05-01', lte: '2026-05-31' },
+  status: 'paid',
+});
+
+// For each payout, fetch its balance transaction breakdown
+for (const payout of payouts.data) {
+  const txns = await vinr.balanceTransactions.list({ payout: payout.id });
+  const net = txns.data.reduce((s, t) => s + t.net, 0);
+  console.assert(net === payout.amount, `Mismatch on ${payout.id}`);
+}
+```
+
+### Monthly finance summary
+
+The monthly finance report (**Dashboard → Finance → Monthly summary**) is a pre-built PDF covering: gross volume, refunds, disputes, fees, net revenue, and a settlement-to-payout waterfall. It is generated automatically on the 3rd of each month and emailed to users with the Finance or Owner role.
+
+</Steps>
+
+<Callout type="info">
+Daily finance reports are also available — useful for businesses that close their books daily. Enable them under **Dashboard → Settings → Reporting → Daily summary**.
+</Callout>
+
 ## Next steps
 
 <Cards>

@@ -1,0 +1,194 @@
+---
+title: "In-person refunds"
+description: "Issue referenced and unreferenced refunds for card-present transactions."
+persona: ["developer", "operations"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+In-person refunds use the same `vinr.refunds.create` API as online refunds — the object shape, status lifecycle, and webhook events are identical. The key difference is whether the original card must be presented to the terminal again. A **referenced refund** re-presents the card to the same terminal; an **unreferenced refund** carries no card requirement and can be initiated from the dashboard or API alone. See [Refunds](/docs/payments/refunds) for the shared concepts (status, timing, fees, failed refunds) that apply to all rails.
+
+## Referenced refunds
+
+A referenced refund is the preferred path for in-person returns. The customer brings the physical card back to the terminal, the device reads it, and the funds are credited back through the scheme on the original transaction reference. This keeps interchange fees at their lowest tier and provides the clearest audit trail.
+
+<Steps>
+  <Step>
+    Customer presents the card or device used in the original purchase to the same terminal or any terminal on your account.
+  </Step>
+  <Step>
+    Staff selects the original transaction in the VINR terminal app or initiates the refund from the API with `presentToTerminal: true`.
+  </Step>
+  <Step>
+    The terminal prompts the customer to tap, insert, or swipe. A PIN is not required for refunds on most schemes.
+  </Step>
+  <Step>
+    VINR creates the refund object, returns a `re_` ID, and prints or sends a receipt automatically.
+  </Step>
+</Steps>
+
+<Tabs items={["SDK", "REST"]}>
+<Tab value="SDK">
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const refund = await vinr.refunds.create({
+  payment: 'pay_3Nf8x2a',
+  presentToTerminal: true,
+  reason: 'requested_by_customer',
+  metadata: { staffId: 'staff_99', registerId: 'pos_2' },
+});
+
+// refund.id               → "re_7Qp2m1c..."
+// refund.status           → "pending"
+// refund.presentToTerminal → true
+```
+
+</Tab>
+<Tab value="REST">
+
+```bash
+curl https://api.vinr.com/v1/refunds \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "payment": "pay_3Nf8x2a",
+    "presentToTerminal": true,
+    "reason": "requested_by_customer",
+    "metadata": { "staffId": "staff_99", "registerId": "pos_2" }
+  }'
+```
+
+</Tab>
+</Tabs>
+
+<TypeTable
+  type={{
+    payment: { type: "string", description: "ID of the original payment (pay_…). Required." },
+    presentToTerminal: { type: "boolean", description: "When true, the terminal is activated to read the card before the refund is submitted to the scheme.", default: "false" },
+    amount: { type: "integer", description: "Minor units to refund. Omit for the full remaining balance.", default: "remaining balance" },
+    reason: { type: "enum", description: "One of requested_by_customer, duplicate, fraudulent, product_not_received." },
+    metadata: { type: "object", description: "Up to 40 key/value pairs echoed back on the refund and its events." },
+  }}
+/>
+
+## Unreferenced refunds
+
+An unreferenced refund credits a cardholder without requiring the original transaction reference or the physical card. Use this when a customer cannot return to the store, when the refund is initiated days or weeks after the sale, or when the original transaction identifier is unavailable.
+
+<Callout type="warn">
+Unreferenced refunds attract higher interchange fees from Visa and Mastercard because they bypass the scheme's matched-refund flow. Prefer referenced refunds at the terminal whenever the customer can present the original card.
+</Callout>
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const refund = await vinr.refunds.create({
+  payment: 'pay_3Nf8x2a',
+  reason: 'requested_by_customer',
+  metadata: { caseId: 'CS-1042' },
+});
+```
+
+Unreferenced refunds can be created from the API, the VINR Dashboard, or via the terminal without card presentment. The `presentToTerminal` field is omitted or set to `false`.
+
+## Refund at terminal vs dashboard vs API
+
+Different teams initiate refunds through different surfaces. The table below shows when each is appropriate.
+
+| Surface | Who initiates | Card-present required | Typical use case |
+|---|---|---|---|
+| Terminal app | In-store staff | Optional (referenced flow) | Customer at counter with card |
+| VINR Dashboard | Operations / finance | No | Remote or delayed refund; batch adjustments |
+| API (`vinr.refunds.create`) | Your server | No | Automated refund logic; post-purchase workflows |
+
+All three surfaces create the same `refund` object and emit the same webhook events. Terminal-initiated refunds include a `terminalId` field in the refund's `metadata` to identify which device processed the return.
+
+## Partial refunds
+
+Pass an explicit `amount` in minor units to refund less than the full charge. The terminal displays the partial amount to the customer before they present their card, so there is no ambiguity at the point of interaction.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const partial = await vinr.refunds.create({
+  payment: 'pay_3Nf8x2a',
+  amount: 500,
+  presentToTerminal: true,
+  reason: 'product_not_received',
+});
+
+// refund.amount → 500  (€5.00 of a larger charge)
+```
+
+When `presentToTerminal` is `true`, the terminal screen shows the partial refund amount before reading the card. The customer must confirm before the card interaction completes — on devices with a customer-facing display (Nexgo CT20P, Nexgo N86Pro) the amount appears on the customer screen; on single-screen devices the staff-facing display shows the amount.
+
+Multiple partial refunds can be issued against the same payment until the refundable balance reaches zero. VINR rejects any request that would exceed the remaining balance with a `422 amount_too_large` error.
+
+## Refund receipts
+
+VINR generates a refund receipt automatically when the terminal completes a card-present refund. The receipt format and delivery channel depend on device and configuration.
+
+| Device | Paper receipt | Email / SMS receipt |
+|---|---|---|
+| Nexgo N92 | Built-in thermal printer | Configurable |
+| Nexgo N86Pro | No printer | Configurable |
+| Nexgo CT20 | Built-in receipt printer | Configurable |
+| Nexgo CT20P | Built-in receipt printer | Configurable |
+| Ciontek CM30 | No printer | Configurable |
+
+Email and SMS receipts are enabled per-location in the VINR Dashboard under **Settings → Receipts**. When both paper and digital are enabled, the terminal prompts staff to choose — or sends both if your configuration specifies `receiptDelivery: 'all'`. Refund receipts carry the original transaction date, the refund amount, and the `re_` reference so customers can match them to their bank statement.
+
+<Callout type="info">
+Receipts for unreferenced or dashboard-initiated refunds are sent by email or SMS only. The terminal is not involved and no paper receipt is produced.
+</Callout>
+
+<Accordions>
+<Accordion title="Advanced — Scheme time limits, cross-terminal refunds, and reconciliation">
+
+**Scheme time limits**
+
+Card schemes impose a maximum window after the original transaction during which a referenced refund can be matched. Exceeding this window forces an unreferenced refund (with the associated higher interchange fees):
+
+| Scheme | Referenced refund window |
+|---|---|
+| Visa | 180 days from the transaction date |
+| Mastercard | 180 days from the transaction date |
+
+After 180 days, the original transaction has already settled through scheme clearing and can no longer be reversed by reference. Issue an unreferenced refund and note the case in your records. VINR returns a `scheme_window_expired` error code if you attempt a referenced refund outside the window.
+
+**Cross-terminal refunds**
+
+By default, any terminal on your VINR account can initiate a refund against any `pay_` ID from any other terminal. You do not need to route the refund back through the specific device that took the original payment. Cross-terminal refunds are useful for multi-lane retailers where the customer may queue at a different register for returns.
+
+To restrict refunds to the originating terminal (for example, to enforce department-level accountability), set `refundPolicy: 'originating_terminal'` on the location in the Dashboard. When this policy is active, the API returns `terminal_mismatch` if a different device attempts the refund.
+
+**Reconciliation**
+
+In-person refunds appear as negative line items in the daily terminal settlement report and in the VINR reconciliation export. Each refund entry includes:
+
+- `refundId` (`re_…`)
+- `paymentId` (`pay_…`) of the original charge
+- `terminalId` of the device that processed the refund (null for dashboard/API-initiated)
+- `amount` in minor units
+- `refundedAt` timestamp (ISO 8601)
+
+Reconcile terminal refunds against your POS system using the `metadata.registerId` field you attach at creation time. See [Reconciliation](/docs/operations/reconciliation) for the full export schema and settlement netting logic.
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Refunds" href="/docs/payments/refunds" description="Shared refund concepts: status lifecycle, fees, failed refunds, and webhooks." />
+  <Card title="Accept an in-person payment" href="/docs/payments/in-person/accept-a-payment" description="Create a payment intent and present it to a VINR terminal." />
+  <Card title="Reconciliation" href="/docs/operations/reconciliation" description="How in-person refunds net against terminal settlement and payouts." />
+</Cards>

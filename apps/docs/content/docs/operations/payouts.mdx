@@ -129,6 +129,143 @@ for (const txn of items.data) {
 
 The sum of every transaction's `net` in a payout equals the payout `amount`. See [Reporting & reconciliation](/docs/operations/reporting) for monthly statements and the financial report API.
 
+## Bank payouts
+
+To receive payouts, you must have at least one verified bank account on file. Bank accounts are verified at onboarding, but you can add or update accounts any time in **Dashboard → Settings → Payout accounts**.
+
+### Supported rails and currencies
+
+| Rail | Regions | Typical timing |
+|---|---|---|
+| SEPA Credit Transfer | EU / EEA | 1 business day |
+| Faster Payments | UK | Same business day |
+| ACH | US | 1–3 business days |
+| SWIFT | Cross-border | 1–5 business days |
+
+Each currency in your balance pays out independently. You cannot receive a EUR balance into a USD account — the destination account must match the currency of the payout.
+
+### Verify a bank account
+
+New bank accounts are verified via a micro-deposit confirmation or, where the banking rail supports it, an instant account verification flow. Until verified, automatic payouts are queued but not released.
+
+```typescript
+const account = await vinr.payoutAccounts.create({
+  currency: 'EUR',
+  bankAccount: {
+    country: 'DE',
+    iban: 'DE89370400440532013000',
+    accountHolderName: 'Example GmbH',
+  },
+});
+// account.status === 'pending_verification'
+// VINR sends two micro-deposits; confirm the amounts to verify.
+
+await vinr.payoutAccounts.verify(account.id, {
+  amounts: [12, 34],   // micro-deposit amounts in cents
+});
+// account.status === 'verified'
+```
+
+<Callout type="info">
+Counterparty name matching is enabled by default. VINR rejects payouts where the `accountHolderName` does not fuzzy-match the registered account holder at the destination bank. This prevents misdirected payouts under PSD2 VOP (Verification of Payee) rules.
+</Callout>
+
+## Card payouts
+
+In addition to bank transfers, VINR supports payouts directly to debit cards — useful for gig-economy platforms, insurance claim disbursements, and instant refunds to a customer's card.
+
+Card payouts settle within 30 minutes for participating issuers using Visa Direct or Mastercard Send, or within 1–2 business days for standard processing.
+
+```typescript
+const payout = await vinr.payouts.create({
+  amount: 7500,          // EUR 75.00
+  currency: 'EUR',
+  destination: {
+    type: 'card',
+    card: { number: '4111111111111111', expMonth: 12, expYear: 2028 },
+  },
+  description: 'Earnings disbursement — week ending 2026-05-30',
+});
+```
+
+<Callout type="warn">
+Card payouts are supported for Visa and Mastercard debit cards only. Credit cards are not eligible for push payouts. The `payoutEligibility` field on a saved card indicates whether it can receive funds.
+</Callout>
+
+### Check card payout eligibility
+
+```typescript
+const method = await vinr.paymentMethods.retrieve('pm_...');
+console.log(method.card.payoutEligibility);
+// 'eligible' | 'not_eligible' | 'unknown'
+```
+
+Eligibility is determined by the issuer and BIN. Cards with unknown eligibility can be attempted — VINR surfaces a `payout.failed` with `failureCode: 'card_not_eligible'` if the issuer declines.
+
+## Internal transfers
+
+Internal transfers move funds between balance accounts within your VINR organization — for example, from a platform balance to a sub-merchant balance, or between your EUR and operations reserve accounts.
+
+```typescript
+const transfer = await vinr.transfers.create({
+  amount: 50000,           // EUR 500.00
+  currency: 'EUR',
+  source: 'ma_platform',
+  destination: 'ma_submrchnt_abc',
+  description: 'Weekly earnings sweep to sub-merchant',
+});
+// transfer.status === 'pending' | 'completed' | 'failed'
+```
+
+Internal transfers are instant between accounts on the same rail and do not leave the VINR network — no banking delay, no transfer fee. They appear as ledger entries in both the source and destination balance transaction reports.
+
+### Scheduled internal transfers
+
+Set a recurring transfer on a cron-like schedule rather than calling the API from your own job:
+
+```typescript
+await vinr.transfers.schedules.create({
+  source: 'ma_platform',
+  destination: 'ma_submrchnt_abc',
+  amount: 50000,
+  currency: 'EUR',
+  frequency: 'weekly',
+  weeklyAnchor: 'friday',
+  description: 'Automated weekly sub-merchant earnings',
+});
+```
+
+### Return a transfer
+
+If a transfer was made in error, initiate a return within 30 days:
+
+```typescript
+await vinr.transfers.return('tfr_...', {
+  reason: 'incorrect_destination',
+});
+```
+
+Returns debit the destination account and credit the source. If the destination account has insufficient funds, the return is queued until funds are available.
+
+## Transaction rules
+
+Transaction rules gate whether a payout or transfer can proceed, independent of balance availability. Use them to enforce limits, require approvals, or block transfers to unapproved destinations.
+
+```typescript
+await vinr.payoutRules.create({
+  name: 'Require approval above EUR 10,000',
+  condition: { field: 'amount', operator: 'gt', value: 1000000 },
+  action: 'require_approval',
+  approvers: ['mbr_finance_lead'],
+});
+```
+
+Payouts matching a `require_approval` rule are held in `pending_approval` status until an approver acts in the dashboard or via the API:
+
+```typescript
+await vinr.payouts.approve('po_...');   // or .reject('po_...')
+```
+
 ## Next steps
 
 <Cards>

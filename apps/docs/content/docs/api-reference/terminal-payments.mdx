@@ -1,0 +1,361 @@
+---
+title: Terminal payments
+description: Create and manage card-present payments via VINR terminals.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+A terminal payment represents a card-present transaction initiated through a VINR hardware terminal.
+You create the payment via the API and, in cloud mode, the terminal executes the reader interaction
+automatically. Listen for the `terminal_payment.completed` webhook to confirm the outcome rather than
+polling.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
+</Callout>
+
+## The terminal payment object
+
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the terminal payment, e.g. `tpy_4Rk9`.
+  </Attribute>
+  <Attribute name="terminalId" type="string">
+    The ID of the VINR terminal that executed or will execute this payment.
+  </Attribute>
+  <Attribute name="amount" type="integer">
+    Amount intended to be collected, in the smallest currency unit (e.g. cents).
+  </Attribute>
+  <Attribute name="currency" type="string">
+    Three-letter ISO 4217 currency code, e.g. `EUR`.
+  </Attribute>
+  <Attribute name="status" type="enum">
+    One of `pending`, `processing`, `authorized`, `completed`, `failed`, `cancelled`, or `expired`.
+  </Attribute>
+  <Attribute name="captureMethod" type="enum">
+    Either `automatic` (default — authorize and capture in one step) or `manual` (authorize now,
+    capture later).
+  </Attribute>
+  <Attribute name="amountCaptured" type="integer">
+    Amount already captured, in the smallest currency unit.
+  </Attribute>
+  <Attribute name="amountCapturable" type="integer">
+    Remaining authorized amount available to capture, in the smallest currency unit.
+  </Attribute>
+  <Attribute name="reference" type="string">
+    Your internal order or transaction reference, echoed back on webhooks and the dashboard.
+  </Attribute>
+  <Attribute name="paymentMethod" type="object">
+    Details of the instrument presented at the terminal.
+    <Attributes>
+      <Attribute name="type" type="string">
+        Always `card` for terminal payments.
+      </Attribute>
+      <Attribute name="card.brand" type="string">
+        Card network, e.g. `visa`, `mastercard`, `amex`.
+      </Attribute>
+      <Attribute name="card.last4" type="string">
+        Last four digits of the PAN.
+      </Attribute>
+      <Attribute name="entryMode" type="enum">
+        How the card was read: `contactless`, `chip`, `swipe`, or `manual_key`.
+      </Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="tip" type="object">
+    Tip collected at the terminal, if any.
+    <Attributes>
+      <Attribute name="amount" type="integer">
+        Tip amount in the smallest currency unit. Included in `amount`.
+      </Attribute>
+      <Attribute name="mode" type="enum">
+        How the tip was selected: `preset`, `custom`, or `none`.
+      </Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="metadata" type="object">
+    Set of key-value pairs you can attach to the payment. See [Metadata](/docs/api-reference/metadata).
+  </Attribute>
+  <Attribute name="createdAt" type="integer">
+    Unix timestamp (seconds) when the payment was created.
+  </Attribute>
+  <Attribute name="completedAt" type="integer | null">
+    Unix timestamp (seconds) when the payment reached a terminal state. `null` while still in
+    progress.
+  </Attribute>
+</Attributes>
+
+## Create a terminal payment
+
+Pass a `terminalId`, `amount`, and `currency`. In cloud mode the terminal begins the reader
+interaction automatically. The returned object has `status: "pending"` — subscribe to the
+`terminal_payment.completed` webhook for the final outcome.
+
+<ApiExample
+  id="create-terminal-payment"
+  title="Create a terminal payment"
+  method="POST"
+  path="/v1/terminal/payments"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/terminal/payments \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d terminalId=trm_7Hq3 \\
+  -d amount=4200 \\
+  -d currency=EUR \\
+  -d reference=order_1099`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminalPayment = await vinr.terminalPayments.create({
+  terminalId: 'trm_7Hq3',
+  amount: 4200,
+  currency: 'EUR',
+  reference: 'order_1099',
+});`,
+  }}
+  response={`{
+  "id": "tpy_4Rk9",
+  "terminalId": "trm_7Hq3",
+  "amount": 4200,
+  "currency": "EUR",
+  "status": "pending",
+  "captureMethod": "automatic",
+  "amountCaptured": 0,
+  "amountCapturable": 0,
+  "reference": "order_1099",
+  "paymentMethod": null,
+  "tip": null,
+  "metadata": {},
+  "createdAt": 1748649600,
+  "completedAt": null
+}`}
+/>
+
+## Retrieve a terminal payment
+
+<ApiExample
+  id="retrieve-terminal-payment"
+  title="Retrieve a terminal payment"
+  method="GET"
+  path="/v1/terminal/payments/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/terminal/payments/tpy_4Rk9 \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminalPayment = await vinr.terminalPayments.retrieve('tpy_4Rk9');`,
+  }}
+  response={`{
+  "id": "tpy_4Rk9",
+  "terminalId": "trm_7Hq3",
+  "amount": 4200,
+  "currency": "EUR",
+  "status": "completed",
+  "captureMethod": "automatic",
+  "amountCaptured": 4200,
+  "amountCapturable": 0,
+  "reference": "order_1099",
+  "paymentMethod": {
+    "type": "card",
+    "card": { "brand": "visa", "last4": "4242" },
+    "entryMode": "contactless"
+  },
+  "tip": { "amount": 0, "mode": "none" },
+  "metadata": {},
+  "createdAt": 1748649600,
+  "completedAt": 1748649643
+}`}
+/>
+
+## Capture a terminal payment
+
+Required when `captureMethod` was set to `manual` at creation. The payment must be in `authorized`
+status. Omit `amount` to capture the full authorized amount, or pass a lower value to do a partial
+capture.
+
+<ApiExample
+  id="capture-terminal-payment"
+  title="Capture a terminal payment"
+  method="POST"
+  path="/v1/terminal/payments/{id}/capture"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/terminal/payments/tpy_4Rk9/capture \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminalPayment = await vinr.terminalPayments.capture('tpy_4Rk9');`,
+  }}
+  response={`{
+  "id": "tpy_4Rk9",
+  "terminalId": "trm_7Hq3",
+  "amount": 4200,
+  "currency": "EUR",
+  "status": "completed",
+  "captureMethod": "manual",
+  "amountCaptured": 4200,
+  "amountCapturable": 0,
+  "reference": "order_1099",
+  "paymentMethod": {
+    "type": "card",
+    "card": { "brand": "mastercard", "last4": "5555" },
+    "entryMode": "chip"
+  },
+  "tip": { "amount": 0, "mode": "none" },
+  "metadata": {},
+  "createdAt": 1748649600,
+  "completedAt": 1748649780
+}`}
+/>
+
+## Cancel a terminal payment
+
+Cancellation is only valid while `status` is `pending` — before the terminal begins executing the
+reader interaction. Once the terminal is `processing` or beyond, cancellation is not possible.
+
+<ApiExample
+  id="cancel-terminal-payment"
+  title="Cancel a terminal payment"
+  method="POST"
+  path="/v1/terminal/payments/{id}/cancel"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/terminal/payments/tpy_4Rk9/cancel \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminalPayment = await vinr.terminalPayments.cancel('tpy_4Rk9');`,
+  }}
+  response={`{
+  "id": "tpy_4Rk9",
+  "terminalId": "trm_7Hq3",
+  "amount": 4200,
+  "currency": "EUR",
+  "status": "cancelled",
+  "captureMethod": "automatic",
+  "amountCaptured": 0,
+  "amountCapturable": 0,
+  "reference": "order_1099",
+  "paymentMethod": null,
+  "tip": null,
+  "metadata": {},
+  "createdAt": 1748649600,
+  "completedAt": 1748649612
+}`}
+/>
+
+## List terminal payments
+
+Returns a paginated list of terminal payments ordered by `createdAt` descending.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `terminalId` | string | Filter by terminal ID. |
+| `locationId` | string | Filter by the location the terminal belongs to. |
+| `status` | enum | One of `pending`, `processing`, `authorized`, `completed`, `failed`, `cancelled`, `expired`. |
+| `fromDate` | integer | Unix timestamp — return payments created at or after this time. |
+| `toDate` | integer | Unix timestamp — return payments created at or before this time. |
+| `limit` | integer | Number of results to return. Default `10`, max `100`. |
+| `starting_after` | string | Cursor for forward pagination — the `id` of the last item from the previous page. |
+
+<ApiExample
+  id="list-terminal-payments"
+  title="List terminal payments"
+  method="GET"
+  path="/v1/terminal/payments"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/terminal/payments?terminalId=trm_7Hq3&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payments = await vinr.terminalPayments.list({
+  terminalId: 'trm_7Hq3',
+  limit: 10,
+});`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "tpy_4Rk9",
+      "terminalId": "trm_7Hq3",
+      "amount": 4200,
+      "currency": "EUR",
+      "status": "completed",
+      "captureMethod": "automatic",
+      "amountCaptured": 4200,
+      "amountCapturable": 0,
+      "reference": "order_1099",
+      "paymentMethod": {
+        "type": "card",
+        "card": { "brand": "visa", "last4": "4242" },
+        "entryMode": "contactless"
+      },
+      "tip": { "amount": 0, "mode": "none" },
+      "metadata": {},
+      "createdAt": 1748649600,
+      "completedAt": 1748649643
+    }
+  ],
+  "has_more": false
+}`}
+/>
+
+<Accordions>
+<Accordion title="Advanced — Local mode (direct terminal connection)">
+
+In **local mode** the terminal acts as a local HTTP server on your LAN. Send the request directly to
+the terminal instead of the VINR cloud API. The request and response shapes are identical to cloud
+mode; only the host and authentication change.
+
+| Difference | Cloud mode | Local mode |
+|---|---|---|
+| Host | `https://api.vinr.com` | `http://{terminal-ip}` |
+| Auth header | `X-Api-Key` (secret key) | `X-Device-Certificate` (terminal certificate) |
+| Connectivity | Internet required | LAN only — no outbound internet needed |
+
+```bash
+curl -X POST http://192.168.1.42/v1/terminal/payments \
+  -H "X-Device-Certificate: $TERMINAL_CERT" \
+  -d terminalId=trm_7Hq3 \
+  -d amount=4200 \
+  -d currency=EUR \
+  -d reference=order_1099
+```
+
+```ts
+const terminalPayment = await fetch('http://192.168.1.42/v1/terminal/payments', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Device-Certificate': process.env.TERMINAL_CERT,
+  },
+  body: JSON.stringify({
+    terminalId: 'trm_7Hq3',
+    amount: 4200,
+    currency: 'EUR',
+    reference: 'order_1099',
+  }),
+}).then(r => r.json());
+```
+
+Local mode does not emit cloud webhooks. Poll the terminal directly or use the terminal's local
+event stream to detect completion.
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+- [Accept an in-person payment](/docs/payments/in-person/accept-a-payment) — end-to-end integration guide
+- [Terminals](/docs/api-reference/terminals) — manage terminal devices and locations
+- [Refunds](/docs/api-reference/refunds) — refund a completed terminal payment

@@ -1,0 +1,243 @@
+---
+title: "Endless aisle"
+description: "Let in-store shoppers buy items not in stock at that location — ordered and paid for at the terminal, shipped to home."
+persona: ["developer", "business-owner"]
+priority: "P2"
+lastUpdated: "2026-05-31"
+---
+
+Endless aisle removes the constraint of physical shelf space: your store can sell any item in your full catalogue, not just what happens to be stocked at that location. A staff member uses a kiosk or tablet to browse live inventory, the customer pays at the terminal as they would for any in-store purchase, and the item ships directly from a warehouse or another store branch. VINR handles the payment leg; your order management system (OMS) owns fulfilment.
+
+## How it works
+
+<Steps>
+  <Step>
+    **Staff finds the item in your catalogue.** On the store's POS or a tablet browser, the associate searches your OMS for the item the customer wants. The OMS returns live stock levels across all locations and warehouses.
+  </Step>
+  <Step>
+    **OMS creates a ship-to-home order.** Before touching VINR, your OMS creates an order record with the customer's `shippingAddress` and the fulfilment source (warehouse ID or store branch). Note the `orderId` — you will attach it to the VINR payment.
+  </Step>
+  <Step>
+    **Backend creates a terminal payment with order metadata.** Your server calls `vinr.terminal.payments.create` with `metadata.orderId`, `metadata.fulfillment`, and `metadata.shippingAddress` so the payment record is permanently linked to the shipment.
+  </Step>
+  <Step>
+    **Customer taps to pay.** The terminal prompts the customer to present their card or device. The transaction authorises and captures in a single pass.
+  </Step>
+  <Step>
+    **OMS receives the confirmation and triggers fulfilment.** Your backend listens for the `payment.completed` webhook, looks up the order by `metadata.orderId`, and instructs the OMS to release the shipment.
+  </Step>
+  <Step>
+    **Standard `payment.completed` webhook confirms payment.** VINR delivers the webhook within milliseconds of authorisation. No polling required.
+  </Step>
+</Steps>
+
+## Integration pattern
+
+Your OMS and VINR are the two systems involved. VINR is payment-only — it never writes to your inventory or triggers a shipment. All fulfilment logic lives in your OMS; VINR provides the payment ID and metadata that your OMS uses to correlate records.
+
+Create the terminal payment from your server after the OMS order exists:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 14900,
+  currency: 'USD',
+  reference: 'order_9934',
+  metadata: {
+    orderId: 'order_9934',
+    fulfillment: 'ship_from_warehouse',
+    shippingAddress: JSON.stringify({
+      name: 'Alex Sharkov',
+      line1: '123 Main St',
+      city: 'Brooklyn',
+      state: 'NY',
+      postalCode: '11201',
+      country: 'US',
+    }),
+  },
+});
+```
+
+In your `payment.completed` webhook handler, retrieve the metadata to link payment back to the order:
+
+```typescript
+app.post('/webhooks/vinr', (req, res) => {
+  const event = req.body;
+
+  if (event.type === 'payment.completed') {
+    const { orderId, fulfillment } = event.data.metadata;
+    oms.releaseShipment({ orderId, fulfillment });
+  }
+
+  res.sendStatus(200);
+});
+```
+
+### Metadata field reference
+
+<TypeTable
+  type={{
+    "metadata.orderId": {
+      type: "string",
+      description: "Your OMS order ID. Used to correlate the VINR payment with the shipment record. Returned verbatim on the payment object and in every webhook for this payment.",
+    },
+    "metadata.fulfillment": {
+      type: "string",
+      description: "Fulfilment strategy identifier. Suggested values: 'ship_from_warehouse', 'ship_from_store', 'drop_ship'. Free-form — VINR stores and echoes it, your OMS interprets it.",
+    },
+    "metadata.shippingAddress": {
+      type: "string (JSON)",
+      description: "JSON-serialised shipping address for the order. Stored on the payment record for audit and receipt purposes. Include at minimum: name, line1, city, state, postalCode, country.",
+    },
+  }}
+/>
+
+## Receipts
+
+The customer receives a receipt confirming both the payment and the shipping details. Populate `receiptData` on the terminal payment to embed the order number and estimated delivery date directly on the printed or emailed receipt:
+
+```typescript
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 14900,
+  currency: 'USD',
+  reference: 'order_9934',
+  metadata: {
+    orderId: 'order_9934',
+    fulfillment: 'ship_from_warehouse',
+    shippingAddress: JSON.stringify({
+      name: 'Alex Sharkov',
+      line1: '123 Main St',
+      city: 'Brooklyn',
+      state: 'NY',
+      postalCode: '11201',
+      country: 'US',
+    }),
+  },
+  receiptData: {
+    lineItems: [
+      { description: 'Blue Suede Shoes (size 10)', amount: 14900 },
+    ],
+    footer: 'Order #9934 · Est. delivery: Jun 4 – Jun 6',
+  },
+});
+```
+
+The footer line appears on paper receipts and in the email receipt body. For full receipt configuration options — including email and SMS delivery channels — see [Receipts & shopper engagement](/docs/payments/in-person/receipts-and-engagement).
+
+## Refunds and returns
+
+If the item arrives damaged or the wrong size, the refund is processed from your backend — not at the original terminal — because the customer is no longer in the store.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const refund = await vinr.refunds.create({
+  payment: 'tpy_01HZ5QA7BK',
+  reason: 'product_not_received',
+  metadata: { orderId: 'order_9934', returnTicket: 'RT-221' },
+});
+```
+
+<Callout type="info">
+For customers who physically return an endless-aisle item to any store location, see [Return in-store](/docs/payments/omnichannel/return-in-store). That flow handles scanning the original payment ID at a terminal and issuing a card-present refund.
+</Callout>
+
+<Accordions>
+  <Accordion title="Advanced — multi-location splits, kiosk mode, and loyalty">
+
+    ### Multi-location inventory split
+
+    When a single basket contains items shipping from two different warehouses, create one VINR terminal payment per fulfilment origin and link them with a shared `orderId` plus a per-shipment `shipmentId`:
+
+    ```typescript
+    const sharedOrderId = 'order_9935';
+
+    const payment1 = await vinr.terminal.payments.create({
+      terminalId: 'term_01HZ5QXYZ',
+      amount: 8900,
+      currency: 'USD',
+      reference: `${sharedOrderId}-A`,
+      metadata: {
+        orderId: sharedOrderId,
+        shipmentId: 'ship_A',
+        fulfillment: 'ship_from_warehouse',
+        warehouseId: 'wh_east',
+        shippingAddress: JSON.stringify({ name: 'Alex Sharkov', line1: '123 Main St', city: 'Brooklyn', state: 'NY', postalCode: '11201', country: 'US' }),
+      },
+    });
+
+    const payment2 = await vinr.terminal.payments.create({
+      terminalId: 'term_01HZ5QXYZ',
+      amount: 6000,
+      currency: 'USD',
+      reference: `${sharedOrderId}-B`,
+      metadata: {
+        orderId: sharedOrderId,
+        shipmentId: 'ship_B',
+        fulfillment: 'ship_from_store',
+        sourceStoreId: 'store_chicago',
+        shippingAddress: JSON.stringify({ name: 'Alex Sharkov', line1: '123 Main St', city: 'Brooklyn', state: 'NY', postalCode: '11201', country: 'US' }),
+      },
+    });
+    ```
+
+    Present payment1 first; only after `payment.completed` fires for it should you present payment2. If payment2 fails, you already have a captured payment1 — handle this in your OMS and issue a refund for payment1 if you cannot fulfil the combined order.
+
+    ### Kiosk mode (unattended endless aisle)
+
+    An unattended endless aisle kiosk lets customers browse and pay without a staff member present. The flow is identical — OMS creates the order, your kiosk backend calls `vinr.terminal.payments.create` — but the terminal must be configured for unattended mode in the VINR Dashboard under **Terminals → Settings → Unattended**. In unattended mode the terminal times out after 90 seconds of inactivity on the payment screen and cancels the pending payment automatically.
+
+    <Callout type="warn">
+    Unattended terminals must be physically secured (bolted enclosure, tamper-evident seal). See the terminal installation requirements in [Terminal management](/docs/payments/in-person/terminal-management) before deploying a kiosk.
+    </Callout>
+
+    ### Loyalty points on endless-aisle orders
+
+    Endless-aisle payments participate in your loyalty programme the same way as regular in-store payments. Pass the shopper's `loyaltyAccountId` in `metadata` so your loyalty service can award points when it processes the `payment.completed` webhook:
+
+    ```typescript
+    const terminalPayment = await vinr.terminal.payments.create({
+      terminalId: 'term_01HZ5QXYZ',
+      amount: 14900,
+      currency: 'USD',
+      reference: 'order_9936',
+      metadata: {
+        orderId: 'order_9936',
+        fulfillment: 'ship_from_warehouse',
+        loyaltyAccountId: 'lac_7Bx22m',
+        shippingAddress: JSON.stringify({ name: 'Alex Sharkov', line1: '123 Main St', city: 'Brooklyn', state: 'NY', postalCode: '11201', country: 'US' }),
+      },
+    });
+    ```
+
+    Your loyalty service reads `metadata.loyaltyAccountId` from the webhook payload and credits points based on the payment `amount`. No VINR-side configuration is required — the metadata field is passed through verbatim.
+
+  </Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card
+    href="/docs/payments/omnichannel/click-and-collect"
+    title="Click and collect"
+    description="Accept online payment at checkout and let the customer pick up in-store — with terminal-side order verification."
+  />
+  <Card
+    href="/docs/payments/omnichannel/return-in-store"
+    title="Return in-store"
+    description="Process card-present refunds at any terminal for purchases made online or at a different location."
+  />
+  <Card
+    href="/docs/payments/in-person/accept-a-payment"
+    title="Accept a payment"
+    description="Core terminal payment flow — create a session, present to the terminal, and confirm via webhook."
+  />
+</Cards>

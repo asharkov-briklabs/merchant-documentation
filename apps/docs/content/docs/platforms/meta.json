@@ -1,0 +1,13 @@
+{
+  "title": "Platforms",
+  "pages": [
+    "index",
+    "platform-models",
+    "onboarding",
+    "verification",
+    "split-payments",
+    "fund-management",
+    "payouts",
+    "platform-controls"
+  ]
+}

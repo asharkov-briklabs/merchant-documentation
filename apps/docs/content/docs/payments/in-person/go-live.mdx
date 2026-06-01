@@ -1,0 +1,313 @@
+---
+title: "Go live"
+description: "Everything to check before you start taking real card-present payments with VINR."
+persona: ["developer", "operations", "business-owner"]
+priority: "P0"
+lastUpdated: "2026-05-31"
+---
+
+Work through each section in this checklist in order before processing your first live card-present transaction. Skipping steps — particularly the compliance and integration checks — can result in declined payments, settlement holds, or PCI audit findings that are costly to remediate after go-live.
+
+<Callout type="warn">
+Live card-present processing must be explicitly enabled on your account. Contact your VINR account manager to turn on live mode before completing this checklist — attempting to process real cards without live mode enabled will result in hard declines on every terminal.
+</Callout>
+
+## Account and compliance
+
+Confirm every item before touching a terminal.
+
+<TypeTable
+  type={{
+    "Account approved for card-present": {
+      type: "Required",
+      description: "Your VINR account has been underwritten for card-present acceptance. Check Dashboard → Account → Capabilities for a 'Card-present: active' status.",
+    },
+    "PCI DSS SAQ completed": {
+      type: "Required",
+      description: "Your annual Self-Assessment Questionnaire is on file. VINR-managed P2PE terminals reduce scope to SAQ P2PE — confirm with your QSA. See the PCI DSS guide for details.",
+    },
+    "Terminals in PCI-compliant zone": {
+      type: "Required",
+      description: "Each terminal is physically located in an area that satisfies your PCI P2PE scope boundary: no cameras capturing the PIN entry surface, no shoulder-surfing exposure, mounting hardware tamper-evident.",
+    },
+    "Staff trained on card-handling procedures": {
+      type: "Required",
+      description: "All staff who will handle terminals or assist customers during card interactions have completed your PCI awareness training. Document training dates for your QSA.",
+    },
+  }}
+/>
+
+<Callout type="info">
+VINR terminals are PCI PTS 5.x certified and participate in a P2PE solution — encryption keys are injected at the factory and are never accessible to you or your staff. This materially reduces your PCI scope, but does not eliminate it. See [PCI DSS](/docs/compliance/pci-dss) for the full scope reduction details.
+</Callout>
+
+## Terminal setup
+
+Complete this section for every terminal in your deployment.
+
+<TypeTable
+  type={{
+    "All terminals activated": {
+      type: "Required",
+      description: "Each device has been powered on and activated via the dashboard QR code or activation code. Status shows 'active' in Dashboard → Hardware → Terminals.",
+    },
+    "Terminals assigned to locations with correct currency": {
+      type: "Required",
+      description: "Every terminal is assigned to a location. The location's currency matches the currency your customers will be charged in. Mismatched currency causes DCC prompts and settlement errors.",
+    },
+    "Terminal software current": {
+      type: "Required",
+      description: "Open Dashboard → Hardware → Terminals and confirm no devices show a pending software update. Apply any available updates before go-live — updates cannot be applied during a live transaction.",
+    },
+    "Receipt settings configured": {
+      type: "Required",
+      description: "In Dashboard → Settings → Receipts, configure paper and/or digital (email/SMS) receipt delivery per location. Devices without a built-in printer (Nexgo N86Pro, Ciontek CM30) require digital receipt configuration.",
+    },
+    "Branding uploaded": {
+      type: "Recommended",
+      description: "Your logo and brand colour have been uploaded in Dashboard → Settings → Terminal branding. These appear on the idle screen and receipt header.",
+    },
+  }}
+/>
+
+<Callout type="info">
+Supported terminal models and their printer and connectivity capabilities:
+
+| Model | Form factor | Printer | Connectivity |
+|---|---|---|---|
+| Nexgo N92 | Android handheld | Built-in | 4G / WiFi / Bluetooth |
+| Nexgo N86Pro | Android handheld (large screen) | None | 4G / WiFi / Bluetooth |
+| Nexgo CT20 | Desktop countertop | Built-in | Ethernet / WiFi |
+| Nexgo CT20P | Desktop countertop with PIN pad | Built-in | Ethernet / WiFi |
+| Ciontek CM30 | Compact Android mPOS | None | Bluetooth / WiFi |
+
+All five models support contactless (NFC), chip+PIN, and magnetic stripe.
+</Callout>
+
+## Integration (skip for standalone)
+
+Complete this section only if your terminals are connected to a backend via the Terminal API. If you are running in standalone mode — configuring everything from the dashboard with no custom code — skip to [Feature verification](#feature-verification).
+
+<TypeTable
+  type={{
+    "Live API keys set": {
+      type: "Required",
+      description: "Your server uses a live secret key (sk_live_…) from Dashboard → Developers → API keys. Test keys (sk_test_…) silently route to the sandbox and will never authorize real cards.",
+    },
+    "Webhook endpoint registered and verified": {
+      type: "Required",
+      description: "An HTTPS endpoint is registered in Dashboard → Developers → Webhooks and has passed VINR's signature verification check. See Webhooks for setup and verification steps.",
+    },
+    "payment.completed and payment.failed handlers tested": {
+      type: "Required",
+      description: "Your webhook handler correctly processes both event types, fulfills orders on completion, and alerts staff on failure. Replay test events from the dashboard to confirm.",
+    },
+    "Refund flow tested": {
+      type: "Required",
+      description: "Your integration can call vinr.refunds.create successfully and handles the refund.completed webhook. Test both referenced (presentToTerminal: true) and unreferenced paths.",
+    },
+    "Offline mode tested (if enabled)": {
+      type: "Conditional",
+      description: "If you have raised the floor limit above zero, simulate a connectivity loss and confirm queued transactions upload and settle correctly when the terminal reconnects.",
+    },
+  }}
+/>
+
+<Tabs items={["SDK setup", "Webhook handler"]}>
+<Tab value="SDK setup">
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 2500,
+  currency: 'USD',
+  reference: 'order_8821',
+});
+```
+
+Confirm `process.env.VINR_SECRET_KEY` resolves to a `sk_live_…` key in your production environment before deploying.
+
+</Tab>
+<Tab value="Webhook handler">
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+export async function POST(request: Request) {
+  const rawBody = await request.text();
+  const signature = request.headers.get('vinr-signature') ?? '';
+
+  const event = vinr.webhooks.constructEvent(
+    rawBody,
+    signature,
+    process.env.VINR_WEBHOOK_SECRET,
+  );
+
+  if (event.type === 'payment.completed') {
+    await fulfillOrder(event.data.reference, event.data.amountCaptured);
+  }
+
+  if (event.type === 'payment.failed') {
+    await notifyStaff(event.data.reference, event.data.declineCode);
+  }
+
+  return new Response(null, { status: 200 });
+}
+```
+
+Always call `vinr.webhooks.constructEvent` and verify the signature before acting on a payload. See [Webhooks](/docs/integration/webhooks) for retry behaviour and failure handling.
+
+</Tab>
+</Tabs>
+
+## Feature verification
+
+For each optional feature you have enabled, run the test described below on a live terminal before opening to customers. Features not in your acquiring agreement do not need to be verified.
+
+<TypeTable
+  type={{
+    Tipping: {
+      type: "If enabled",
+      description: "Create a payment with tip.mode: 'on_screen'. Confirm the tip selection screen appears on the terminal before the card prompt. Verify the captured amount includes the selected tip.",
+    },
+    Surcharge: {
+      type: "If enabled",
+      description: "Present a card type subject to surcharge. Confirm the surcharge amount is disclosed on the terminal screen before the customer approves. Check the payment object's surcharge field in the dashboard. See Surcharging for legal disclosure requirements.",
+    },
+    "Dynamic Currency Conversion (DCC)": {
+      type: "If enabled",
+      description: "Present a foreign-issued card. Confirm the DCC offer screen appears with the home-currency amount and exchange rate before the customer approves or declines.",
+    },
+    Cashback: {
+      type: "If enabled",
+      description: "Process a debit card transaction with a cashback amount. Confirm the terminal prompts for the cashback amount and that the total (purchase + cashback) appears correctly on the receipt.",
+    },
+    MOTO: {
+      type: "If enabled",
+      description: "Process a key-entered card-not-present transaction via the terminal MOTO flow. Confirm the card number entry screen appears and that the resulting payment is flagged as card_not_present in the dashboard.",
+    },
+    "Offline authorization": {
+      type: "If enabled",
+      description: "Disable the terminal's network connection. Process a transaction at or below your configured floor limit. Reconnect and confirm the queued transaction uploads and settles. Verify a transaction above the floor limit is declined offline.",
+    },
+    Installments: {
+      type: "If enabled",
+      description: "Present an issuer-eligible card and select an installment plan on the terminal. Confirm the plan terms appear before authorization and that the payment object includes an installments field in the dashboard.",
+    },
+    "Gift cards": {
+      type: "If enabled",
+      description: "Redeem a test gift card balance against a transaction. Confirm split tender (partial gift card + remaining on a payment card) completes correctly and that both instruments appear on the receipt.",
+    },
+  }}
+/>
+
+## Test transactions
+
+Run this sequence on each terminal model in your deployment before going live.
+
+<Steps>
+<Step>
+**Insert a test card and process a small live transaction**
+
+Use a real, low-value card (or a dedicated test card issued by your bank) to process a transaction of the smallest denomination that clears on your acquiring account — typically the equivalent of $0.01 to $1.00. Perform this on each distinct terminal model: Nexgo N92, Nexgo N86Pro, Nexgo CT20, Nexgo CT20P, and Ciontek CM30 as applicable.
+</Step>
+<Step>
+**Verify the receipt**
+
+Confirm a receipt is produced — printed on devices with a built-in printer (N92, CT20, CT20P), or delivered digitally on devices without one (N86Pro, CM30). Check that the merchant name, amount, card last four, and a transaction reference are all present.
+</Step>
+<Step>
+**Confirm in the dashboard**
+
+Open Dashboard → Payments and locate the transaction. Verify the status is `completed`, the amount matches, and the terminal ID is correct. If your integration attaches metadata or a reference, confirm those fields are populated.
+</Step>
+<Step>
+**Issue a test refund**
+
+Initiate a refund against the transaction — either via the terminal app, the dashboard, or your integration using `vinr.refunds.create`. Confirm the refund appears under the original payment with status `succeeded` and that a refund receipt is delivered.
+</Step>
+</Steps>
+
+<Callout type="warn">
+Do not process test transactions above the minimum required to verify the flow. These are real authorizations against a live acquiring account and will appear on the cardholder's statement.
+</Callout>
+
+## Monitoring
+
+Set up alerting before your first live shift so that issues surface immediately rather than at end-of-day reconciliation.
+
+<TypeTable
+  type={{
+    "Terminal offline alert": {
+      type: "Recommended",
+      description: "In Dashboard → Operations → Alerts, create an alert for the 'Terminal offline' condition. Set a threshold (e.g. offline for more than 5 minutes) and a notification channel (email, SMS, or Slack).",
+    },
+    "Payment failure spike alert": {
+      type: "Recommended",
+      description: "Create an alert for 'Payment failure rate' that fires when the decline rate on a terminal or location exceeds a threshold (e.g. 10% over a 15-minute window). A spike often indicates a connectivity issue or a terminal requiring a restart.",
+    },
+    "terminal.offline webhook": {
+      type: "Recommended",
+      description: "Subscribe your webhook endpoint to the terminal.offline event in Dashboard → Developers → Webhooks. Use this to page on-call staff or trigger an automated remediation workflow when a device loses its cloud connection.",
+    },
+  }}
+/>
+
+See [Monitoring and alerts](/docs/operations/monitoring-and-alerts) for the full alert configuration reference and webhook event schema.
+
+<Accordions>
+<Accordion title="Advanced — Fleet health monitoring and automated remediation">
+
+For deployments with multiple locations and many terminals, use the Terminal Management API to build automated monitoring.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminals = await vinr.terminals.list({ locationId: 'loc_7Xk4p' });
+
+const offline = terminals.data.filter(t => t.status === 'offline');
+
+for (const terminal of offline) {
+  await vinr.terminals.reboot(terminal.id);
+  await alertOncall(`Rebooted offline terminal ${terminal.label} (${terminal.id})`);
+}
+```
+
+Subscribe to `terminal.offline` and `terminal.online` webhook events to build a real-time device health feed. Pair with the `terminal.softwareUpdateAvailable` event to automate update scheduling during off-peak hours.
+
+</Accordion>
+</Accordions>
+
+## You're live
+
+<Callout type="info">
+Your terminals are ready to accept real payments. For day-to-day operations, refer to [Accept a payment](/docs/payments/in-person/accept-a-payment) for the payment session flow, and [Reconciliation](/docs/operations/reconciliation) for end-of-day settlement and reporting.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card
+    title="Accept a payment"
+    href="/docs/payments/in-person/accept-a-payment"
+    description="Create a terminal payment session, present it to the terminal, and verify the result via webhook."
+  />
+  <Card
+    title="Terminal management"
+    href="/docs/payments/in-person/terminal-management"
+    description="Assign terminals to locations, monitor device health, and handle remote reboot or deactivation."
+  />
+  <Card
+    title="Reconciliation"
+    href="/docs/operations/reconciliation"
+    description="End-of-day settlement reports, payout netting, and the full reconciliation export schema."
+  />
+</Cards>

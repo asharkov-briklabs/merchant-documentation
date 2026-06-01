@@ -1,0 +1,437 @@
+---
+title: Terminals
+description: Manage VINR payment terminals — activate, assign, configure, and monitor your hardware fleet.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+Terminals represent physical payment hardware in your fleet. Use this API to activate new devices,
+assign them to locations, push configuration changes, and trigger remote actions such as reboots or
+software updates. Each terminal reports its connectivity status and last-seen timestamp so you can
+monitor fleet health programmatically.
+
+<Callout type="info">
+**Illustrative content.** Hand-authored to demonstrate the Standard/Advanced pattern; the production
+page will be generated from the VINR OpenAPI spec (roadmap item #1). Field names are representative.
+</Callout>
+
+## The terminal object
+
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the terminal, e.g. `term_3Nx8`.
+  </Attribute>
+  <Attribute name="model" type="string">
+    Hardware model identifier, e.g. `nexgo_n92`.
+  </Attribute>
+  <Attribute name="serialNumber" type="string">
+    Manufacturer serial number printed on the device.
+  </Attribute>
+  <Attribute name="status" type="enum">
+    One of `online`, `offline`, `needs_attention`, or `deactivated`.
+  </Attribute>
+  <Attribute name="locationId" type="string">
+    The identifier of the [location](/docs/api-reference/payments) the terminal is assigned to,
+    e.g. `loc_7Yz4`.
+  </Attribute>
+  <Attribute name="softwareVersion" type="string">
+    Firmware and application version string currently running on the device, e.g. `3.14.2`.
+  </Attribute>
+  <Attribute name="lastSeen" type="integer">
+    Unix timestamp of the most recent successful connection to the VINR cloud.
+  </Attribute>
+  <Attribute name="batteryLevel" type="integer | null">
+    Battery charge percentage from `0` to `100`. `null` for mains-powered devices that do not
+    report battery state.
+  </Attribute>
+  <Attribute name="createdAt" type="integer">
+    Unix timestamp when the terminal was first activated.
+  </Attribute>
+</Attributes>
+
+## Activate a terminal
+
+Pair a new device to your account using the activation code displayed on the terminal's setup screen.
+Optionally assign it to a location at activation time. On success the terminal is returned with
+`status: "online"`.
+
+<ApiExample
+  id="activate-terminal"
+  title="Activate a terminal"
+  method="POST"
+  path="/v1/terminals/activate"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/terminals/activate \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d activationCode=ACT-7X9K-2M4P \\
+  -d locationId=loc_7Yz4`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminal = await vinr.terminals.activate({
+  activationCode: 'ACT-7X9K-2M4P',
+  locationId: 'loc_7Yz4',
+});`,
+  }}
+  response={`{
+  "id": "term_3Nx8",
+  "model": "nexgo_n92",
+  "serialNumber": "SN-00482910",
+  "status": "online",
+  "locationId": "loc_7Yz4",
+  "softwareVersion": "3.14.2",
+  "lastSeen": 1748649600,
+  "batteryLevel": 87,
+  "createdAt": 1748649600
+}`}
+/>
+
+## Retrieve a terminal
+
+Fetch a single terminal by its ID.
+
+<ApiExample
+  id="retrieve-terminal"
+  title="Retrieve a terminal"
+  method="GET"
+  path="/v1/terminals/{id}"
+  request={{
+    curl: `curl https://api.vinr.com/v1/terminals/term_3Nx8 \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminal = await vinr.terminals.retrieve('term_3Nx8');`,
+  }}
+  response={`{
+  "id": "term_3Nx8",
+  "model": "nexgo_n92",
+  "serialNumber": "SN-00482910",
+  "status": "online",
+  "locationId": "loc_7Yz4",
+  "softwareVersion": "3.14.2",
+  "lastSeen": 1748649600,
+  "batteryLevel": 87,
+  "createdAt": 1748649600
+}`}
+/>
+
+## Update a terminal
+
+Reassign a terminal to a different location or set a human-readable display name. Only the fields
+you include are changed.
+
+<ApiExample
+  id="update-terminal"
+  title="Update a terminal"
+  method="POST"
+  path="/v1/terminals/{id}"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/terminals/term_3Nx8 \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d locationId=loc_2Qr9 \\
+  -d displayName="Counter 3"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminal = await vinr.terminals.update('term_3Nx8', {
+  locationId: 'loc_2Qr9',
+  displayName: 'Counter 3',
+});`,
+  }}
+  response={`{
+  "id": "term_3Nx8",
+  "model": "nexgo_n92",
+  "serialNumber": "SN-00482910",
+  "status": "online",
+  "locationId": "loc_2Qr9",
+  "softwareVersion": "3.14.2",
+  "lastSeen": 1748649600,
+  "batteryLevel": 87,
+  "createdAt": 1748649600
+}`}
+/>
+
+## List terminals
+
+Returns a paginated list of terminals, newest first. Filter by location or status to scope results.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `locationId` | string | Return only terminals assigned to this location. |
+| `status` | enum | Filter by `online`, `offline`, `needs_attention`, or `deactivated`. |
+| `limit` | integer | Number of results to return. Default `10`, max `100`. |
+| `starting_after` | string | Cursor for forward pagination — the `id` of the last item from the previous page. |
+
+<ApiExample
+  id="list-terminals"
+  title="List terminals"
+  method="GET"
+  path="/v1/terminals"
+  request={{
+    curl: `curl "https://api.vinr.com/v1/terminals?locationId=loc_7Yz4&status=online&limit=10" \\
+  -H "X-Api-Key: $VINR_SECRET_KEY"`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminals = await vinr.terminals.list({
+  locationId: 'loc_7Yz4',
+  status: 'online',
+  limit: 10,
+});`,
+  }}
+  response={`{
+  "object": "list",
+  "data": [
+    {
+      "id": "term_3Nx8",
+      "model": "nexgo_n92",
+      "serialNumber": "SN-00482910",
+      "status": "online",
+      "locationId": "loc_7Yz4",
+      "softwareVersion": "3.14.2",
+      "lastSeen": 1748649600,
+      "batteryLevel": 87,
+      "createdAt": 1748649600
+    }
+  ],
+  "has_more": false
+}`}
+/>
+
+## Configure a terminal
+
+Push a configuration payload to a specific terminal. The device applies changes on its next sync
+cycle (typically within 30 seconds while online).
+
+<ApiExample
+  id="configure-terminal"
+  title="Configure a terminal"
+  method="POST"
+  path="/v1/terminals/{id}/configure"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/terminals/term_3Nx8/configure \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "tip": {
+      "mode": "percentage",
+      "suggestions": [10, 15, 20]
+    },
+    "receipt": {
+      "channels": ["print", "sms"],
+      "requireConsent": true
+    },
+    "display": {
+      "idleMessage": "Welcome to Acme Coffee"
+    },
+    "offlineMode": {
+      "enabled": true,
+      "maxAmount": 5000,
+      "maxQueue": 50
+    }
+  }'`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminal = await vinr.terminals.configure('term_3Nx8', {
+  tip: {
+    mode: 'percentage',
+    suggestions: [10, 15, 20],
+  },
+  receipt: {
+    channels: ['print', 'sms'],
+    requireConsent: true,
+  },
+  display: {
+    idleMessage: 'Welcome to Acme Coffee',
+  },
+  offlineMode: {
+    enabled: true,
+    maxAmount: 5000,
+    maxQueue: 50,
+  },
+});`,
+  }}
+  response={`{
+  "id": "term_3Nx8",
+  "model": "nexgo_n92",
+  "serialNumber": "SN-00482910",
+  "status": "online",
+  "locationId": "loc_7Yz4",
+  "softwareVersion": "3.14.2",
+  "lastSeen": 1748649600,
+  "batteryLevel": 87,
+  "createdAt": 1748649600
+}`}
+/>
+
+The `config` body accepts the following top-level keys:
+
+<Attributes>
+  <Attribute name="tip" type="object">
+    Tipping settings for this terminal.
+    <Attributes>
+      <Attribute name="mode" type="enum">
+        `percentage` or `fixed`. Controls whether suggestion amounts are treated as percentages of
+        the transaction total or fixed currency amounts.
+      </Attribute>
+      <Attribute name="suggestions" type="integer[]">
+        Up to four tip suggestions shown on-screen, e.g. `[10, 15, 20]` for 10 %, 15 %, 20 %.
+      </Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="receipt" type="object">
+    Receipt delivery settings.
+    <Attributes>
+      <Attribute name="channels" type="string[]">
+        One or more of `print`, `email`, `sms`. The device offers only the channels listed here.
+      </Attribute>
+      <Attribute name="requireConsent" type="boolean">
+        When `true` the customer must actively choose a receipt channel; no receipt is sent silently.
+      </Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="display" type="object">
+    Screen content settings.
+    <Attributes>
+      <Attribute name="idleMessage" type="string">
+        Text shown on the idle/attract screen, up to 60 characters.
+      </Attribute>
+    </Attributes>
+  </Attribute>
+  <Attribute name="offlineMode" type="object">
+    Controls behavior when the device loses connectivity.
+    <Attributes>
+      <Attribute name="enabled" type="boolean">
+        When `true` the terminal can authorize transactions locally while offline.
+      </Attribute>
+      <Attribute name="maxAmount" type="integer">
+        Maximum amount (in smallest currency unit) that may be authorized offline per transaction.
+      </Attribute>
+      <Attribute name="maxQueue" type="integer">
+        Maximum number of transactions held in the offline queue before the terminal stops accepting
+        payments.
+      </Attribute>
+    </Attributes>
+  </Attribute>
+</Attributes>
+
+## Send a remote action
+
+Dispatch an action to a terminal. VINR enqueues the command and delivers it the next time the device
+checks in. The response is a `terminalAction` object, not the terminal itself.
+
+<ApiExample
+  id="terminal-action"
+  title="Send a remote action"
+  method="POST"
+  path="/v1/terminals/{id}/actions"
+  request={{
+    curl: `curl -X POST https://api.vinr.com/v1/terminals/term_3Nx8/actions \\
+  -H "X-Api-Key: $VINR_SECRET_KEY" \\
+  -d action=reboot`,
+    node: `import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminalAction = await vinr.terminals.sendAction('term_3Nx8', {
+  action: 'reboot',
+});`,
+  }}
+  response={`{
+  "id": "tact_8Wq1",
+  "terminalId": "term_3Nx8",
+  "action": "reboot",
+  "status": "queued",
+  "createdAt": 1748649600
+}`}
+/>
+
+The `terminalAction` object fields:
+
+<Attributes>
+  <Attribute name="id" type="string">
+    Unique identifier for the action, e.g. `tact_8Wq1`.
+  </Attribute>
+  <Attribute name="terminalId" type="string">
+    The terminal this action targets.
+  </Attribute>
+  <Attribute name="action" type="enum">
+    One of `reboot` (restart the device), `update` (trigger a software update check), or `lock`
+    (prevent new transactions until unlocked via the Dashboard or API).
+  </Attribute>
+  <Attribute name="status" type="enum">
+    Lifecycle state: `queued` → `processing` → `completed` or `failed`.
+  </Attribute>
+  <Attribute name="createdAt" type="integer">
+    Unix timestamp when the action was created.
+  </Attribute>
+</Attributes>
+
+<Accordions>
+<Accordion title="Advanced — bulk configure via location and terminal webhooks">
+
+**Bulk configure an entire location**
+
+Instead of configuring each terminal individually, push a configuration template to all terminals
+at a location with a single call. Terminals inherit the location config; per-terminal overrides
+applied via `POST /v1/terminals/:id/configure` take precedence.
+
+```bash
+curl -X PUT https://api.vinr.com/v1/locations/loc_7Yz4/terminal-config \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tip": { "mode": "percentage", "suggestions": [10, 15, 20] },
+    "receipt": { "channels": ["print"], "requireConsent": false },
+    "display": { "idleMessage": "Welcome" },
+    "offlineMode": { "enabled": true, "maxAmount": 5000, "maxQueue": 50 }
+  }'
+```
+
+```ts
+await vinr.locations.updateTerminalConfig('loc_7Yz4', {
+  tip: { mode: 'percentage', suggestions: [10, 15, 20] },
+  receipt: { channels: ['print'], requireConsent: false },
+  display: { idleMessage: 'Welcome' },
+  offlineMode: { enabled: true, maxAmount: 5000, maxQueue: 50 },
+});
+```
+
+**Terminal connectivity webhooks**
+
+Subscribe to `terminal.online` and `terminal.offline` events to react to fleet connectivity
+changes in real time — for example, alerting staff when a device goes offline during trading
+hours.
+
+```json
+{
+  "type": "terminal.offline",
+  "data": {
+    "id": "term_3Nx8",
+    "locationId": "loc_7Yz4",
+    "lastSeen": 1748649600
+  }
+}
+```
+
+Register your endpoint via the [Webhook Endpoints API](/docs/api-reference/webhook-endpoints) and
+filter for the `terminal.*` event category.
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Terminal management guide" href="/docs/payments/in-person/terminal-management" />
+  <Card title="Terminal Payments API" href="/docs/api-reference/payments" />
+  <Card title="Events" href="/docs/api-reference/events" />
+</Cards>

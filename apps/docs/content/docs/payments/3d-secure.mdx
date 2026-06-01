@@ -1,0 +1,329 @@
+---
+title: 3D Secure
+description: Control and customize 3DS2 authentication flows — integration modes, standalone auth, browser data, result codes, and testing.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+3D Secure 2 (3DS2) is the network protocol that carries Strong Customer Authentication. When a payment requires SCA, VINR drives a 3DS2 exchange with the issuer that collects device data, optionally shows a challenge, and returns a cryptographic proof of authentication. This page covers the three integration modes and how to supply or read authentication data. For the regulatory context — which payments need SCA and which exemptions apply — see [Strong Customer Authentication](/docs/payments/strong-customer-authentication).
+
+## Integration modes
+
+<Tabs items={["Native 3DS (recommended)", "Redirect 3DS", "Data-only / passive"]}>
+<Tab value="Native 3DS (recommended)">
+
+VINR's hosted checkout owns the full 3DS flow. You create a payment, redirect the customer to `checkoutUrl`, and VINR returns them to your `returnUrl` when done. The challenge UI, ACS redirect, and result handling are all managed for you.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 7900,
+  currency: 'EUR',
+  description: 'Order #8821',
+  returnUrl: 'https://yoursite.com/orders/8821/complete',
+});
+
+// Send the customer here. VINR runs 3DS and redirects back.
+console.log(payment.checkoutUrl);
+```
+
+This is the recommended mode for browser-based checkout. No additional SDK is required, and soft declines (issuer overrides an exemption and demands a challenge) are handled transparently.
+
+</Tab>
+<Tab value="Redirect 3DS">
+
+Use redirect mode when your UI needs the ACS URL directly — for example, to embed the challenge in an iframe or to control the redirect yourself. Create the payment, then inspect `authentication.redirectUrl` before sending the customer.
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 7900,
+  currency: 'EUR',
+  description: 'Order #8821',
+  returnUrl: 'https://yoursite.com/orders/8821/complete',
+  authentication: {
+    mode: 'redirect',
+  },
+});
+
+if (payment.authentication?.status === 'required') {
+  const acsUrl = payment.authentication.redirectUrl;
+  // Redirect the customer to acsUrl, or load it in an iframe.
+}
+```
+
+VINR posts the authentication result to your `returnUrl` with a `paymentId` query parameter. Retrieve the payment server-side to confirm the final status before fulfilling the order.
+
+</Tab>
+<Tab value="Data-only / passive">
+
+Data-only mode sends device and browser signals to the issuer for risk scoring without presenting a challenge to the customer. The issuer uses the data to decide whether to approve the payment frictionlessly. No customer interaction occurs.
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 1500,
+  currency: 'EUR',
+  description: 'Top-up',
+  returnUrl: 'https://yoursite.com/wallet/complete',
+  authentication: {
+    mode: 'data_only',
+    browserInfo: {
+      userAgent: req.headers['user-agent'],
+      colorDepth: 24,
+      screenWidth: 1440,
+      screenHeight: 900,
+      timeZoneOffset: -120,
+      javaEnabled: false,
+      language: 'en-GB',
+    },
+  },
+});
+```
+
+Use data-only for low-value payments, trusted returning customers, or flows where a challenge would be disproportionate. The issuer may still decline if risk scoring fails; there is no frictionless guarantee. Liability shift does not apply to data-only results — see [Reading the result](#reading-the-result).
+
+</Tab>
+</Tabs>
+
+## Standalone authentication
+
+Authenticate a card without immediately charging it. This is useful for verifying a card before saving it to a customer's wallet, or for pre-authenticating a marketplace seller's payout method. The returned `authenticationId` can be attached to a later `payments.create` call.
+
+```typescript
+const auth = await vinr.authentication.create({
+  amount: 0,
+  currency: 'EUR',
+  paymentMethod: 'pm_4Rk9...',
+  returnUrl: 'https://yoursite.com/wallet/verify-complete',
+  deviceChannel: 'browser',
+  challengeIndicator: 'challenge_requested',
+  browserInfo: {
+    userAgent: req.headers['user-agent'],
+    colorDepth: 24,
+    screenWidth: 1440,
+    screenHeight: 900,
+    timeZoneOffset: -120,
+    javaEnabled: false,
+    language: 'en-GB',
+  },
+});
+
+// auth.authenticationId → "aut_7Kx2p..."
+// auth.status           → "pending" → "authenticated" | "not_authenticated"
+// auth.redirectUrl      → present if a challenge is required
+
+// Later: attach to a payment with no re-authentication needed.
+const payment = await vinr.payments.create({
+  amount: 9900,
+  currency: 'EUR',
+  customer: 'cust_8Qd2...',
+  paymentMethod: 'pm_4Rk9...',
+  authenticationId: auth.authenticationId,
+  confirm: true,
+});
+```
+
+<Callout type="info">
+Standalone authentication is intended for saving a payment method or pre-authorizing a marketplace participant. For subscription setup, pass `setupFutureUsage: 'recurring'` on the initial payment instead — that authenticates and stores the mandate in a single step.
+</Callout>
+
+## Passing 3DS data
+
+Supply these fields on `authentication` (inside `payments.create` or `authentication.create`) to improve the issuer's risk decision and maximize frictionless results.
+
+<TypeTable
+  type={{
+    browserInfo: {
+      type: "object",
+      description: "Browser environment signals collected from the customer's device. Richer data improves frictionless rates.",
+    },
+    "browserInfo.userAgent": {
+      type: "string",
+      description: "The navigator.userAgent string from the customer's browser.",
+    },
+    "browserInfo.colorDepth": {
+      type: "number",
+      description: "Screen colour depth in bits (e.g. 24). Read from screen.colorDepth.",
+    },
+    "browserInfo.screenWidth": {
+      type: "number",
+      description: "Screen width in pixels. Read from screen.width.",
+    },
+    "browserInfo.screenHeight": {
+      type: "number",
+      description: "Screen height in pixels. Read from screen.height.",
+    },
+    "browserInfo.timeZoneOffset": {
+      type: "number",
+      description: "UTC offset in minutes (negative east of UTC). Read from new Date().getTimezoneOffset().",
+    },
+    "browserInfo.javaEnabled": {
+      type: "boolean",
+      description: "Whether Java is enabled in the browser. Read from navigator.javaEnabled().",
+    },
+    "browserInfo.language": {
+      type: "string",
+      description: "Browser language tag (e.g. 'en-GB'). Read from navigator.language.",
+    },
+    deviceChannel: {
+      type: "'browser' | 'app' | '3ri'",
+      description: "The channel through which authentication is initiated. Use 'app' for native mobile, '3ri' for requestor-initiated off-session flows.",
+      default: "browser",
+    },
+    challengeIndicator: {
+      type: "'no_preference' | 'no_challenge_requested' | 'challenge_requested'",
+      description: "Your preference for whether the issuer presents a challenge. The issuer may override this. Use 'no_challenge_requested' for low-risk flows, 'challenge_requested' for high-value or first-use authorization.",
+      default: "no_preference",
+    },
+    mode: {
+      type: "'native' | 'redirect' | 'data_only'",
+      description: "Controls which integration path VINR uses for the 3DS exchange.",
+      default: "native",
+    },
+  }}
+/>
+
+## Reading the result
+
+After authentication completes, inspect `authentication.status` on the payment or authentication object. The status determines who bears liability if the payment is later disputed as unauthorized.
+
+| Status | Meaning | Liability shift? |
+|---|---|---|
+| `authenticated` | Customer completed a 3DS challenge or the flow resolved frictionlessly with a fully authenticated result. | Yes — issuer bears liability. |
+| `attempted` | Issuer participated in 3DS but did not fully authenticate; an attempt proof (ECI 06 / 01) was returned. | Partial — varies by network and region. |
+| `not_authenticated` | Authentication failed. Customer failed or abandoned the challenge, or the issuer rejected it. | No — merchant bears liability. |
+| `informational` | Data-only / passive flow completed. Issuer received signals but no authentication was performed. | No — merchant bears liability. |
+| `rejected` | The 3DS request was rejected by the card scheme before reaching the issuer (e.g. invalid card data). | No — payment should be declined. |
+
+<Callout type="warn">
+Never capture or fulfil an order if `authentication.status` is `not_authenticated` or `rejected`. Doing so shifts fraud liability to you and increases dispute risk.
+</Callout>
+
+Verify the outcome from a webhook rather than relying on the browser redirect alone:
+
+```typescript
+const event = vinr.webhooks.verify(rawBody, req.headers['x-vinr-signature']);
+
+switch (event.type) {
+  case 'payment.completed':
+    await fulfillOrder(event.data.metadata.orderId);
+    break;
+  case 'payment.authentication_failed':
+    await notifyAuthFailed(event.data.id);
+    break;
+}
+```
+
+## Testing
+
+The sandbox drives authentication outcomes from the card number. Use any future expiry, any 3-digit CVC, and any postal code.
+
+| Card number | 3DS outcome | `authentication.status` |
+|---|---|---|
+| `4242 4242 4242 4242` | Frictionless — no challenge | `authenticated` |
+| `4000 0000 0000 3220` | Challenge required | `authenticated` (after approval) or `not_authenticated` (after failure) |
+| `4000 0000 0000 9995` | Data-only / informational | `informational` |
+
+To simulate a specific ECI value, pass `test.eciOverride` in the authentication object. This field is ignored outside the sandbox.
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 4900,
+  currency: 'EUR',
+  returnUrl: 'https://yoursite.com/complete',
+  authentication: {
+    test: {
+      eciOverride: '06',
+    },
+  },
+});
+
+// authentication.eci → "06"  (attempted authentication)
+// authentication.status → "attempted"
+```
+
+For the challenge card (`4000 0000 0000 3220`), approve or fail the challenge from **Dashboard → Sandbox → Authentication** to control the final status without browser interaction.
+
+<Advanced>
+
+### 3DS for mobile apps
+
+Native iOS and Android apps cannot use browser-based fingerprinting. Instead, integrate the VINR Mobile SDK, which handles device fingerprinting and the native challenge UI through the EMVCo 3DS SDK standard.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const payment = await vinr.payments.create({
+  amount: 7900,
+  currency: 'EUR',
+  returnUrl: 'yourapp://payment/complete',
+  authentication: {
+    mode: 'native',
+    deviceChannel: 'app',
+    sdkInfo: {
+      sdkAppId: sdkInstance.getSDKAppID(),
+      sdkEncData: sdkInstance.getDeviceData(),
+      sdkEphemeralPublicKey: sdkInstance.getEphemeralPublicKey(),
+      sdkReferenceNumber: sdkInstance.getSDKReferenceNumber(),
+      sdkTransactionId: sdkInstance.getSDKTransactionId(),
+    },
+  },
+});
+```
+
+The SDK collects the device fingerprint, encrypts it for the ACS, and presents the native challenge UI directly — no WebView required. See the [Mobile SDK guide](/docs/integration/mobile-sdks) for setup instructions.
+
+### 3DS Requestor Initiated (3RI)
+
+3RI allows you to authenticate off-session — without the cardholder present — for use cases like verifying a stored card or pre-authorizing a scheduled payment. Unlike a standard off-session charge, 3RI sends an authentication request through the 3DS network even though no browser interaction is possible.
+
+```typescript
+const auth = await vinr.authentication.create({
+  amount: 9900,
+  currency: 'EUR',
+  paymentMethod: 'pm_4Rk9...',
+  deviceChannel: '3ri',
+  challengeIndicator: 'no_challenge_requested',
+  threeRIIndicator: 'recurring_transaction',
+});
+
+// auth.status → "authenticated" | "attempted" | "not_authenticated"
+// Use auth.authenticationId on the subsequent payments.create call.
+```
+
+Supported `threeRIIndicator` values: `recurring_transaction`, `instalment_transaction`, `add_card`, `maintain_card`, `account_verification`.
+
+### Decoupled authentication
+
+Decoupled authentication lets the issuer authenticate the customer asynchronously — for example, through a push notification to their banking app — without requiring them to be present in your checkout flow at that exact moment. This is useful for high-value payments where you want strong authentication but can tolerate a short delay.
+
+```typescript
+const auth = await vinr.authentication.create({
+  amount: 250000,
+  currency: 'EUR',
+  paymentMethod: 'pm_4Rk9...',
+  deviceChannel: 'browser',
+  challengeIndicator: 'challenge_requested',
+  decoupledAuthentication: {
+    maxTime: 10,
+  },
+});
+
+// auth.status → "pending" while the customer authenticates on their device.
+// Poll or listen for the authentication.updated webhook.
+```
+
+VINR sends an `authentication.updated` webhook when the issuer returns the decoupled result. `maxTime` sets the maximum number of minutes to wait; if the customer does not authenticate within that window, `status` moves to `not_authenticated`.
+
+</Advanced>
+
+## Next steps
+
+<Cards>
+  <Card title="Strong Customer Authentication" href="/docs/payments/strong-customer-authentication" description="Regulatory context, exemptions, and how VINR applies SCA." />
+  <Card title="Recurring payments" href="/docs/payments/recurring-payments" description="Off-session charges, mandates, and authentication on renewals." />
+  <Card title="Testing your integration" href="/docs/integration/testing" description="Sandbox cards, ECI simulation, and scripting challenge outcomes." />
+</Cards>

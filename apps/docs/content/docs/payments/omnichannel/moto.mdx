@@ -1,0 +1,256 @@
+---
+title: "Mail order / telephone order (MOTO)"
+description: "Accept card payments over the phone or by mail without the cardholder present."
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+Mail Order / Telephone Order (MOTO) is a card-not-present transaction initiated by a merchant operator rather than the cardholder. It covers phone bookings, written mail orders, and call-centre payments — any situation where a staff member collects payment details on behalf of a customer who is not interacting with a payment terminal or checkout page. VINR supports three MOTO paths: direct API submission, a browser-based virtual terminal in the dashboard, and manual key entry on a physical terminal. Choose the path that matches your PCI scope and operational setup.
+
+## MOTO via API
+
+When your staff collects card details verbally — over the phone or from a written order form — your server can submit those details directly to the VINR Payments API. Set `moto: true` on the payment to flag it as a card-not-present MOTO transaction. VINR applies the correct interchange category and bypasses 3DS (see [3DS and authentication](#3ds-and-authentication)).
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 9900,
+  currency: 'GBP',
+  moto: true,
+  paymentMethod: {
+    type: 'card',
+    card: {
+      number: '4111111111111111',
+      expMonth: 12,
+      expYear: 2027,
+      cvc: '123',
+    },
+  },
+  billingDetails: {
+    name: 'Jane Smith',
+    address: {
+      line1: '14 Regent Street',
+      city: 'London',
+      postalCode: 'SW1Y 4PH',
+      country: 'GB',
+    },
+  },
+  reference: 'order_3821',
+});
+```
+
+<Callout type="warn">
+The API path puts raw card data through your server. This places you in **SAQ-C** (or higher) PCI DSS scope. Only use direct API submission if your environment has appropriate PCI controls in place — network segmentation, key management, and annual assessment. If you cannot meet that bar, use the virtual terminal instead.
+</Callout>
+
+## MOTO via virtual terminal
+
+The Virtual Terminal is a browser-based card form hosted entirely by VINR. Your staff opens **Operations → Virtual Terminal** in the VINR dashboard, enters the cardholder's details, and submits the payment. Raw card data is entered into VINR's page — your network and systems never touch it.
+
+<Steps>
+  <Step>
+    **Open the Virtual Terminal.** In the VINR dashboard navigate to **Operations → Virtual Terminal**. Any staff member with the *Payments Operator* role can access it.
+  </Step>
+  <Step>
+    **Enter the order details.** Set the amount, currency, and an internal reference (order number, booking ID, etc.) before entering card details.
+  </Step>
+  <Step>
+    **Enter the card details.** Type the card number, expiry, and CVC into the hosted fields. Optionally enter the cardholder billing address to trigger AVS.
+  </Step>
+  <Step>
+    **Submit the payment.** VINR processes the charge and displays an immediate result. A receipt can be emailed to the customer from the confirmation screen.
+  </Step>
+  <Step>
+    **Reconcile via the dashboard or webhooks.** The payment appears in your transaction list immediately. If you have a backend webhook listener, a `payment.completed` event arrives within milliseconds.
+  </Step>
+</Steps>
+
+Because raw card data never touches your systems, the Virtual Terminal path reduces your PCI scope to **SAQ-A**. Use it when:
+
+- You lack the infrastructure to meet SAQ-C requirements for the API path.
+- Your call-centre staff already work in a browser environment.
+- You want supervisory controls (role-based access, audit log) without custom integration work.
+
+Use the API path instead when you need to embed MOTO processing inside a proprietary CRM, telephony platform, or order management system.
+
+## MOTO via terminal key entry
+
+On a VINR terminal, staff can manually enter a card number on the physical keypad when the customer is not present to tap or insert. This is known as manual key entry. See [In-person features — manual key entry](/docs/payments/in-person/features#manual-key-entry) for the full terminal walkthrough.
+
+<Tabs items={["When to use", "PCI scope"]}>
+  <Tab value="When to use">
+    Terminal key entry suits low-volume phone orders at a physical location — a hotel front desk taking a booking, a restaurant confirming a reservation deposit, or a repair shop billing a job agreed over the phone. Staff are already at the terminal for in-person transactions, so no additional hardware or software is required.
+  </Tab>
+  <Tab value="PCI scope">
+    Manual key entry via a certified VINR terminal is classified as **SAQ-B**. Card data is entered into a certified hardware device and encrypted immediately — it does not pass through any software on your network. This is a lighter scope than the API path (SAQ-C) but requires a physical VINR terminal.
+  </Tab>
+</Tabs>
+
+<Callout type="info">
+For the terminal MOTO flow (configuring the terminal and enabling key-entry mode) see [In-person features](/docs/payments/in-person/features#moto).
+</Callout>
+
+## 3DS and authentication
+
+MOTO transactions are explicitly excluded from Strong Customer Authentication (SCA) requirements under PSD2 Article 18. Because the cardholder is not present to authenticate, 3DS cannot be applied. VINR automatically marks API payments with `moto: true` as out-of-scope for 3DS and does not request an authentication challenge.
+
+<Callout type="warn">
+The exclusion from SCA means there is **no liability shift** to the card scheme. For MOTO transactions, the merchant bears full chargeback liability regardless of whether the card details were correct. A fraudulent MOTO transaction that a cardholder disputes will result in a chargeback against your account. Use the fraud controls below to reduce exposure.
+</Callout>
+
+## Reducing fraud risk
+
+Card-not-present fraud is more common in MOTO than in card-present channels. Apply as many of these controls as your volume justifies:
+
+- **AVS (Address Verification Service)** — pass `billingDetails.address` on every MOTO payment. VINR returns an `avsResult` code on the payment object. Decline or flag payments where the postcode or full address does not match.
+- **CVC check** — always collect and submit the CVC. VINR returns a `cvcResult` code. A `no_match` result is a strong fraud signal.
+- **Velocity limits** — configure per-card and per-IP velocity rules in **Operations → Fraud prevention** to block rapid repeat attempts with the same card number.
+- **Shipping-address match** — for physical goods, compare the shipping address against the billing address. A significant mismatch warrants manual review before fulfilment.
+- **Tokenize repeat customers** — for customers who order regularly by phone, complete an initial MOTO charge and save a reusable token. On subsequent calls, staff look up the customer record; you charge the token without re-collecting card details. See [Tokenization](/docs/payments/tokenization).
+
+## MOTO-specific field reference
+
+<TypeTable
+  type={{
+    moto: {
+      type: "boolean",
+      description: "Set to true to flag this as a MOTO (card-not-present, operator-initiated) transaction. VINR applies the correct interchange category and bypasses 3DS.",
+      default: "false",
+    },
+    "billingDetails.address": {
+      type: "object",
+      description: "Cardholder billing address used for AVS. Pass line1, city, postalCode, and country. The avsResult field on the payment response reflects the issuer's match result.",
+      default: "—",
+    },
+    "billingDetails.address.line1": {
+      type: "string",
+      description: "First line of the billing address (street number and name). Submitted to the issuer for AVS line-1 matching.",
+      default: "—",
+    },
+    "billingDetails.address.postalCode": {
+      type: "string",
+      description: "Billing postal or ZIP code. Most issuers support at minimum postcode-only AVS matching even when full-address matching is unavailable.",
+      default: "—",
+    },
+    "billingDetails.address.country": {
+      type: "string",
+      description: "ISO 3166-1 alpha-2 country code for the billing address (e.g. GB, US, DE).",
+      default: "—",
+    },
+  }}
+/>
+
+<Accordions>
+<Accordion title="Advanced — call-centre integration, MOTO + recurring, and chargeback handling">
+
+### Call-centre CTI integration
+
+In a telephony environment with Computer Telephony Integration (CTI), the call management platform can pre-populate the Virtual Terminal or your internal CRM with the caller's account details as the call connects. This reduces handling time and limits the window during which an agent must ask for card details.
+
+A typical CTI pop-up integration works as follows:
+
+```typescript
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+async function prepareAgentContext(callerId: string) {
+  const customer = await crm.lookupByPhone(callerId);
+
+  if (customer?.vinrCustomerId) {
+    const methods = await vinr.customers.listPaymentMethods(customer.vinrCustomerId);
+    const defaultCard = methods.find(m => m.isDefault);
+
+    return {
+      customerId: customer.vinrCustomerId,
+      defaultCardLast4: defaultCard?.card?.last4,
+      defaultCardExpiry: `${defaultCard?.card?.expMonth}/${defaultCard?.card?.expYear}`,
+    };
+  }
+
+  return null;
+}
+```
+
+If the customer has a saved token, the agent can confirm the last four digits and expiry with the customer over the phone and charge the existing token — no new card data is collected.
+
+### Combining MOTO with recurring payments
+
+A common pattern for subscription businesses with a call-centre channel is:
+
+1. **Initial MOTO charge** — staff takes the customer's details over the phone and creates the first payment with `moto: true`. Pass `setupFutureUsage: 'off_session'` so VINR stores a reusable token alongside the payment.
+2. **Recurring charges** — subsequent billing cycles use the saved token with `offSession: true`. The customer is never asked for card details again.
+
+```typescript
+const initialPayment = await vinr.payments.create({
+  amount: 2999,
+  currency: 'EUR',
+  moto: true,
+  setupFutureUsage: 'off_session',
+  paymentMethod: {
+    type: 'card',
+    card: { number, expMonth, expYear, cvc },
+  },
+  customer: customerId,
+  reference: 'subscription_initial',
+});
+
+const recurringPayment = await vinr.payments.create({
+  amount: 2999,
+  currency: 'EUR',
+  offSession: true,
+  paymentMethod: initialPayment.paymentMethodId,
+  customer: customerId,
+  reference: 'subscription_month_2',
+});
+```
+
+### MOTO refunds
+
+MOTO payments are refunded via the standard Payments API — there is no MOTO-specific refund flow. Call `vinr.payments.refund` with the original `paymentId` and the amount to refund.
+
+```typescript
+const refund = await vinr.payments.refund({
+  paymentId: 'pay_01HZMOTO123',
+  amount: 9900,
+  reason: 'customer_request',
+});
+```
+
+Refunds on MOTO payments are processed to the original card. If the card has been replaced (e.g. due to fraud), issuers will usually route the refund to the replacement card. If the card is closed, the issuer may return the funds to the customer by other means — contact VINR Support if a refund is unresolved after 10 business days.
+
+### MOTO chargeback handling
+
+Because there is no SCA liability shift on MOTO transactions, all chargebacks are the merchant's liability. To contest a MOTO chargeback, you must provide evidence that the legitimate cardholder authorised the transaction. Useful evidence includes:
+
+- A call recording or transcript showing the cardholder provided their details.
+- A signed order form for mail orders.
+- Delivery confirmation (proof of receipt for physical goods) tied to the billing address.
+- IP and device fingerprint from any post-purchase customer interaction (account login, delivery tracking).
+
+Submit evidence through the VINR dashboard under **Operations → Disputes**, or via the Disputes API. See [Disputes](/docs/payments/disputes) for the full evidence submission flow and deadlines.
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card
+    title="Pay by link"
+    href="/docs/payments/omnichannel/pay-by-link"
+    description="Send a payment link by SMS or email so customers pay on their own device — no card details collected by staff."
+  />
+  <Card
+    title="Tokenization"
+    href="/docs/payments/tokenization"
+    description="Save a card token after an initial MOTO charge so repeat customers never need to read their card details again."
+  />
+  <Card
+    title="Result codes"
+    href="/docs/troubleshooting/result-codes"
+    description="Understand AVS, CVC, and decline codes returned on MOTO payment responses."
+  />
+</Cards>

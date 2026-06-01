@@ -1,0 +1,192 @@
+---
+title: Collect an in-person payment
+description: Set up a VINR terminal and take your first card-present payment in under 10 minutes.
+category: "payments"
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-06-01"
+---
+
+This guide covers everything needed to accept a card-present payment through a VINR terminal: activating the device, creating a payment from your server, handling the result via webhook, and testing before going live. By the end you'll have a working end-to-end in-person payment flow running against the sandbox.
+
+## Overview
+
+```
+your POS server          VINR API            terminal          customer
+       │  create payment    │                    │                 │
+       │───────────────────►│                    │                 │
+       │  terminalPayment   │  present amount    │                 │
+       │◄───────────────────│───────────────────►│                 │
+       │                    │                    │   tap/dip/swipe │
+       │                    │                    │◄────────────────│
+       │  terminal_payment.completed (webhook)   │                 │
+       │◄───────────────────│◄───────────────────│                 │
+       │  fulfil order      │                    │                 │
+```
+
+## Prerequisites
+
+Before writing any code, confirm you have:
+
+<Steps>
+
+### Enable in-person processing
+
+Log in to the VINR Dashboard, go to **Settings → Payment methods → In-person**, and enable card-present processing for your account.
+
+### Activate a supported terminal
+
+VINR supports the Nexgo N92, N86Pro, CT20, CT20P, and the Ciontek CM30. Activate your device and assign it to a location in the Dashboard. The full activation walk-through is at [In-person terminal setup](/docs/payments/in-person/terminals).
+
+### Obtain API keys
+
+Copy your secret key from **Dashboard → Developers → API keys**. Use a sandbox key while following this guide.
+
+</Steps>
+
+## Activate and assign your terminal
+
+<Callout type="info">
+If you haven't yet activated your terminal or assigned it to a location, follow the step-by-step instructions at [In-person terminal setup](/docs/payments/in-person/terminals) before continuing. The steps below assume the device is already online.
+</Callout>
+
+Confirm the terminal is reachable and online before creating your first payment.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const { data: terminals } = await vinr.terminal.terminals.list({ status: 'online' });
+
+console.log(terminals);
+```
+
+A healthy terminal returns `status: "online"` and the `locationId` you set in the Dashboard. If the device appears `offline`, check that it is powered on, connected to the network, and has completed its initial software update.
+
+## Create a terminal payment
+
+Once the terminal is online, create a payment from your server. VINR routes it to the terminal and presents the amount to the customer automatically — you do not need a second API call to start the transaction.
+
+```typescript
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_live_abc123',
+  amount: 4999,
+  currency: 'EUR',
+  reference: 'order-1042',
+});
+
+console.log(terminalPayment.status);
+```
+
+The response looks like this:
+
+```typescript
+{
+  id: 'tpay_01j9xkm7qefg8h3nv2wp4c5rd6',
+  terminalId: 'term_live_abc123',
+  amount: 4999,
+  currency: 'EUR',
+  reference: 'order-1042',
+  status: 'pending',
+  createdAt: '2026-06-01T09:14:22Z',
+}
+```
+
+<Callout type="info">
+Once `status` is `pending`, the terminal displays the amount and is waiting for the customer to tap, dip, or swipe. No further API call is needed — the transaction completes on the device.
+</Callout>
+
+## Handle the result
+
+Listen for the `terminal_payment.completed` or `terminal_payment.failed` webhook events to fulfil or handle failure. Fulfilling from the webhook ensures it happens exactly once, even if your server never receives a redirect.
+
+```typescript
+export async function POST(req: Request) {
+  const event = vinr.webhooks.verify(
+    await req.text(),
+    req.headers.get('x-vinr-signature'),
+  );
+
+  switch (event.type) {
+    case 'terminal_payment.completed': {
+      const { id, amountCaptured, reference, paymentMethod } = event.data;
+      console.log(
+        `Payment ${id} captured ${amountCaptured} — card ending ${paymentMethod.card.last4}`,
+      );
+      await fulfillOrder(reference);
+      break;
+    }
+    case 'terminal_payment.failed': {
+      const { id, reference, failureReason } = event.data;
+      console.warn(`Payment ${id} failed for order ${reference}: ${failureReason}`);
+      await notifyStaff(reference);
+      break;
+    }
+  }
+
+  return new Response('OK', { status: 200 });
+}
+```
+
+The `terminal_payment.completed` payload includes:
+
+| Field | Description |
+|---|---|
+| `id` | Unique ID of the terminal payment |
+| `status` | `completed` |
+| `amountCaptured` | Amount captured in minor units |
+| `reference` | The `reference` you supplied at creation |
+| `paymentMethod.card.last4` | Last four digits of the card used |
+
+## Test before going live
+
+Use the sandbox terminal simulator to exercise both outcomes without a physical device.
+
+```typescript
+const testPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_test_simulator',
+  amount: 4999,
+  currency: 'EUR',
+  reference: 'order-test-001',
+});
+```
+
+Then trigger a result in the simulator using these test card numbers:
+
+| Card | Result |
+|---|---|
+| `4242 4242 4242 4242` (tap) | `terminal_payment.completed` |
+| `4000 0000 0000 0002` (tap) | `terminal_payment.failed` — card declined |
+
+<Callout type="warn">
+`term_test_simulator` only works with sandbox API keys. It will be rejected in the live environment.
+</Callout>
+
+See [Testing your integration](/docs/integration/testing) for the full list of simulator cards and error scenarios.
+
+## Go live
+
+<Steps>
+
+### Switch to live API keys
+
+Replace `VINR_SECRET_KEY` with your live secret key from **Dashboard → Developers → API keys**. Update your webhook signing secret at the same time.
+
+### Run a real transaction on each terminal model
+
+Process one genuine payment on every terminal model you've deployed (Nexgo N92, N86Pro, CT20, CT20P, Ciontek CM30) before opening to customers. This confirms firmware, network routing, and receipt printing all work as expected.
+
+### Complete the go-live checklist
+
+Review error handling, webhook reliability, and reconciliation with the [In-person go-live checklist](/docs/payments/in-person/go-live).
+
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="In-person payment features" href="/docs/payments/in-person/features" description="Refunds, tips, receipts, and partial captures on terminal payments." />
+  <Card title="Terminal management" href="/docs/payments/in-person/terminal-management" description="Assign terminals to locations, update firmware, and monitor status." />
+  <Card title="Go-live checklist" href="/docs/payments/in-person/go-live" description="Everything to verify before accepting real customer payments." />
+</Cards>

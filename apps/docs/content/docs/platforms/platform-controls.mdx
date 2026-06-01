@@ -1,0 +1,152 @@
+---
+title: Platform controls
+description: Manage sub-merchant capabilities, spending limits, risk rules, and third-party access across your platform.
+---
+
+Platform controls give you programmatic governance over what your sub-merchants can do — from accepting payments to receiving payouts to accessing dashboards.
+
+## Capabilities
+
+Capabilities gate specific actions. VINR enables a capability automatically when verification criteria are met, but your platform can independently restrict or expand them.
+
+### Query capabilities
+
+```
+GET /v1/platform/sub-merchants/{id}/capabilities
+```
+
+Response:
+
+```json
+{
+  "card_payments":        { "status": "active",      "requirements": [] },
+  "bank_transfers":       { "status": "active",      "requirements": [] },
+  "payouts":              { "status": "restricted",  "requirements": ["bank_account"] },
+  "in_person_payments":   { "status": "inactive",    "requirements": ["terminal_agreement"] },
+  "cross_border_payouts": { "status": "inactive",    "requirements": ["edd_review"] }
+}
+```
+
+### Request a capability
+
+```json
+POST /v1/platform/sub-merchants/{id}/capabilities
+{
+  "capability": "cross_border_payouts",
+  "requested": true
+}
+```
+
+VINR may trigger additional verification before granting the capability.
+
+### Restrict a capability
+
+```json
+POST /v1/platform/sub-merchants/{id}/capabilities
+{
+  "capability": "payouts",
+  "requested": false,
+  "reason": "onboarding_incomplete"
+}
+```
+
+This overrides VINR's own verification status — the sub-merchant cannot receive payouts even if fully verified. Use this for platform-level business holds.
+
+---
+
+## Spending and volume limits
+
+Set per-sub-merchant limits to manage risk exposure:
+
+```json
+POST /v1/platform/sub-merchants/{id}/limits
+{
+  "single_transaction_max": 100000,
+  "daily_volume_max":       500000,
+  "monthly_volume_max":    2000000
+}
+```
+
+Transactions that would exceed a limit are declined with a `platform_limit_exceeded` error. Limits apply to payment acceptance, not payouts.
+
+---
+
+## Risk rules
+
+Define automated rules that trigger actions when sub-merchant behavior matches a pattern:
+
+```json
+POST /v1/platform/risk-rules
+{
+  "name": "High dispute rate alert",
+  "condition": {
+    "metric": "dispute_rate_7d",
+    "operator": "gt",
+    "threshold": 0.02
+  },
+  "actions": [
+    { "type": "notify_platform" },
+    { "type": "restrict_capability", "capability": "card_payments" }
+  ]
+}
+```
+
+Available metrics: `dispute_rate_7d`, `refund_rate_7d`, `failed_payment_rate_24h`, `volume_spike_pct`.
+
+Available actions: `notify_platform`, `notify_sub_merchant`, `restrict_capability`, `add_to_review_queue`, `suspend_account`.
+
+---
+
+## Third-party access
+
+Control whether external tools (accounting software, ERPs) can access a sub-merchant's data through the VINR API:
+
+| Level | Description |
+|---|---|
+| `full` | Third-party app can read and write all sub-merchant data |
+| `read_only` | Third-party can read transaction and balance data; cannot initiate payments or payouts |
+| `none` | No third-party access (default) |
+
+```json
+POST /v1/platform/sub-merchants/{id}/third-party-access
+{
+  "app_id": "app_accounting_xyz",
+  "level": "read_only"
+}
+```
+
+---
+
+## Sub-merchant dashboard access
+
+By default, sub-merchants have no dashboard. You can grant access to a lightweight VINR-hosted sub-merchant portal showing their transactions, payouts, and tax documents:
+
+```json
+POST /v1/platform/sub-merchants/{id}/dashboard-access
+{
+  "enabled": true,
+  "login_link_ttl": 3600
+}
+
+→ { "url": "https://dashboard.vinr.com/sm/.../login?token=..." }
+```
+
+The URL is single-use and expires after `login_link_ttl` seconds.
+
+---
+
+## Platform webhooks
+
+| Event | Trigger |
+|---|---|
+| `sub_merchant.capability.updated` | A capability status changes |
+| `sub_merchant.limit.exceeded` | A transaction is declined due to a platform limit |
+| `sub_merchant.risk_rule.triggered` | An automated risk rule fires |
+| `sub_merchant.suspended` | Account suspended (by platform or VINR) |
+
+---
+
+## Next steps
+
+- [Verification & KYC/KYB](/docs/platforms/verification) — when VINR changes capability status automatically
+- [Fund management](/docs/platforms/fund-management) — reserve policies as a complement to risk rules

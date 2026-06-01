@@ -1,0 +1,307 @@
+---
+title: "Shopper insights"
+description: "Understand how shoppers buy across online, mobile, and in-store channels with VINR's unified transaction data."
+persona: ["developer", "finance-manager", "operations"]
+priority: "P2"
+lastUpdated: "2026-05-31"
+---
+
+Because VINR links every payment to a `shopperReference` regardless of which channel it originates from, you can analyse purchase behaviour across the full customer journey — not just within one channel. A shopper who browses online, buys in store, then requests a refund via pay-by-link appears as a single identity in your data, giving you a coherent picture of value, preferences, and conversion that per-channel analytics cannot provide.
+
+## What data is available
+
+VINR's unified transaction data exposes the following dimensions per shopper:
+
+- **Per-shopper spend by channel** — lifetime and period spend broken down by `online`, `in_person`, and `pay_by_link`.
+- **Channel preference over time** — how the mix of channels a shopper uses shifts across quarters or seasons.
+- **First-channel attribution** — which channel the shopper first transacted on, so you know where acquisition actually happened.
+- **Cross-channel conversion** — shoppers who interacted on one channel (e.g. browsed via an online session) and completed a purchase on another (e.g. in store).
+- **Return rates by channel** — refund and return frequency broken down by the originating channel.
+- **Average order value by channel** — whether a shopper spends more in store, online, or via link.
+
+All dimensions are available from the date the `shopperReference` was first used on your account.
+
+## Query shopper history
+
+`vinr.payments.list` accepts a `shopperReference` alongside date filters and returns every payment for that shopper across all channels. Each payment object includes a `channel` field (`'online' | 'in_person' | 'pay_by_link'`), `amount`, `currency`, and `createdAt`.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payments = await vinr.payments.list({
+  shopperReference: 'shopper_8A2KX',
+  fromDate: '2025-01-01',
+  toDate: '2026-01-01',
+});
+
+type ChannelKey = 'online' | 'in_person' | 'pay_by_link';
+
+const spendByChannel = payments.data.reduce<Record<ChannelKey, number>>(
+  (acc, payment) => {
+    const channel = payment.channel as ChannelKey;
+    acc[channel] = (acc[channel] ?? 0) + payment.amount;
+    return acc;
+  },
+  { online: 0, in_person: 0, pay_by_link: 0 },
+);
+
+console.log(spendByChannel);
+```
+
+The `payments.data` array is ordered by `createdAt` descending. Paginate using the `cursor` field on the response if the shopper has a large transaction history.
+
+### Payment object field reference
+
+<TypeTable
+  type={{
+    shopperReference: {
+      type: "string",
+      description: "Your stable identifier for the shopper — the join key across all channels.",
+    },
+    channel: {
+      type: "'online' | 'in_person' | 'pay_by_link'",
+      description: "The channel on which this payment was initiated.",
+    },
+    amount: {
+      type: "number",
+      description: "Payment amount in the currency's minor units (e.g. 7500 = €75.00).",
+    },
+    currency: {
+      type: "string",
+      description: "ISO 4217 three-letter currency code.",
+    },
+    createdAt: {
+      type: "string",
+      description: "ISO 8601 timestamp when the payment was created.",
+    },
+    "metadata.acquisitionChannel": {
+      type: "string",
+      description: "Optional. Set by your OMS at first purchase to record the marketing or acquisition channel. Preserved on every subsequent payment for the same shopper.",
+      default: "—",
+    },
+  }}
+/>
+
+## Dashboard reports
+
+The VINR Dashboard exposes pre-built shopper analytics under **Reporting → Shoppers**:
+
+- **Top spenders by channel** — ranked list filterable by date range and channel.
+- **Cohort analysis** — groups shoppers by their first-purchase month; tracks how many transact again in subsequent months and on which channels.
+- **Channel mix chart** — stacked bar chart showing what percentage of revenue each channel contributed per week or month.
+
+All views support CSV export. Use the export to feed downstream tools such as your CRM, marketing platform, or BI suite.
+
+<Callout type="info">
+Data in the Shoppers tab is available from the date a `shopperReference` was first used on your VINR account. Payments made before you started passing `shopperReference` are not retroactively attributed to a shopper profile.
+</Callout>
+
+## Segmentation
+
+The payments list endpoint accepts several filter parameters that let you target specific shopper segments.
+
+<Tabs items={["By channel", "By spend tier", "By location"]}>
+  <Tab value="By channel">
+    Filter for shoppers who have only ever bought in store and have never transacted online — a useful segment for targeted online acquisition campaigns.
+
+    ```typescript
+    const inStoreOnly = await vinr.payments.list({
+      channel: 'in_person',
+      fromDate: '2025-01-01',
+    });
+
+    const shopperEmails = inStoreOnly.data
+      .filter((p) => p.shopperEmail)
+      .map((p) => p.shopperEmail as string);
+    ```
+  </Tab>
+  <Tab value="By spend tier">
+    Identify high-value shoppers (lifetime spend above a threshold) across any channel for a VIP re-engagement flow.
+
+    ```typescript
+    const payments = await vinr.payments.list({ fromDate: '2024-01-01' });
+
+    const spendByRef = new Map<string, number>();
+    for (const p of payments.data) {
+      spendByRef.set(
+        p.shopperReference,
+        (spendByRef.get(p.shopperReference) ?? 0) + p.amount,
+      );
+    }
+
+    const highValue = [...spendByRef.entries()]
+      .filter(([, total]) => total >= 100000)
+      .map(([ref]) => ref);
+    ```
+  </Tab>
+  <Tab value="By location">
+    Scope a segment to shoppers who transacted at a specific physical location using the terminal's `locationId` stored in payment metadata.
+
+    ```typescript
+    const locationPayments = await vinr.payments.list({
+      channel: 'in_person',
+      'metadata.locationId': 'loc_MANHATTAN_5TH',
+      fromDate: '2025-06-01',
+    });
+    ```
+  </Tab>
+</Tabs>
+
+Once you have a list of `shopperReference` values or `shopperEmail` addresses, export them and upload to your email platform to run targeted campaigns — for example, inviting high-value in-store shoppers to your online loyalty programme.
+
+<Callout type="warn">
+GDPR and equivalent privacy laws restrict using personal data (including purchase history and email addresses) to purposes covered by your privacy notice and a valid legal basis. Ensure your notice explicitly describes cross-channel analytics and targeted marketing before exporting shopper data for campaign use.
+</Callout>
+
+## Attribution
+
+VINR supports both first-touch and last-touch attribution using fields on the payment object and its `metadata`.
+
+<Steps>
+  <Step>
+    **Set `acquisitionChannel` at first purchase.** When your OMS or marketing layer knows how a shopper was acquired (e.g. from a paid search click or an affiliate referral), write it into `metadata.acquisitionChannel` on the payment request.
+
+    ```typescript
+    const payment = await vinr.payments.create({
+      amount: 4900,
+      currency: 'GBP',
+      shopperReference: 'shopper_8A2KX',
+      metadata: {
+        acquisitionChannel: 'paid_search',
+        campaignId: 'gs_spring_2026',
+      },
+    });
+    ```
+  </Step>
+  <Step>
+    **VINR preserves metadata across the shopper's lifetime.** Every subsequent payment for `shopper_8A2KX` — regardless of channel — retains `metadata.acquisitionChannel` as set on the first payment, giving you a consistent first-touch signal across the full history.
+  </Step>
+  <Step>
+    **Read attribution on any payment.** When you query `vinr.payments.list({ shopperReference })`, each payment object includes the metadata blob. The first record (oldest `createdAt`) carries the original acquisition channel; the most recent carries the last-touch channel.
+
+    ```typescript
+    const history = await vinr.payments.list({
+      shopperReference: 'shopper_8A2KX',
+      fromDate: '2024-01-01',
+    });
+
+    const sorted = history.data.sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+
+    const firstTouch = sorted.at(0)?.metadata?.acquisitionChannel;
+    const lastTouch  = sorted.at(-1)?.channel;
+
+    console.log({ firstTouch, lastTouch });
+    ```
+  </Step>
+</Steps>
+
+If your OMS does not set `acquisitionChannel`, you can backfill it on existing payments using `vinr.payments.update({ id, metadata: { acquisitionChannel: '…' } })`. Backfilling does not affect the settled payment; it only updates the metadata record.
+
+<Accordions>
+<Accordion title="Advanced — webhook pipeline, cohort retention, and CRM integration">
+
+### Webhook-driven data pipeline
+
+For custom BI or a data warehouse, stream `payment.completed` events directly to your pipeline rather than polling the list endpoint. Each event payload includes the full payment object — `shopperReference`, `channel`, `amount`, `currency`, `metadata`, and timestamps.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+app.post('/webhooks/vinr', express.raw({ type: 'application/json' }), async (req, res) => {
+  const event = vinr.webhooks.constructEvent(
+    req.body,
+    req.headers['vinr-signature'] as string,
+    process.env.VINR_WEBHOOK_SECRET!,
+  );
+
+  if (event.type === 'payment.completed') {
+    const { shopperReference, channel, amount, currency, createdAt, metadata } = event.data;
+    await warehouse.insert('vinr_payments', {
+      shopperReference,
+      channel,
+      amount,
+      currency,
+      createdAt,
+      acquisitionChannel: metadata?.acquisitionChannel ?? null,
+    });
+  }
+
+  res.sendStatus(200);
+});
+```
+
+This approach gives you sub-minute latency from transaction to analytics and keeps your warehouse in sync without scheduled batch exports.
+
+### Cohort retention analysis
+
+With `shopperReference` and `createdAt` in your warehouse, build standard cohort retention tables: group shoppers by their first-purchase month (the cohort), then count how many made a second purchase in each subsequent month. You can further split cohorts by `channel` (first-purchase channel) to understand whether online acquirees or in-store acquirees show higher retention.
+
+```sql
+WITH first_purchase AS (
+  SELECT shopper_reference, DATE_TRUNC('month', MIN(created_at)) AS cohort_month
+  FROM vinr_payments
+  GROUP BY shopper_reference
+),
+activity AS (
+  SELECT p.shopper_reference, DATE_TRUNC('month', p.created_at) AS activity_month
+  FROM vinr_payments p
+)
+SELECT
+  f.cohort_month,
+  DATEDIFF('month', f.cohort_month, a.activity_month) AS months_since_first,
+  COUNT(DISTINCT a.shopper_reference) AS retained_shoppers
+FROM first_purchase f
+JOIN activity a USING (shopper_reference)
+GROUP BY 1, 2
+ORDER BY 1, 2;
+```
+
+### CRM integration via shopperReference
+
+`shopperReference` is your stable join key between VINR and your CRM. Map CRM contact IDs to `shopperReference` in a cross-reference table, then enrich CRM profiles with VINR spend and channel data:
+
+```typescript
+const payments = await vinr.payments.list({
+  shopperReference: crm.getVinrRef(contactId),
+  fromDate: '2024-01-01',
+});
+
+const crmUpdate = {
+  lifetimeSpendGbp: payments.data.reduce((sum, p) => sum + p.amount, 0) / 100,
+  preferredChannel: getMostFrequentChannel(payments.data),
+  lastPurchaseDate: payments.data[0]?.createdAt ?? null,
+};
+
+await crm.contacts.update(contactId, crmUpdate);
+```
+
+Keep the cross-reference table updated by writing `shopperReference` into your CRM at account creation or first purchase — retrofitting it later requires matching on email or order ID, which is more fragile.
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card
+    title="Shopper recognition"
+    href="/docs/payments/omnichannel/shopper-recognition"
+    description="Set up shopperReference so loyalty, saved cards, and purchase history follow each customer across channels."
+  />
+  <Card
+    title="Reporting"
+    href="/docs/operations/reporting"
+    description="Explore the full Reporting dashboard — revenue breakdowns, settlement reports, and custom date ranges."
+  />
+  <Card
+    title="Reconciliation"
+    href="/docs/operations/reconciliation"
+    description="Match VINR settlement data against your ledger and understand how cross-channel payments are batched."
+  />
+</Cards>

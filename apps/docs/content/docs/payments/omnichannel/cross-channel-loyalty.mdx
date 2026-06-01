@@ -1,0 +1,319 @@
+---
+title: "Cross-channel loyalty"
+description: "Earn and redeem loyalty points on every channel — online, in-store, and mobile — using VINR's unified commerce and engagement stack."
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+Loyalty is most powerful when it works the same way whether the customer buys online, taps at the terminal, or orders over the phone. VINR ties payment events to the engagement stack via `shopperReference` so points accrue and redeem across channels automatically — there is no separate loyalty middleware to maintain and no risk of a customer's in-store balance being invisible at your web checkout. See [Engagement](/docs/engagement) for the full loyalty feature set including tier configuration, reward catalogues, and expiry rules.
+
+## How it works
+
+<Steps>
+<Step>
+The customer is identified by their `shopperReference` at checkout on any channel — online, terminal, or phone. The reference is the stable, unique identifier that links every payment to the same loyalty ledger.
+</Step>
+<Step>
+When the payment settles, VINR fires a `payment.completed` webhook that includes the `shopperReference` alongside the payment amount and currency.
+</Step>
+<Step>
+Your backend — or VINR's no-code webhook integration — calls the Engagement API to credit points for the transaction.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+export async function handlePaymentCompleted(event: WebhookEvent) {
+  const { shopperReference, amount, currency, id: paymentId } = event.data;
+
+  if (!shopperReference) return;
+
+  await vinr.engagement.loyalty.credit({
+    shopperReference,
+    points: Math.floor(amount / 100),
+    currency,
+    sourceType: 'payment',
+    sourceId: paymentId,
+    metadata: {
+      channel: event.data.metadata?.channel ?? 'unknown',
+    },
+  });
+}
+```
+
+</Step>
+<Step>
+At the customer's next purchase the accrued balance is available to retrieve and redeem on any channel. The ledger is shared — points earned in store are visible online and vice versa.
+</Step>
+</Steps>
+
+<Callout type="info">
+Sending `shopperReference` on every payment is the only prerequisite. Points are credited asynchronously after settlement, so there is no latency impact on checkout.
+</Callout>
+
+## Earning points at the terminal
+
+Pass `shopperReference` on every terminal payment request. VINR links the terminal transaction to the shopper profile in the same way as an online payment, and the same `payment.completed` webhook fires with the reference included.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_london_01',
+  amount: 4200,
+  currency: 'GBP',
+  shopperReference: 'cust_abc123',
+  receiptData: {
+    pointsEarned: 42,
+    loyaltyBalanceAfter: 1380,
+  },
+});
+```
+
+`receiptData.pointsEarned` and `receiptData.loyaltyBalanceAfter` surface on the printed and digital receipts so staff can read the points earned aloud and the customer sees confirmation on their copy. Retrieve the current balance before creating the payment to populate `loyaltyBalanceAfter` accurately.
+
+For the full terminal payment reference see [Shopper recognition](/docs/payments/omnichannel/shopper-recognition).
+
+## Redeeming in store
+
+When a customer mentions their loyalty balance at the counter, staff retrieve it before creating the payment. The redemption value is applied as a discount; any remaining basket value is charged to the customer's card.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const balance = await vinr.engagement.loyalty.getBalance({
+  shopperReference: 'cust_abc123',
+});
+
+const redeemPoints = 500;
+const pointValue = balance.pointValueMinorUnit * redeemPoints;
+const remainingAmount = Math.max(0, 6000 - pointValue);
+
+await vinr.engagement.loyalty.redeem({
+  shopperReference: 'cust_abc123',
+  points: redeemPoints,
+  sourceType: 'payment',
+  metadata: { channel: 'in_store', staffId: 'staff_jsmith' },
+});
+
+const payment = await vinr.terminal.payments.create({
+  terminalId: 'term_london_01',
+  amount: remainingAmount,
+  currency: 'GBP',
+  shopperReference: 'cust_abc123',
+  metadata: {
+    loyaltyRedemption: true,
+    pointsRedeemed: redeemPoints,
+    pointsValueMinorUnit: pointValue,
+  },
+});
+```
+
+<Callout type="warn">
+Redeem points before creating the payment, not after. If the card payment fails after redemption, reverse the redemption with `vinr.engagement.loyalty.reverseRedemption` using the same `sourceId`.
+</Callout>
+
+## Redemption fields
+
+<TypeTable
+  type={{
+    shopperReference: {
+      type: "string",
+      description: "Stable identifier linking the customer to their loyalty ledger across all channels.",
+      required: true,
+    },
+    points: {
+      type: "number",
+      description: "Number of points to redeem or credit.",
+      required: true,
+    },
+    pointValueMinorUnit: {
+      type: "number",
+      description: "Value of one point in the minor currency unit (e.g. pence or cents). Returned by getBalance.",
+    },
+    sourceType: {
+      type: "'payment' | 'adjustment' | 'promotion'",
+      description: "Describes what triggered the credit or redemption.",
+      required: true,
+    },
+    sourceId: {
+      type: "string",
+      description: "The payment or event ID. Used for idempotency and reversal.",
+    },
+    metadata: {
+      type: "Record<string, string>",
+      description: "Arbitrary key-value pairs stored on the loyalty event. Useful for channel tagging and audit.",
+    },
+  }}
+/>
+
+## Redemption via terminal prompt
+
+Configure a terminal input prompt to collect the customer's loyalty identifier — their account number, email address, or phone number — without staff manually looking it up. VINR maps the input to a `shopperReference` and surfaces the balance for staff to confirm before redemption.
+
+<Tabs items={["Configure prompt", "Handle response"]}>
+<Tab value="Configure prompt">
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const session = await vinr.terminal.sessions.create({
+  terminalId: 'term_london_01',
+  prompts: [
+    {
+      id: 'loyalty_lookup',
+      type: 'text_input',
+      label: 'Loyalty number or email',
+      optional: true,
+      keyboardType: 'email_address',
+    },
+  ],
+});
+```
+
+</Tab>
+<Tab value="Handle response">
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+export async function handleSessionPromptResponse(event: WebhookEvent) {
+  const loyaltyInput = event.data.promptResponses?.loyalty_lookup;
+  if (!loyaltyInput) return;
+
+  const shopperReference = await vinr.engagement.loyalty.resolveIdentifier({
+    identifier: loyaltyInput,
+  });
+
+  const balance = await vinr.engagement.loyalty.getBalance({ shopperReference });
+
+  await vinr.terminal.sessions.update(event.data.sessionId, {
+    display: {
+      message: `Balance: ${balance.points} points (worth ${balance.formattedValue})`,
+      confirmAction: 'Redeem',
+      dismissAction: 'Skip',
+    },
+  });
+}
+```
+
+</Tab>
+</Tabs>
+
+See [Receipts and engagement](/docs/payments/in-person/receipts-and-engagement) for the full terminal prompts and display reference.
+
+## Cross-channel point expiry
+
+Points earned online and in store share the same ledger and the same expiry rules. There is no separate expiry clock per channel — a point earned at the terminal and a point earned at web checkout age at the same rate under the same policy.
+
+Configure expiry windows, rolling or fixed, in [Loyalty accounts](/docs/engagement/loyalty-accounts).
+
+<Callout type="info">
+When expiry is configured, the expiry date of the soonest-expiring points block appears on digital receipts automatically. No additional integration is required.
+</Callout>
+
+<Accordions>
+<Accordion title="Advanced — tiered loyalty, multi-currency points, and third-party programmes">
+
+**Tiered loyalty at the terminal**
+
+Tier status (Gold, Silver, Bronze) is stored on the shopper profile and returned by `getBalance`. Pass it into `receiptData` so it prints on the receipt and displays on the customer-facing terminal screen.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const balance = await vinr.engagement.loyalty.getBalance({
+  shopperReference: 'cust_abc123',
+});
+
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_london_01',
+  amount: 5500,
+  currency: 'GBP',
+  shopperReference: 'cust_abc123',
+  receiptData: {
+    loyaltyTier: balance.tier,
+    pointsEarned: 55,
+    loyaltyBalanceAfter: balance.points + 55,
+    tierProgressPercent: balance.tierProgressPercent,
+  },
+});
+```
+
+Tier multipliers (e.g. Gold earns 2× points per pound) are applied automatically by the Engagement API when you call `loyalty.credit` — you do not need to compute them in your webhook handler.
+
+**Multi-currency point values**
+
+Points are stored in a single ledger currency defined in your engagement configuration. When a customer earns points from a transaction in a different currency, VINR converts the transaction amount to the ledger currency using the settlement exchange rate before computing points.
+
+When redeeming, the `pointValueMinorUnit` returned by `getBalance` is always expressed in the currency of the current transaction, converted at the current mid-market rate. Pass the `transactionCurrency` parameter to get the correct value for the redemption context.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const balance = await vinr.engagement.loyalty.getBalance({
+  shopperReference: 'cust_abc123',
+  transactionCurrency: 'GBP',
+});
+```
+
+**Third-party loyalty programme integration via webhook**
+
+If you operate a third-party loyalty programme alongside VINR's native loyalty stack, forward `payment.completed` events to your external programme's API from your webhook handler. Use the `sourceId` field to deduplicate events and prevent double crediting if your endpoint receives a retry.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+export async function handlePaymentCompleted(event: WebhookEvent) {
+  const { shopperReference, amount, currency, id: paymentId } = event.data;
+
+  await Promise.all([
+    vinr.engagement.loyalty.credit({
+      shopperReference,
+      points: Math.floor(amount / 100),
+      currency,
+      sourceType: 'payment',
+      sourceId: paymentId,
+    }),
+    fetch('https://api.your-loyalty-programme.com/v1/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        memberId: shopperReference,
+        transactionId: paymentId,
+        amount,
+        currency,
+      }),
+    }),
+  ]);
+}
+```
+
+Register your webhook endpoint and event subscriptions in the [VINR Dashboard](https://dashboard.vinr.com) or via the [Webhooks API](/docs/integration/webhooks).
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Loyalty accounts" href="/docs/engagement/loyalty-accounts" description="Configure expiry rules, tier thresholds, point multipliers, and reward catalogues for your loyalty programme." />
+  <Card title="Shopper recognition" href="/docs/payments/omnichannel/shopper-recognition" description="Understand how shopperReference links payment methods and loyalty data across every channel." />
+  <Card title="Receipts and engagement" href="/docs/payments/in-person/receipts-and-engagement" description="Customise printed and digital receipts with loyalty balances, tier status, and terminal prompts." />
+</Cards>

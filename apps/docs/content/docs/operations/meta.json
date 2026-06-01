@@ -5,11 +5,15 @@
   "pages": [
     "index",
     "dashboard",
+    "account-management",
     "settlement",
     "payouts",
     "reconciliation",
     "reporting",
     "balances",
+    "risk-management",
+    "disputes",
+    "optimization",
     "monitoring-and-alerts"
   ]
 }

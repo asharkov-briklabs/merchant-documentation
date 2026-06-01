@@ -1,0 +1,254 @@
+---
+title: Tokenization
+description: How VINR replaces raw card numbers with tokens to reduce PCI scope and enable reuse.
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+Tokenization is the process by which VINR replaces a raw card number (PAN) with a surrogate identifier — the `pm_` token — that is safe to store, log, and transmit. The actual card credentials never transit your server after the initial collection, which collapses most integrations to the lightest PCI self-assessment tier and makes one-click checkout and recurring billing straightforward to build.
+
+## How tokenization works
+
+When a customer enters card details on a VINR-hosted surface (Hosted Checkout, Elements, or the mobile SDK), the card data is encrypted and sent directly to VINR's vault. Your server receives only a `pm_` identifier in return. Every subsequent operation — charging, saving for later, cancelling — references that token, never the underlying number.
+
+<TypeTable
+  type={{
+    id: { type: "string", description: "The token identifier, always prefixed pm_. Safe to store and log." },
+    type: { type: "string", description: "Instrument type. Currently 'card'; bank instruments use separate types." },
+    "card.brand": { type: "string", description: "Card network: visa, mastercard, amex, discover." },
+    "card.last4": { type: "string", description: "Last four digits of the PAN. The only part of the card number returned." },
+    "card.expMonth": { type: "integer", description: "Two-digit expiry month." },
+    "card.expYear": { type: "integer", description: "Four-digit expiry year." },
+    "networkToken.status": { type: "'active' | 'inactive' | 'suspended'", description: "Whether a network token (Visa VTS / Mastercard MDES) backs this stored method.", default: "active" },
+    customer: { type: "string | null", description: "The cust_ ID this method is attached to, if any.", default: "null" },
+  }}
+/>
+
+<Callout type="info">
+Tokens are not cards. A `pm_` ID carries no sensitive cardholder data and is safe to store in your database, emit in logs, and reference in API calls. The PAN is held exclusively inside VINR's PCI DSS Level 1 vault.
+</Callout>
+
+## Create a token
+
+The recommended path collects the card on a VINR-hosted surface and then saves the method to a customer record. The customer enters their details, VINR vaults them, and the resulting `pm_` ID is attached to the customer automatically.
+
+<Tabs items={["SDK", "REST"]}>
+<Tab value="SDK">
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const setup = await vinr.customers.setupMethod({
+  customerId: 'cust_9Kp2v...',
+  returnUrl: 'https://yoursite.com/wallet/saved',
+});
+
+// Redirect the customer to setup.checkoutUrl.
+// On return, the new token is attached to the customer.
+// setup.paymentMethod → "pm_7Xk4..."
+```
+
+</Tab>
+<Tab value="REST">
+
+```bash
+curl -X POST https://api.vinr.com/v1/customers/cust_9Kp2v.../setup-method \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -d "returnUrl=https://yoursite.com/wallet/saved"
+```
+
+</Tab>
+</Tabs>
+
+You can also save the method used during a payment by passing `savePaymentMethod: true` when you create the payment. The token is created and attached to the customer as part of the same request.
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 4500,
+  currency: 'EUR',
+  customer: 'cust_9Kp2v...',
+  description: 'Order #2084',
+  savePaymentMethod: true,
+  returnUrl: 'https://yoursite.com/checkout/complete',
+});
+
+// After the customer completes checkout:
+// payment.paymentMethod → "pm_7Xk4..."
+```
+
+## Pay with a token
+
+Pass the `pm_` ID as `paymentMethod` on `payments.create`. For off-session charges — where the customer is not present — also set `offSession: true` so VINR sends the correct credential flags to the network.
+
+<Tabs items={["SDK", "REST"]}>
+<Tab value="SDK">
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 4500,
+  currency: 'EUR',
+  customer: 'cust_9Kp2v...',
+  paymentMethod: 'pm_7Xk4...',
+  offSession: true,
+  confirm: true,
+  description: 'Order #2085',
+  idempotencyKey: 'order-2085-charge-1',
+});
+
+// payment.status → "completed" | "requires_action" | "failed"
+```
+
+</Tab>
+<Tab value="REST">
+
+```bash
+curl -X POST https://api.vinr.com/v1/payments \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -d "amount=4500" \
+  -d "currency=EUR" \
+  -d "customer=cust_9Kp2v..." \
+  -d "paymentMethod=pm_7Xk4..." \
+  -d "offSession=true" \
+  -d "confirm=true" \
+  -d "description=Order #2085" \
+  -d "idempotencyKey=order-2085-charge-1"
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="warn">
+If the charge returns `requires_action`, the issuer is requesting step-up authentication. Bring the customer back on-session to complete it — do not silently retry. See [SCA & 3D Secure](/docs/payments/strong-customer-authentication) for the handling pattern.
+</Callout>
+
+## Manage tokens
+
+Use the following operations to list, retrieve, and remove stored methods.
+
+<Steps>
+
+### List methods on a customer
+
+```typescript
+const methods = await vinr.paymentMethods.list({
+  customer: 'cust_9Kp2v...',
+  type: 'card',
+});
+
+for (const pm of methods.data) {
+  console.log(pm.id, pm.card.brand, pm.card.last4);
+  // → "pm_7Xk4..." "visa" "4242"
+}
+```
+
+### Retrieve a single method
+
+```typescript
+const pm = await vinr.paymentMethods.retrieve('pm_7Xk4...');
+
+// pm.networkToken.status → "active"
+// pm.card.expMonth       → 12
+// pm.card.expYear        → 2028
+```
+
+### Detach (delete) a method
+
+Detaching is immediate and irreversible. The token can no longer be charged. Remove a method as soon as a buyer deletes a card from their wallet.
+
+```typescript
+await vinr.paymentMethods.detach('pm_7Xk4...');
+```
+
+</Steps>
+
+<Callout type="info">
+Detaching does not issue a refund or cancel any active subscriptions that reference the token. Update those to a new method before detaching, or they will fail on the next billing cycle.
+</Callout>
+
+## Network tokenization
+
+Beyond VINR's own vault tokens, VINR participates in **Visa Token Service (VTS)** and **Mastercard Digital Enablement Service (MDES)**. When you store a card, VINR automatically requests a network token — a credential issued by the card scheme that is scoped to your merchant and replaces the underlying PAN on the network rail. This process is on by default and requires no flags or configuration changes from you.
+
+Network tokens deliver two concrete benefits:
+
+- **Higher authorization rates.** Issuers treat network-tokenized credentials as lower risk than raw PAN-based credentials, particularly on off-session charges, resulting in fewer soft declines.
+- **Automatic card renewal.** When a cardholder's card is reissued — whether the physical card is lost, the number is refreshed, or the expiry rolls — the card scheme updates the network token automatically. Recurring charges keep working without the customer re-entering their details.
+
+You can verify that a stored method is backed by an active network token by inspecting `paymentMethod.networkToken.status`:
+
+```typescript
+const pm = await vinr.paymentMethods.retrieve('pm_7Xk4...');
+
+if (pm.networkToken.status === 'active') {
+  // this method benefits from network tokenization
+}
+```
+
+Listen for the `payment_method.updated` webhook to be notified when a network token is refreshed or a card's details are updated by the scheme:
+
+```typescript
+const event = vinr.webhooks.verify(payload, signature); // x-vinr-signature header
+
+if (event.type === 'payment_method.updated') {
+  const pm = event.data.object;
+  console.log('Token refreshed for customer', pm.customer, '— method', pm.id);
+}
+```
+
+## Account updater
+
+For cards where a network token is not available — for example, prepaid cards and certain regional issuers — VINR runs an **account updater** service. On a nightly batch schedule, VINR queries card network update feeds for any expiry date changes, card number replacements, or account closures and applies them to your stored methods silently.
+
+When an update is applied, a `payment_method.updated` event fires with the same payload structure as a network token refresh. Your webhook handler does not need to distinguish between the two sources.
+
+<Callout type="info">
+Account updater coverage depends on the issuer's participation in the relevant card network update programme. Network tokenization is always preferred where available because it is real-time rather than batch.
+</Callout>
+
+<Accordions>
+<Accordion title="Enterprise: controlling token lifecycle">
+
+For high-compliance or regulated environments, VINR exposes lifecycle controls that let you pause, reactivate, or set a hard expiry on a stored method independently of the card's own expiry.
+
+**Pause a method** — prevents new charges without detaching the token. Use this when a customer disputes a charge and you need to freeze the method while the investigation is open.
+
+```typescript
+await vinr.paymentMethods.update('pm_7Xk4...', {
+  status: 'paused',
+  pauseReason: 'dispute_investigation',
+});
+```
+
+**Reactivate a paused method** — re-enables charging once the block is lifted.
+
+```typescript
+await vinr.paymentMethods.update('pm_7Xk4...', {
+  status: 'active',
+});
+```
+
+**Set a token expiry** — force an upper bound on how long a stored method can be used, independent of the card's physical expiry. Useful for trial periods and limited-consent mandates.
+
+```typescript
+await vinr.paymentMethods.update('pm_7Xk4...', {
+  expiresAt: '2026-12-31T23:59:59Z',
+});
+```
+
+After the `expiresAt` timestamp, the token is treated as detached — charges against it return a `payment_method_expired` error and the customer must re-consent. This is distinct from card expiry and is not updated by the account updater or network tokenization refresh.
+
+For the data-retention and consent obligations that apply to stored payment methods in the EU, see [PCI DSS](/docs/compliance/pci-dss). For mandate requirements on recurring charges against stored tokens, see [Recurring payments](/docs/payments/recurring-payments).
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Recurring payments" href="/docs/payments/recurring-payments" description="Charge stored tokens on a schedule with proper mandate handling." />
+  <Card title="Payment methods" href="/docs/payments/payment-methods" description="The full range of rails and instruments VINR supports." />
+  <Card title="PCI DSS" href="/docs/compliance/pci-dss" description="How VINR reduces your PCI scope and what remains your responsibility." />
+</Cards>

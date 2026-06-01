@@ -1,0 +1,121 @@
+---
+title: Major sports events
+description: Prepare your in-person payment acceptance for high-volume international sports events with diverse visitor payment preferences.
+---
+
+Major international sports events — World Cups, Olympics, Grand Prix races, and similar — concentrate tens of thousands of international visitors into a venue or city for a short period. These visitors arrive with unfamiliar cards, wallets, and currency preferences. Your payment terminals must be ready to accept all of them, reliably, at high throughput.
+
+This guide covers the preparation steps for merchants operating at or near major sports venues.
+
+## Accept international payments
+
+International visitors carry payment instruments from their home markets. Configuring broad acceptance before the event prevents lost sales at the point of purchase.
+
+### QR wallet payments
+
+Asian visitors commonly pay with QR-code-based wallets rather than cards:
+
+| Wallet | Primary market |
+|---|---|
+| Alipay | China |
+| WeChat Pay | China |
+| Alipay+ | Pan-Asian (TrueMoney, GCash, Touch 'n Go, etc.) |
+| PayPay | Japan |
+
+VINR terminals support QR wallet acceptance on devices running the current terminal software. Ensure your software is up to date before the event (see [Terminal hardware](/docs/payments/in-person/terminals)).
+
+### Dynamic currency conversion (DCC)
+
+DCC lets international cardholders see the transaction amount in their home currency at the point of sale. VINR supports DCC across 60+ currencies. When enabled, the terminal presents the cardholder with a choice — pay in the local currency (merchant rate) or their home currency (DCC rate). The cardholder's choice is always honored.
+
+Enable DCC in your VINR terminal settings at least 2 weeks before the event to allow configuration propagation.
+
+### Multi-network card acceptance
+
+Ensure your terminals are configured to accept all major global networks:
+- Visa, Mastercard (universal)
+- American Express (requires separate enablement — verify with your account manager)
+- China UnionPay (required for Chinese visitors paying by card rather than QR wallet)
+- JCB (required for Japanese visitors)
+
+Contact your VINR account manager to verify network enablement.
+
+## Serve international shoppers
+
+### Terminal language support
+
+VINR terminals detect the cardholder's card-issuing country and automatically switch the on-screen prompts to the corresponding language. No action is required from the cashier. Verify that your terminal software is current to ensure the language library is up to date.
+
+### Tipping
+
+If your operation accepts tips (food & beverage, hospitality services), ensure the tipping flow is enabled and configured with appropriate percentage suggestions. VINR's tipping configuration is set per terminal group in the dashboard.
+
+### Tax-free shopping
+
+If your venue or city participates in a tax-refund scheme for international tourists (VAT refund at departure), VINR can integrate with Global Blue and Planet at the point of sale to issue tax-refund vouchers. Contact your account manager to discuss enablement.
+
+## Ensure reliability during peak times
+
+Venue environments during major events are congested — cellular networks can be overloaded, and POS connectivity is stressed.
+
+### Cellular failover
+
+VINR terminals with built-in SIM support cellular failover: if your primary Ethernet or Wi-Fi connection drops, the terminal automatically switches to 4G/LTE to maintain acceptance. Verify that:
+- Your terminals have active SIM cards provisioned
+- The SIM provider has adequate coverage at the venue
+- Cellular failover is enabled in terminal configuration
+
+### Offline mode
+
+For environments where all connectivity is lost, VINR terminals can operate in offline mode: transactions are stored locally and authorized when connectivity is restored. Offline mode involves risk (approvals are subject to floor limits and offline authorization rules). Set up offline parameters in advance:
+- Configure your floor limit (the maximum transaction amount approved offline)
+- Confirm your staff are trained to handle offline receipts
+- Test the offline-to-online sync flow in staging before the event
+
+### Hardware preparation
+
+- **Order terminals 4–6 weeks in advance** — Lead times lengthen before major events. Don't assume next-day delivery.
+- **Have backup terminals on-site** — Plan for 10–15% hardware failure rate under heavy use. Keep spares.
+- **Push software updates before arrival** — Never update terminal firmware on event day. Complete updates at least 3 days before.
+- **Use regional endpoints** — VINR automatically routes to the nearest processing endpoint. If you are operating in a new country for the first time, confirm with your account manager that regional routing is correctly configured for your MID.
+
+## Optimize high-volume venues
+
+### Contactless and NFC
+
+For high-throughput points like food & beverage kiosks, contactless-only lanes can dramatically reduce queue time. VINR terminals support contactless limits that can be raised for specific terminal groups — contact your account manager to discuss limit adjustments ahead of the event.
+
+### Pay at seat
+
+For stadium concessions, VINR supports mobile handheld terminals that allow staff to take orders and collect payment at the seat. This requires handheld terminal provisioning — plan for this 6–8 weeks in advance.
+
+### Charitable giving at checkout
+
+VINR's [donations](/docs/payments/donations) feature allows you to present a rounding-up or fixed-amount donation prompt at checkout. This is particularly effective at events with a charitable partner.
+
+### Hotel and accommodation pre-authorizations
+
+If your property takes pre-authorizations at check-in (for incidentals), ensure your [authorization adjustment](/docs/payments/authorization-adjustment) flows are configured and tested. International cards may have lower pre-authorization limits — brief your front desk staff on how to handle partial holds.
+
+## Risk and operations
+
+### Transaction anomaly monitoring
+
+Configure VINR dashboard alerts for:
+- Sudden spike in declines from a specific terminal (may indicate a device issue)
+- Unusually high average transaction value (may indicate a data entry error or fraud attempt)
+- High velocity from a single card (fraud signal)
+
+### Refund reserves
+
+Post-event refund requests (cancellations, disputes) can be significant. Ensure your settlement account has a pre-event balance sufficient to cover projected refunds without triggering reserve holds.
+
+### Support resources
+
+- [Result codes](/docs/troubleshooting/result-codes) — interpret live decline codes during the event
+- [VINR status page](https://status.vinr.com) — infrastructure status
+- Your VINR account manager — escalation path for issues during the event (confirm the on-call contact 1 week before)
+
+<Callout type="warning">
+  For very large-scale events (stadium capacity >50,000), contact your VINR account manager at least 8 weeks before the event date to discuss dedicated support and capacity reservation.
+</Callout>

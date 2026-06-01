@@ -2,36 +2,41 @@
 title: Quick Start
 description: Make your first payment with VINR in 5 minutes.
 persona: ["developer"]
+priority: "P0"
 lastUpdated: "2026-05-31"
 ---
 
-## Overview
+This guide walks you through making your first payment using the VINR API. By the end you'll have a working integration running against the sandbox — no real money, no KYB required.
 
-This guide walks you through creating your first payment using the VINR API. By the end, you'll have a working integration in your test environment.
+<Callout type="info">
+This guide uses the **hosted** path: your server creates a payment, then redirects the customer to a VINR-hosted checkout page that handles the card form and 3DS. For embedded card fields or full API control, see [Integration overview](/docs/getting-started/integration-overview).
+</Callout>
 
 <Steps>
 
-### Get Your API Keys
+### Get your API keys
 
-Log in to your [VINR Dashboard](https://dashboard.vinr.com) and navigate to **Settings → API Keys**. You'll find:
+Log in to your [VINR Dashboard](https://dashboard.vinr.com) and navigate to **Settings → API Keys**. You'll find two keys per environment:
 
-- **Public Key** — Used client-side for checkout initialization
-- **Secret Key** — Used server-side for API calls (never expose this)
+- **Secret key** (`sk_test_…`) — server-side only. Used to create payments and verify webhooks. Never expose this to a browser.
+- **Public key** (`pk_test_…`) — safe for client-side use. Initialises the embedded Elements UI (not needed for the hosted path).
+
+Store the secret key in an environment variable — never commit it.
+
+```bash
+# .env
+VINR_SECRET_KEY=sk_test_xxxxxxxxxxxxxxxxxxxx
+```
 
 ### Install the SDK
 
+<Tabs items={["Node.js", "Python", "PHP"]}>
+<Tab value="Node.js">
 ```bash
-# Node.js
 npm install @vinr/sdk
-
-# Python
-pip install vinr
-
-# PHP
-composer require vinr/vinr-php
 ```
 
-Your project structure should look like this:
+Recommended project layout:
 
 <Files>
   <Folder name="src" defaultOpen>
@@ -44,9 +49,29 @@ Your project structure should look like this:
   </Folder>
   <File name="package.json" />
 </Files>
+</Tab>
+<Tab value="Python">
+```bash
+pip install vinr
+```
 
-### Create a Payment
+Requires Python 3.8+. The library is typed and works with any WSGI/ASGI framework (Flask, Django, FastAPI).
+</Tab>
+<Tab value="PHP">
+```bash
+composer require vinr/vinr-php
+```
 
+Requires PHP 8.1+ and the `ext-curl` extension.
+</Tab>
+</Tabs>
+
+### Create a payment
+
+Create a `pay_` object server-side and redirect your customer to the returned `checkoutUrl`. VINR collects the card details and handles 3DS on your behalf.
+
+<Tabs items={["Node.js", "Python", "PHP"]}>
+<Tab value="Node.js">
 ```typescript
 import { Vinr } from '@vinr/sdk';
 
@@ -55,29 +80,70 @@ const vinr = new Vinr({
 });
 
 const payment = await vinr.payments.create({
-  amount: 1000, // Amount in minor units (€10.00)
+  amount: 1000, // Minor units — €10.00
   currency: 'EUR',
   description: 'Order #1234',
   returnUrl: 'https://yoursite.com/payment/complete',
-  metadata: {
-    orderId: '1234',
-  },
+  metadata: { orderId: '1234' },
 });
 
-// Redirect the customer to payment.checkoutUrl
-console.log(payment.checkoutUrl);
+// Redirect the customer
+return Response.redirect(payment.checkoutUrl);
 ```
+</Tab>
+<Tab value="Python">
+```python
+import vinr
+import os
 
-### Handle the Webhook
+client = vinr.Client(secret_key=os.environ["VINR_SECRET_KEY"])
 
+payment = client.payments.create(
+    amount=1000,  # Minor units — €10.00
+    currency="EUR",
+    description="Order #1234",
+    return_url="https://yoursite.com/payment/complete",
+    metadata={"order_id": "1234"},
+)
+
+# Redirect the customer
+return redirect(payment.checkout_url)
+```
+</Tab>
+<Tab value="PHP">
+```php
+<?php
+require_once 'vendor/autoload.php';
+
+$vinr = new \Vinr\Client([
+    'secret_key' => getenv('VINR_SECRET_KEY'),
+]);
+
+$payment = $vinr->payments->create([
+    'amount'      => 1000, // Minor units — €10.00
+    'currency'    => 'EUR',
+    'description' => 'Order #1234',
+    'return_url'  => 'https://yoursite.com/payment/complete',
+    'metadata'    => ['order_id' => '1234'],
+]);
+
+// Redirect the customer
+header('Location: ' . $payment->checkout_url);
+```
+</Tab>
+</Tabs>
+
+### Handle the webhook
+
+After the customer completes checkout, VINR delivers a `payment.completed` (or `payment.failed`) event to your webhook endpoint. This is the authoritative signal — do not fulfil orders based on the redirect alone.
+
+<Tabs items={["Node.js", "Python", "PHP"]}>
+<Tab value="Node.js">
 ```typescript
 import { Vinr } from '@vinr/sdk';
 
-const vinr = new Vinr({
-  secretKey: process.env.VINR_SECRET_KEY,
-});
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-// In your webhook endpoint handler
 export async function POST(req: Request) {
   const payload = await req.text();
   const signature = req.headers.get('x-vinr-signature');
@@ -86,11 +152,9 @@ export async function POST(req: Request) {
 
   switch (event.type) {
     case 'payment.completed':
-      // Mark order as paid
       await fulfillOrder(event.data.metadata.orderId);
       break;
     case 'payment.failed':
-      // Handle failure
       await handleFailedPayment(event.data);
       break;
   }
@@ -98,21 +162,83 @@ export async function POST(req: Request) {
   return new Response('OK', { status: 200 });
 }
 ```
+</Tab>
+<Tab value="Python">
+```python
+import vinr
+import os
+from flask import Flask, request, Response
 
-### Test Your Integration
+client = vinr.Client(secret_key=os.environ["VINR_SECRET_KEY"])
+app = Flask(__name__)
 
-Use these test card numbers in the sandbox environment:
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    payload = request.get_data(as_text=True)
+    signature = request.headers.get("X-Vinr-Signature")
 
-| Card Number | Result |
+    event = client.webhooks.verify(payload, signature)
+
+    if event.type == "payment.completed":
+        fulfill_order(event.data.metadata["order_id"])
+    elif event.type == "payment.failed":
+        handle_failed_payment(event.data)
+
+    return Response("OK", status=200)
+```
+</Tab>
+<Tab value="PHP">
+```php
+<?php
+require_once 'vendor/autoload.php';
+
+$vinr = new \Vinr\Client([
+    'secret_key' => getenv('VINR_SECRET_KEY'),
+]);
+
+$payload   = file_get_contents('php://input');
+$signature = $_SERVER['HTTP_X_VINR_SIGNATURE'] ?? '';
+
+$event = $vinr->webhooks->verify($payload, $signature);
+
+switch ($event->type) {
+    case 'payment.completed':
+        fulfillOrder($event->data->metadata->order_id);
+        break;
+    case 'payment.failed':
+        handleFailedPayment($event->data);
+        break;
+}
+
+http_response_code(200);
+echo 'OK';
+```
+</Tab>
+</Tabs>
+
+<Callout type="warn">
+Always verify the `x-vinr-signature` header before trusting the payload. Reject any request where verification fails — return `400`, not `200`.
+</Callout>
+
+### Test your integration
+
+Use these test card numbers in the sandbox. Any future expiry date and any 3-digit CVV are accepted.
+
+| Card number | Result |
 |---|---|
 | `4242 4242 4242 4242` | Successful payment |
 | `4000 0000 0000 0002` | Declined |
-| `4000 0000 0000 3220` | 3D Secure authentication |
+| `4000 0000 0000 3220` | 3DS challenge required |
+
+Trigger a test payment, confirm your webhook fires and returns `200`, then check that your fulfilment logic ran. See [Test mode & sandbox](/docs/getting-started/test-mode) for the full set of test cards and simulated failure scenarios.
 
 </Steps>
 
-## Next Steps
+## Next steps
 
-- [Authentication](/docs/getting-started/authentication) — Secure your API keys
-- [Webhooks](/docs/integration/webhooks) — Set up reliable webhook handling
-- [Payment Methods](/docs/payments/payment-methods) — Explore all supported methods
+<Cards>
+  <Card title="Authentication" href="/docs/getting-started/authentication" description="Scope, rotate, and secure your API keys." />
+  <Card title="Integration overview" href="/docs/getting-started/integration-overview" description="Move from hosted to embedded or API-direct when you're ready." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Signature verification, retries, and idempotent event handling." />
+  <Card title="Payment methods" href="/docs/payments/payment-methods" description="Cards, bank transfers, wallets — all supported methods." />
+</Cards>

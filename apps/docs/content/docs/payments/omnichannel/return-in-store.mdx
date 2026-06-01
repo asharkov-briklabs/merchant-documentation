@@ -1,0 +1,250 @@
+---
+title: "Buy online, return in store"
+description: "Process refunds for online purchases at the physical counter — BORIS / cross-channel returns."
+persona: ["developer", "operations"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+BORIS (Buy Online, Return In Store) lets a customer complete a purchase on your website or app and then walk into any physical location to return it. VINR links the original online payment to your in-store POS via `shopperReference` or order ID — so the refund credits the original payment method (card, wallet, or bank account) without the customer needing to produce the physical card. No duplicate customer records, no manual cross-referencing: one lookup surfaces the order and one API call closes it.
+
+## Look up the original payment
+
+Staff begin a return by searching for the order at the POS counter. You can locate the original payment by `shopperReference` (your customer's stable ID) or by the VINR payment ID directly.
+
+<Steps>
+  <Step>
+    Customer arrives at the counter and provides their order number, email address, or the name on the order.
+  </Step>
+  <Step>
+    Staff enters the identifier into your POS. Your POS calls `vinr.payments.list` with `shopperReference`, or `vinr.payments.retrieve` if the `pay_` ID is embedded in the order barcode.
+  </Step>
+  <Step>
+    The POS displays the matching order — amount, items, date, and payment method — for staff to confirm with the customer before issuing the refund.
+  </Step>
+</Steps>
+
+<Tabs items={["List by shopperReference", "Retrieve by payment ID"]}>
+<Tab value="List by shopperReference">
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payments = await vinr.payments.list({
+  shopperReference: 'shopper_ada_lovelace',
+  limit: 10,
+});
+
+const original = payments.data.find(
+  (p) => p.metadata?.orderId === 'ORD-8821',
+);
+
+// original.id     → "pay_3Nf8x2a..."
+// original.amount → 4900
+// original.status → "captured"
+```
+
+</Tab>
+<Tab value="Retrieve by payment ID">
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.retrieve('pay_3Nf8x2a');
+
+// payment.shopperReference → "shopper_ada_lovelace"
+// payment.amount           → 4900
+// payment.status           → "captured"
+```
+
+</Tab>
+</Tabs>
+
+## Issue the refund
+
+Once the original payment is confirmed, create the refund against its `pay_` ID. VINR routes the credit back to the payment method on file — card, digital wallet, or bank account — without requiring the customer to present the original card at the terminal.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const refund = await vinr.refunds.create({
+  payment: 'pay_3Nf8x2a',
+  amount: 4900,
+  reason: 'requested_by_customer',
+  metadata: {
+    shopperReference: 'shopper_ada_lovelace',
+    originalOrderId: 'ORD-8821',
+    returnLocationId: 'store_london_oxford_st',
+  },
+});
+
+// refund.id     → "re_7Qp2m1c..."
+// refund.status → "pending"
+```
+
+<Callout type="info">
+The customer does not need to present the original card. The refund travels back to the stored payment token that was used at checkout — the same card or wallet, regardless of which terminal or location processes the return.
+</Callout>
+
+## Refund to a different method
+
+If the customer prefers store credit or a gift card instead of a refund to their original payment method, pass `refundMethod: 'store_credit'` in the request. VINR records the refund disposition and marks the original payment as refunded in reconciliation, but the credit is disbursed by your own gift-card or loyalty system.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const refund = await vinr.refunds.create({
+  payment: 'pay_3Nf8x2a',
+  amount: 4900,
+  refundMethod: 'store_credit',
+  reason: 'requested_by_customer',
+  metadata: {
+    shopperReference: 'shopper_ada_lovelace',
+    originalOrderId: 'ORD-8821',
+  },
+});
+
+// refund.refundMethod → "store_credit"
+// refund.status       → "succeeded"
+```
+
+<Callout type="warn">
+Store credit refunds require your own gift-card or loyalty system to receive and honour the credit. VINR does not manage gift-card balances. Your system must listen for the `refund.succeeded` webhook with `refundMethod: store_credit` and issue the credit to the customer's account.
+</Callout>
+
+## Receipt
+
+Issue a return receipt at the counter — on paper from a receipt printer or digitally by email or SMS — using the VINR terminal or your own POS printer. Configure delivery channels per location under **Settings → Receipts** in the VINR Dashboard, or see [Receipts and engagement](/docs/payments/in-person/receipts-and-engagement) for the full configuration reference.
+
+The refund receipt automatically includes:
+
+- The original order reference (`metadata.originalOrderId`)
+- The original transaction date and payment method
+- The refund amount and the `re_` refund ID
+- The store location and staff identifier if passed in `metadata`
+
+Customers can match the `re_` ID against their bank or wallet statement to confirm the credit has been applied.
+
+## Exchange flow
+
+An exchange — where the customer returns one item and immediately purchases a replacement — requires two operations: a refund on the original payment and a new payment for the replacement item. Link them with `metadata.originalOrderId` so both transactions appear together in reconciliation and reporting.
+
+<Steps>
+  <Step>
+    Create a refund against the original `pay_` ID for the item being returned (full or partial amount).
+  </Step>
+  <Step>
+    Create a new payment for the replacement item at the terminal using `vinr.payments.create` or your POS payment flow. Include the same `shopperReference` and set `metadata.originalOrderId` to the original order ID.
+  </Step>
+  <Step>
+    Both the refund and the new payment share the same `shopperReference`, so they appear together in the shopper's payment history and in your reconciliation export under the same customer record.
+  </Step>
+</Steps>
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const refund = await vinr.refunds.create({
+  payment: 'pay_3Nf8x2a',
+  amount: 4900,
+  reason: 'requested_by_customer',
+  metadata: {
+    shopperReference: 'shopper_ada_lovelace',
+    originalOrderId: 'ORD-8821',
+  },
+});
+
+const replacement = await vinr.payments.create({
+  amount: 5500,
+  currency: 'gbp',
+  shopperReference: 'shopper_ada_lovelace',
+  metadata: {
+    originalOrderId: 'ORD-8821',
+    exchangeRefundId: refund.id,
+  },
+});
+```
+
+## Refund field reference
+
+<TypeTable
+  type={{
+    payment: { type: "string", description: "ID of the original online payment (pay_…). Required." },
+    amount: { type: "integer", description: "Amount to refund in minor units. Omit to refund the full remaining balance." },
+    shopperReference: { type: "string", description: "Your stable customer identifier. Used to look up the original payment and to group the refund with the customer's payment history." },
+    "metadata.originalOrderId": { type: "string", description: "Your order ID. Included on the return receipt and used to join refund and replacement payment in reconciliation." },
+    reason: { type: "enum", description: "Optional. One of requested_by_customer, duplicate, fraudulent, product_not_received." },
+    refundMethod: { type: "enum", description: "Optional. Defaults to the original payment method. Pass store_credit to divert the refund to your gift-card or loyalty system." },
+  }}
+/>
+
+<Accordions>
+<Accordion title="Advanced — Partial returns, return fraud detection, and cross-border returns">
+
+**Partial returns**
+
+When a customer returns only some items from a multi-item order, pass the sub-total for the returned items as `amount`. You can issue multiple partial refunds against the same `pay_` ID until the full original amount has been refunded. VINR rejects any request that would exceed the remaining refundable balance with a `422 amount_too_large` error.
+
+```typescript
+const partialRefund = await vinr.refunds.create({
+  payment: 'pay_3Nf8x2a',
+  amount: 1900,
+  reason: 'requested_by_customer',
+  metadata: { returnedSkus: 'SKU-42,SKU-17', originalOrderId: 'ORD-8821' },
+});
+```
+
+To display the outstanding refundable balance before prompting staff, read `payment.refundableAmount` from the retrieved payment object.
+
+**Return fraud detection**
+
+Shoppers with unusually high return rates can expose you to return fraud. Use VINR's payment history to surface patterns before issuing refunds:
+
+1. Call `vinr.payments.list({ shopperReference })` to retrieve the shopper's payment history.
+2. Count refunds over a rolling window (e.g. last 90 days) against total purchases.
+3. If the ratio exceeds your threshold, route the return to a supervisor review queue rather than completing it automatically.
+
+You can also attach a `riskScore` to the refund's `metadata` for downstream analytics and integrate with your fraud tooling via the `refund.created` webhook.
+
+**Cross-border returns**
+
+When the original online payment was made in a currency that differs from the store's local currency (for example, a tourist pays in EUR online but returns at a GBP store), VINR refunds in the currency of the original payment. The shopper receives the EUR amount on their statement; your store's payout is adjusted at the exchange rate used at the time of the original transaction.
+
+To confirm the refund currency before presenting the receipt:
+
+```typescript
+const payment = await vinr.payments.retrieve('pay_3Nf8x2a');
+
+// payment.currency → "eur"
+// payment.amount   → 4900  (€49.00)
+
+const refund = await vinr.refunds.create({
+  payment: payment.id,
+  amount: payment.amount,
+  reason: 'requested_by_customer',
+  metadata: { storeCountry: 'GB', originalOrderId: 'ORD-8821' },
+});
+```
+
+If your store cannot display foreign-currency amounts, use the `payment.amountConverted` and `payment.currencyConverted` fields (populated when dynamic currency conversion was applied at checkout) to show the equivalent local amount on the receipt for the customer's reference.
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Refunds" href="/docs/payments/refunds" description="Shared refund concepts: status lifecycle, partial refunds, fees, and failed refunds." />
+  <Card title="Shopper recognition" href="/docs/payments/omnichannel/shopper-recognition" description="Identify returning customers across channels using shopperReference and stored payment methods." />
+  <Card title="In-person refunds" href="/docs/payments/in-person/refunds" description="Referenced and unreferenced refunds for card-present transactions at the terminal." />
+</Cards>

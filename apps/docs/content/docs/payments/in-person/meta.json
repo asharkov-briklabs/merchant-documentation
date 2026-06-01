@@ -1,0 +1,17 @@
+{
+  "title": "In-person payments",
+  "pages": [
+    "index",
+    "terminals",
+    "architecture",
+    "accept-a-payment",
+    "refunds",
+    "tap-to-pay",
+    "features",
+    "receipts-and-engagement",
+    "mobile-solutions",
+    "standalone-terminal",
+    "terminal-management",
+    "go-live"
+  ]
+}

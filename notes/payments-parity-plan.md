@@ -1,6 +1,6 @@
 # Plan: Payments docs + API to Stripe/Adyen parity
 
-**Status:** Proposed — execute phase by phase
+**Status:** COMPLETE — all phases 0–3, 5–7 shipped 2026-06-01
 **Date:** 2026-05-31
 **Owner:** Alex
 **Sources reviewed:**
@@ -10,6 +10,7 @@
 - Adyen — https://docs.adyen.com/point-of-sale
 - Adyen — https://docs.adyen.com/unified-commerce
 - Adyen — https://docs.adyen.com/plugins
+- Viva — https://developer.viva.com/
 
 ---
 
@@ -77,11 +78,12 @@ Cross-channel shopper recognition & shared tokens, endless aisle, click & collec
 buy-online-return-in-store (BORIS), pay-by-link in-store, MOTO, cross-channel loyalty
 (bridges to the existing **engagement** product), digital receipts, shopper insights.
 
-### Gap D — Platforms & Marketplaces (NEW product) — missing
-Stripe Connect / Adyen for Platforms equivalent. The Payments API already exposes
-`on_behalf_of`; there is no product doc. Connected-account onboarding (ties to
-`compliance/kyc-kyb`), charge/split models, sub-merchant payouts, fees/revenue share,
-per-account reporting.
+### Gap D — Platforms & Marketplaces — DEFERRED (not this round)
+Stripe Connect, Adyen for Platforms, and Viva Marketplaces are all **separate top-level
+products** in each provider's docs, not sub-sections of Payments. VINR's equivalent should
+follow the same pattern: a new top-level category with its own `CategoryEnum` entry,
+`CATEGORIES` registry entry, and `ROOTS` product-switcher entry — a larger taxonomy surgery
+that warrants its own planning pass. Deferred out of the payments parity scope.
 
 ### Gap E — Plugins / Pre-built integrations (NEW product) — missing
 Built-by-VINR vs partner plugins for Shopify, WooCommerce, Adobe Commerce (Magento),
@@ -142,21 +144,21 @@ Each phase is independently shippable and must end CI-green:
 ### Phase 1 — Deepen online payments (Gap A) — no taxonomy changes
 Extends existing folders; lowest risk; do first.
 New pages in `content/docs/payments/`:
-- [ ] `tokenization.mdx` — create/store tokens, token payments, network tokenization,
+- [x] `tokenization.mdx` — create/store tokens, token payments, network tokenization,
       account updater (split from/links to `recurring-payments`).
-- [ ] `authorization-adjustment.mdx` — increase/decrease an auth, reversal vs void.
-- [ ] `surcharging.mdx`, `installments.mdx`, `partial-authorization.mdx`,
+- [x] `authorization-adjustment.mdx` — increase/decrease an auth, reversal vs void.
+- [x] `surcharging.mdx`, `installments.mdx`, `partial-authorization.mdx`,
       `partial-payments.mdx`, `donations.mdx`, `auto-rescue.mdx` (feature pages; some may
       merge — judge length).
-- [ ] Expand `strong-customer-authentication.mdx` (or new `3d-secure.mdx`): native vs
+- [x] New `3d-secure.mdx` (or new `3d-secure.mdx`): native vs
       redirect, data-only, standalone.
 New page in `content/docs/integration/`:
-- [ ] `integration-models.mdx` — Sessions vs Advanced flow; Drop-in vs Components vs
+- [x] `integration-models.mdx` — Sessions vs Advanced flow; Drop-in vs Components vs
       API-only; decision matrix. Cross-link Checkout/Elements.
-- [ ] `advanced-flow.mdx` — lower-level orchestration (payment session → details → result).
+- [x] `advanced-flow.mdx` — lower-level orchestration (payment session → details → result).
 New page in `content/docs/troubleshooting/` (or api-reference):
-- [ ] `result-codes.mdx` — authorization result + refusal-reason reference table.
-- [ ] Update `payments/meta.json`, `integration/meta.json`, run `check-links`.
+- [x] `result-codes.mdx` — authorization result + refusal-reason reference table.
+- [x] Update `payments/meta.json`, `integration/meta.json`, run `check-links`.
 
 ### Phase 2 — In-person / Point of Sale (Gap B)
 Create `content/docs/payments/in-person/` + taxonomy edits (§4):
@@ -186,15 +188,11 @@ Create `content/docs/payments/omnichannel/`:
 - [ ] `digital-receipts.mdx`, `shopper-insights.mdx`.
 - [ ] `meta.json`; taxonomy sync; `check-links`.
 
-### Phase 4 — Platforms & Marketplaces (Gap D)
-Create `content/docs/payments/platforms/`:
-- [ ] `index.mdx` — platform vs marketplace; when to use.
-- [ ] `connected-accounts.mdx` — onboarding/KYC-KYB (link `compliance/kyc-kyb`).
-- [ ] `charges-and-splits.mdx` — direct/destination charges, `on_behalf_of`, splits.
-- [ ] `payouts.mdx` — paying out to sub-merchants (link `operations/payouts`).
-- [ ] `fees-and-revenue-share.mdx`.
-- [ ] `reporting.mdx` — per-account reconciliation.
-- [ ] `meta.json`; taxonomy sync; `check-links`.
+### Phase 4 — Platforms & Marketplaces — DEFERRED
+Not in this round. All three reference providers (Stripe Connect, Adyen for Platforms,
+Viva Marketplaces) treat this as a separate top-level product. When planned, it will need
+its own `CategoryEnum` / `CATEGORIES` / `ROOTS` entries — outside the `payments/` nesting
+strategy used here. Track separately.
 
 ### Phase 5 — Plugins (Gap E)
 Create `content/docs/payments/plugins/` using one template per plugin:
@@ -213,14 +211,14 @@ Add to `content/docs/api-reference/` + `api-reference/meta.json` groups:
 - [ ] `terminals.mdx`, `terminal-payments.mdx`, `terminal-actions.mdx` (new "In-person
       API" group).
 - [ ] `tokens.mdx` (network-token / payment-instrument object).
-- [ ] `connected-accounts.mdx`, `transfers.mdx` (new "Platforms API" group).
 - [ ] Extend `payments.mdx` with reversal / authorization-adjustment endpoints.
 - [ ] Keep the "Illustrative content" callout; reconcile with OpenAPI later (TODO #1, #5).
+- Note: `connected-accounts.mdx` and `transfers.mdx` are deferred with Phase 4.
 
 ### Phase 7 — Glue, guides, polish
 - [ ] New task guides in `content/docs/guides/`: `collect-in-person-payment.mdx`,
-      `go-omnichannel.mdx`, `onboard-a-platform-merchant.mdx`,
-      `install-the-shopify-plugin.mdx`.
+      `go-omnichannel.mdx`, `install-the-woocommerce-plugin.mdx`.
+      (`onboard-a-platform-merchant.mdx` deferred with Phase 4.)
 - [ ] Homepage grids + persona pages: surface new products.
 - [ ] `changelog/index.mdx` entry summarizing the expansion.
 - [ ] Final full CI pass; spot-check nav, search facets, mega-menu, mobile.
@@ -244,7 +242,10 @@ Add to `content/docs/api-reference/` + `api-reference/meta.json` groups:
 
 ## 8. Decisions & remaining questions
 - [x] **Structure:** nest under `payments/` (not new top-level products). DECIDED 2026-05-31.
-- [x] **Scope:** all phases (1–7) in scope.
+- [x] **Scope:** Phases 0–3, 5–7 in scope this round. Phase 4 deferred. DECIDED 2026-05-31.
+- [x] **Phase 4 (Platforms & Marketplaces) deferred:** Stripe, Adyen, and Viva all ship
+      this as a separate top-level product, not under Payments. VINR should follow suit;
+      requires new `CategoryEnum`/`CATEGORIES`/`ROOTS` — out of scope here. DECIDED 2026-05-31.
 - [x] **Plugin priority (Phase 5):** WooCommerce → Adobe Commerce → SFCC. DECIDED.
 - [x] **In-person hardware:** Nexgo N92, Nexgo N86Pro, Nexgo CT20, Nexgo CT20P,
       Ciontek CM30. DECIDED.

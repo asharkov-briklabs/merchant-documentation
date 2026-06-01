@@ -1,0 +1,233 @@
+---
+title: Installments
+description: Split a purchase into equal monthly payments while receiving the full amount upfront.
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+Installments let customers split a single purchase into equal monthly payments while VINR advances the full purchase amount to you immediately after the transaction settles. Credit risk on the repayment schedule stays with the card issuer or BNPL provider — not with your business. From your perspective an installment payment settles like any other card charge.
+
+## Eligibility
+
+Installment programs are offered by participating card issuers and BNPL networks. Availability varies by market and currency.
+
+| Market | Supported currencies | Participating brands |
+|---|---|---|
+| European Union | EUR | Visa, Mastercard (select issuers) |
+| United Kingdom | GBP | Visa, Mastercard (select issuers) |
+| United States | USD | Visa, Mastercard, American Express |
+| Brazil | BRL | Visa, Mastercard, Elo |
+| Mexico | MXN | Visa, Mastercard |
+
+<Callout type="info">
+Whether installment options appear at checkout depends on both the issuer's participation in the program and the individual cardholder's account terms. A card brand appearing in the table above does not guarantee every cardholder on that brand will see installment offers.
+</Callout>
+
+## Offer installments at checkout
+
+Pass `installments: { enabled: true }` when creating a payment. The VINR hosted checkout automatically presents available installment plans when the customer's card supports them. If the card does not qualify, checkout proceeds as a standard one-shot payment.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 60000,                  // €600.00
+  currency: 'EUR',
+  description: 'VINR Pro annual kit',
+  returnUrl: 'https://yoursite.com/orders/complete',
+  installments: {
+    enabled: true,
+  },
+});
+
+// Redirect the customer to payment.checkoutUrl.
+// The hosted checkout surfaces installment plans if the card is eligible.
+```
+
+After the customer selects a plan and authenticates, the payment moves to `completed` and `payment.completed` fires. The `installments` object on the completed payment reflects the plan the customer chose.
+
+## Specify a plan
+
+To pre-select the number of installments instead of letting the customer choose, pass `count` alongside `enabled: true`. If the issuer supports the requested count it is applied automatically; otherwise VINR falls back to the closest available option and records the resolved plan on the payment object.
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 60000,
+  currency: 'EUR',
+  description: 'VINR Pro annual kit',
+  returnUrl: 'https://yoursite.com/orders/complete',
+  installments: {
+    enabled: true,
+    count: 3,
+    interval: 'month',
+    firstPaymentDate: '2026-06-01',
+  },
+});
+```
+
+<TypeTable
+  type={{
+    enabled: { type: "boolean", description: "Turn on installment plan selection at checkout. Required to use any other installment field.", default: "false" },
+    count: { type: "integer", description: "Number of installments to request (e.g. 3, 6, 12). The issuer may resolve to the nearest supported value.", default: "issuer default" },
+    interval: { type: "'month'", description: "Interval between payments. Only monthly intervals are currently supported.", default: "month" },
+    firstPaymentDate: { type: "string (ISO 8601 date)", description: "Requested date for the first installment. Must be today or a future date. Ignored if the issuer controls the schedule.", default: "issuer controlled" },
+  }}
+/>
+
+## Merchant settlement
+
+When a customer completes an installment payment, VINR settles the full purchase amount to your account in the next regular settlement cycle — not spread across the installment schedule. The only difference from a standard card payment is the processing fee structure: an installment fee applies in addition to the base interchange, and both are shown as separate line items on your statement.
+
+<Tabs items={["Settlement record", "Fee breakdown"]}>
+<Tab value="Settlement record">
+
+The settlement record for an installment payment includes the resolved plan details:
+
+```typescript
+const payment = await vinr.payments.retrieve('pay_3Nf8x2a');
+
+console.log(payment.installments);
+// {
+//   enabled: true,
+//   count: 3,
+//   interval: 'month',
+//   firstPaymentDate: '2026-06-01',
+//   resolvedCount: 3,         // plan confirmed by the issuer
+//   issuerProgram: 'mastercard_installments'
+// }
+```
+
+</Tab>
+<Tab value="Fee breakdown">
+
+```typescript
+const payment = await vinr.payments.retrieve('pay_3Nf8x2a');
+
+console.log(payment.feeBreakdown);
+// {
+//   processingFee: 174,         // base interchange, minor units
+//   installmentFee: 90,         // installment program surcharge
+//   totalFee: 264
+// }
+```
+
+</Tab>
+</Tabs>
+
+Installment transactions appear in [reconciliation](/docs/operations/reconciliation) with a `payment_method_type` of `card_installment`. Use this field to filter or aggregate installment volume in your reporting.
+
+## Refunds on installment payments
+
+Refunds interact with installment plans at the issuer level. VINR processes the refund on your side identically to any card refund — the adjustment to the cardholder's repayment schedule is handled by the issuer.
+
+**Full refund** — Refunding the complete purchase amount cancels the outstanding installment plan with the issuer. The cardholder is no longer billed for future installments.
+
+```typescript
+const refund = await vinr.refunds.create({
+  payment: 'pay_3Nf8x2a',
+  reason: 'requested_by_customer',
+});
+
+// refund.status → "pending"
+// The issuer cancels the remaining installment schedule on confirmation.
+```
+
+**Partial refund** — A partial refund reduces the outstanding balance on the installment plan. The issuer recalculates the remaining installment amounts and notifies the cardholder. You cannot partially refund below the amount already collected in prior installments.
+
+```typescript
+const partial = await vinr.refunds.create({
+  payment: 'pay_3Nf8x2a',
+  amount: 20000,              // €200.00 of a €600.00 installment payment
+  reason: 'product_not_received',
+});
+```
+
+<Callout type="warn">
+Refund timing on installment payments can be longer than on standard card charges. The issuer must update the repayment schedule before the cardholder sees the adjustment. Budget 5–15 business days for the change to be visible to the customer.
+</Callout>
+
+For full refund mechanics, status states, and failure handling see [Refunds](/docs/payments/refunds).
+
+<Accordions>
+<Accordion title="Advanced: issuer programs, BNPL, and API-driven plan selection">
+
+### Issuer-branded vs. VINR-managed BNPL
+
+There are two distinct models for installments on the VINR platform:
+
+**Issuer-managed installments** — The program is run entirely by the card issuer (e.g. Mastercard Installments, Visa Installment Solution). The customer's existing credit line funds the payments. VINR passes the plan request through to the network; the issuer approves and owns the repayment schedule. Co-brand programs (store-branded cards with dedicated installment terms) also fall into this category.
+
+**VINR-managed BNPL** — For markets or card types where issuer programs are unavailable, VINR operates its own buy-now-pay-later layer in partnership with licensed lenders. The customer undergoes a soft credit check at checkout and receives a new repayment schedule independent of their card balance. Settlement to you is identical; the `issuerProgram` field on the payment will be `vinr_bnpl` in this case.
+
+To restrict a checkout to one model or the other, set the `installments.program` field (not shown in the standard TypeTable above):
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 60000,
+  currency: 'EUR',
+  installments: {
+    enabled: true,
+    count: 6,
+    program: 'issuer',   // 'issuer' | 'vinr_bnpl' | 'any' (default)
+  },
+  returnUrl: 'https://yoursite.com/orders/complete',
+});
+```
+
+### API-driven plan selection without hosted checkout
+
+Enterprise integrations that render their own checkout UI can retrieve available plans before presenting them to the customer, then confirm the selected plan directly — bypassing the hosted page entirely.
+
+**Step 1 — Create a payment intent (not yet confirmed):**
+
+```typescript
+const intent = await vinr.payments.create({
+  amount: 60000,
+  currency: 'EUR',
+  installments: { enabled: true },
+  confirm: false,             // do not open checkout yet
+});
+```
+
+**Step 2 — Fetch available plans for the payment method:**
+
+```typescript
+const plans = await vinr.installments.listPlans({
+  payment: intent.id,
+  paymentMethod: 'pm_4Rk9...',
+});
+
+// plans → [{ count: 3, interval: 'month', monthlyAmount: 20000, ... }, ...]
+```
+
+**Step 3 — Confirm with the chosen plan:**
+
+```typescript
+const confirmed = await vinr.payments.confirm(intent.id, {
+  paymentMethod: 'pm_4Rk9...',
+  installments: {
+    enabled: true,
+    count: plans[0].count,
+  },
+});
+```
+
+This flow requires an additional API permission (`installments:read`) on your API key. Contact [merchant support](mailto:support@vinr.com) to enable it.
+
+### Co-brand programs
+
+Cards issued under VINR co-brand agreements (e.g. a retailer's own card powered by VINR) may carry pre-negotiated installment terms that override the standard issuer program. These appear in `issuerProgram` as a custom identifier (e.g. `cobrand_acme_retail`). If your platform hosts co-brand programs, the Dashboard → Installments tab shows plan utilization and conversion broken out by program.
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Subscriptions" href="/docs/billing/subscriptions" description="Automate recurring billing with plans, trials, and lifecycle events." />
+  <Card title="Refunds" href="/docs/payments/refunds" description="Return funds fully or partially and track refund status." />
+  <Card title="Payment methods" href="/docs/payments/payment-methods" description="Cards, bank transfers, stablecoins, and local methods." />
+</Cards>

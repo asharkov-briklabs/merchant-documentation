@@ -1,0 +1,309 @@
+---
+title: "Accept a payment"
+description: "Create a terminal payment session, present it to the terminal, and verify the result."
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-05-31"
+---
+
+Accepting an in-person payment with a VINR terminal follows three steps: your backend creates a payment session and instructs the terminal, the terminal handles the card interaction with the customer, and your backend confirms the result via a webhook. For a deeper look at how cloud-mode and local-mode terminals differ, see the [architecture overview](/docs/payments/in-person/architecture).
+
+## Step 1 — Create a terminal payment
+
+Call `vinr.terminal.payments.create` from your server. Never call terminal APIs from a client — your secret key must stay on the backend.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 2500,
+  currency: 'USD',
+  reference: 'order_8821',
+});
+
+console.log(terminalPayment.id);
+console.log(terminalPayment.status);
+```
+
+The response is a terminal payment object with `status: "pending"`. The terminal receives the instruction automatically via the cloud connection; no separate push step is required in cloud mode.
+
+```json
+{
+  "id": "tpay_01HZ5QA7BK",
+  "terminalId": "term_01HZ5QXYZ",
+  "amount": 2500,
+  "currency": "USD",
+  "reference": "order_8821",
+  "captureMethod": "automatic",
+  "status": "pending",
+  "createdAt": "2026-05-31T14:23:00Z"
+}
+```
+
+## Step 2 — Terminal executes the transaction
+
+Once the session is pending, the terminal's screen activates and prompts the customer to present their card or device. VINR terminals support three entry methods:
+
+- **Contactless (NFC)** — tap a card, phone, or wearable
+- **Chip + PIN** — insert an EMV chip card and enter the PIN
+- **Magnetic stripe** — swipe a card (fallback only)
+
+All supported devices — Nexgo N92, Nexgo N86Pro, Nexgo CT20, Nexgo CT20P, and Ciontek CM30 — handle all three methods. The terminal selects the optimal entry method for the card presented.
+
+<Callout type="warn">
+Do not poll the terminal payment object to check completion. Polling adds latency, burns API quota, and creates race conditions. Use webhooks instead — they deliver the result within milliseconds of the card interaction completing.
+</Callout>
+
+## Step 3 — Verify via webhook
+
+Register an HTTPS endpoint in the Dashboard under **Developers → Webhooks** and subscribe to `terminal_payment.completed` and `terminal_payment.failed`. VINR delivers one of these events as soon as the terminal finishes the interaction.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+export async function POST(request: Request) {
+  const rawBody = await request.text();
+  const signature = request.headers.get('vinr-signature') ?? '';
+
+  const event = vinr.webhooks.constructEvent(
+    rawBody,
+    signature,
+    process.env.VINR_WEBHOOK_SECRET,
+  );
+
+  if (event.type === 'terminal_payment.completed') {
+    const tp = event.data.object;
+    await fulfillOrder(tp.reference, tp.amountCaptured);
+  }
+
+  if (event.type === 'terminal_payment.failed') {
+    const tp = event.data.object;
+    await notifyStaff(tp.reference, tp.declineCode);
+  }
+
+  return new Response(null, { status: 200 });
+}
+```
+
+A `terminal_payment.completed` payload looks like this:
+
+```json
+{
+  "id": "evt_01HZ5QB2CC",
+  "type": "terminal_payment.completed",
+  "createdAt": "2026-05-31T14:23:07Z",
+  "data": {
+    "object": {
+      "id": "tpay_01HZ5QA7BK",
+      "terminalId": "term_01HZ5QXYZ",
+      "amount": 2500,
+      "amountCaptured": 2500,
+      "currency": "USD",
+      "reference": "order_8821",
+      "captureMethod": "automatic",
+      "status": "completed",
+      "entryMethod": "contactless",
+      "last4": "4242",
+      "brand": "visa",
+      "createdAt": "2026-05-31T14:23:00Z",
+      "completedAt": "2026-05-31T14:23:07Z"
+    }
+  }
+}
+```
+
+Always verify the webhook signature with `vinr.webhooks.constructEvent` before trusting the payload. See [Webhooks](/docs/integration/webhooks) for endpoint configuration and retry behaviour.
+
+## Capture modes
+
+By default, VINR captures the funds automatically the moment the card interaction completes (`captureMethod: "automatic"`). If your workflow requires a review step before funds move — for example, a restaurant that adds a tip adjustment after the customer signs — use manual capture.
+
+<Tabs items={["Automatic (default)", "Manual capture"]}>
+<Tab value="Automatic (default)">
+
+```typescript
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 2500,
+  currency: 'USD',
+  reference: 'order_8821',
+  captureMethod: 'automatic',
+});
+```
+
+Funds settle as soon as `terminal_payment.completed` fires. No further API calls are required.
+
+</Tab>
+<Tab value="Manual capture">
+
+```typescript
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 2500,
+  currency: 'USD',
+  reference: 'order_8821',
+  captureMethod: 'manual',
+});
+
+await vinr.terminal.payments.capture(terminalPayment.id, {
+  amount: 2750,
+});
+```
+
+After `terminal_payment.completed` the payment sits at `status: "authorized"`. Call `capture` to move funds, optionally adjusting the amount upward (for tip) within the permitted tolerance. Uncaptured authorizations expire after 7 days.
+
+</Tab>
+</Tabs>
+
+## Terminal payment create fields
+
+<TypeTable
+  type={{
+    terminalId: {
+      type: "string",
+      description: "ID of the target terminal, from the Dashboard or terminal management API.",
+      required: true,
+    },
+    amount: {
+      type: "integer",
+      description: "Payment amount in the smallest currency unit (e.g. cents for USD).",
+      required: true,
+    },
+    currency: {
+      type: "string",
+      description: "ISO 4217 three-letter currency code, e.g. 'USD'.",
+      required: true,
+    },
+    reference: {
+      type: "string",
+      description: "Your internal order or transaction reference. Returned on every event for idempotent reconciliation.",
+      required: true,
+    },
+    captureMethod: {
+      type: "'automatic' | 'manual'",
+      description: "Whether to capture funds immediately on completion or hold an authorization.",
+      default: "automatic",
+    },
+    tip: {
+      type: "object",
+      description: "Tip configuration. Set mode: 'on_screen' to prompt the customer on the terminal display, or mode: 'manual' to adjust via capture.",
+      default: "undefined",
+    },
+    metadata: {
+      type: "Record<string, string>",
+      description: "Up to 50 key-value pairs stored on the payment object, visible in the Dashboard and returned on webhook events.",
+      default: "{}",
+    },
+  }}
+/>
+
+## Handle failures
+
+When a payment fails, the `terminal_payment.failed` event includes a `declineCode` that explains the reason. Use it to decide whether to retry.
+
+| `declineCode` | Meaning | Action |
+|---|---|---|
+| `card_declined` | Generic issuer decline | Ask customer to try a different card |
+| `insufficient_funds` | Insufficient balance | Ask customer to use a different card |
+| `expired_card` | Card past expiry date | Ask customer for a current card |
+| `lost_or_stolen` | Card flagged by issuer | Do not retry; follow your security policy |
+| `communication_error` | Terminal lost connectivity mid-transaction | Retry the same session once, then contact support |
+| `terminal_busy` | Another session is active on this terminal | Wait and retry |
+
+<Steps>
+<Step>
+Catch the `terminal_payment.failed` event in your webhook handler.
+</Step>
+<Step>
+Read `event.data.object.declineCode` to classify the failure.
+</Step>
+<Step>
+For soft declines (`card_declined`, `insufficient_funds`, `expired_card`), create a new terminal payment session and prompt the customer to present a different card. Do not reuse the failed session ID.
+</Step>
+<Step>
+For hard declines (`lost_or_stolen`) or operational errors, surface the appropriate message to staff and log the event for reconciliation.
+</Step>
+</Steps>
+
+<Callout type="info">
+VINR does not automatically retry failed terminal payments. Each retry must be a new `vinr.terminal.payments.create` call with a fresh session.
+</Callout>
+
+## Test in sandbox
+
+Use a sandbox secret key (`sk_test_...`) to test against simulated terminals without real hardware.
+
+```typescript
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_test_simulator',
+  amount: 1000,
+  currency: 'USD',
+  reference: 'sandbox_order_001',
+});
+```
+
+The sandbox terminal ID `term_test_simulator` is always available on every test account and requires no physical device. Use the following test card numbers to drive specific outcomes:
+
+| Card number | Outcome |
+|---|---|
+| `4242 4242 4242 4242` | Successful payment |
+| `4000 0000 0000 0002` | Card declined |
+| `4000 0000 0000 9995` | Insufficient funds |
+| `4000 0000 0000 0069` | Expired card |
+
+Webhook events are delivered to your registered test endpoint in real time. For full test card reference and network-specific scenarios, see [Testing your integration](/docs/integration/testing).
+
+<Accordions>
+<Accordion title="Advanced — Local mode: call the terminal directly over your LAN">
+
+In local mode the terminal exposes an HTTP server on your local network and VINR's cloud is not in the transaction path. This is suited to high-reliability environments where internet connectivity cannot be guaranteed, or where latency requirements are strict.
+
+Make a direct `POST` to the terminal's local endpoint using the same payload shape as the cloud API. Retrieve the terminal's IP address from the Dashboard or your network DHCP lease.
+
+```typescript
+const TERMINAL_IP = '192.168.1.42';
+const DEVICE_CERT = process.env.VINR_TERMINAL_CERT;
+
+const response = await fetch(`http://${TERMINAL_IP}/v1/terminal/payments`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Device-Certificate': DEVICE_CERT,
+  },
+  body: JSON.stringify({
+    terminalId: 'term_01HZ5QXYZ',
+    amount: 2500,
+    currency: 'USD',
+    reference: 'order_8821',
+    captureMethod: 'automatic',
+  }),
+});
+
+const terminalPayment = await response.json();
+```
+
+The `X-Device-Certificate` header carries the per-terminal mutual TLS certificate issued during provisioning. Requests without a valid certificate are rejected by the terminal.
+
+The response object and all `declineCode` values are identical to cloud mode. Webhook events are still delivered via the VINR cloud after the transaction completes — the local endpoint handles only the initiation and card interaction.
+
+<Callout type="warn">
+Local mode requires the terminal and your server to be on the same network segment, or reachable via a static route. It is not available on the Ciontek CM30 when connected only over Bluetooth.
+</Callout>
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Terminal features" href="/docs/payments/in-person/features" description="Tipping, receipts, split tender, and other point-of-sale capabilities." />
+  <Card title="In-person refunds" href="/docs/payments/in-person/refunds" description="Issue full or partial refunds against a completed terminal payment." />
+  <Card title="Webhooks" href="/docs/integration/webhooks" description="Configure endpoints, verify signatures, and handle retries." />
+</Cards>

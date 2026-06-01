@@ -1,0 +1,307 @@
+---
+title: Adobe Commerce
+description: Install and configure the VINR payment plugin for Adobe Commerce (Magento 2).
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+<Callout type="info">
+  This is illustrative content. Plugin availability and exact menu paths may differ; refer to your VINR account manager for production details.
+</Callout>
+
+The VINR plugin for Adobe Commerce (Magento 2) integrates VINR payments directly into Magento-powered storefronts. It supports **Adobe Commerce 2.4.x** and **Magento Open Source 2.4.x**, is distributed as a Composer package, and exposes the full VINR payment surface — card, wallet, and local payment methods — through the native Magento payment framework.
+
+## Supported payment methods
+
+<TypeTable
+  type={{
+    "Credit and debit cards": { type: "Visa · Mastercard · Amex · Discover", description: "Card-present and card-not-present; full 3DS2 and network tokenization." },
+    "Apple Pay": { type: "Wallet", description: "Safari and Safari-based webviews on Apple devices." },
+    "Google Pay": { type: "Wallet", description: "Chrome and Chrome-based webviews on Android and desktop." },
+    "SEPA Direct Debit": { type: "Bank", description: "EUR-denominated mandated debits across the SEPA zone." },
+    "Bancontact": { type: "Local", description: "Belgium debit-card scheme." },
+    "iDEAL": { type: "Local", description: "Netherlands bank-transfer scheme." },
+    "Klarna": { type: "BNPL", description: "Pay later and installment options at checkout." },
+    "PayPal": { type: "Wallet", description: "Redirects to PayPal hosted flow; returns to Magento on completion." },
+  }}
+/>
+
+<Callout type="info">
+  Available methods depend on your VINR merchant account configuration. Contact your account manager to enable additional payment methods.
+</Callout>
+
+## Requirements
+
+- Adobe Commerce 2.4.x or Magento Open Source 2.4.x
+- PHP 8.1 or higher
+- Composer 2
+- An active VINR merchant account
+- VINR API Key and Merchant ID (available in the VINR dashboard under **Developers → API credentials**)
+
+## Install
+
+<Steps>
+
+### Add the VINR Composer repository
+
+Add the VINR package repository to your project's `composer.json`, or download the module ZIP from the VINR dashboard under **Plugins → Adobe Commerce** and place it in `app/code/Vinr/Payments`.
+
+```json
+{
+  "repositories": [
+    {
+      "type": "composer",
+      "url": "https://packages.vinr.com"
+    }
+  ]
+}
+```
+
+### Require the package
+
+```bash
+composer require vinr/magento2-payments
+```
+
+### Enable the module
+
+```bash
+bin/magento module:enable Vinr_Payments
+```
+
+### Run setup and compile
+
+```bash
+bin/magento setup:upgrade && \
+bin/magento setup:di:compile && \
+bin/magento cache:clean
+```
+
+### Open the VINR configuration panel
+
+In the Magento Admin, go to **Stores → Configuration → Sales → Payment Methods → VINR Payments** and expand the section.
+
+### Enter your API credentials
+
+Set **API Key** and **Merchant ID** to the values from your VINR dashboard, then click **Save Config**.
+
+</Steps>
+
+## Configure
+
+### Payment methods
+
+Navigate to **Stores → Configuration → Sales → Payment Methods → VINR Payments → Enabled Methods**. Toggle individual payment methods on or off. Changes take effect after saving; no cache flush is required for method visibility changes.
+
+### Capture mode
+
+<Tabs items={["Authorize and Capture", "Authorize Only"]}>
+<Tab value="Authorize and Capture">
+
+Funds are captured immediately when the order is placed. This is the recommended setting for most merchants selling physical and digital goods.
+
+In **VINR Payments → Payment Action**, select **Authorize and Capture**.
+
+```bash
+bin/magento config:set payment/vinr_payments/payment_action authorize_capture
+bin/magento cache:clean
+```
+
+</Tab>
+<Tab value="Authorize Only">
+
+An authorization hold is placed at order time; the capture is triggered when you invoice the order in the Magento Admin (**Sales → Orders → [order] → Invoice**). Use this mode when you ship physical goods and want to capture only after fulfillment.
+
+In **VINR Payments → Payment Action**, select **Authorize Only**.
+
+```bash
+bin/magento config:set payment/vinr_payments/payment_action authorize
+bin/magento cache:clean
+```
+
+<Callout type="warn">
+  Uncaptured authorizations expire after seven days. Invoice orders before the authorization window closes or the payment will void automatically.
+</Callout>
+
+</Tab>
+</Tabs>
+
+### 3D Secure
+
+3D Secure 2 (3DS2) is handled automatically by VINR. No additional Magento configuration is required. When an issuer triggers a challenge flow, the customer is presented with the authentication step during checkout and returned to the Magento order confirmation page on completion. See [3D Secure](/docs/payments/3d-secure) for the underlying protocol details.
+
+### Webhooks
+
+The VINR module registers a webhook listener at:
+
+```
+https://yourstore.com/vinr/webhook
+```
+
+Verify that this URL is reachable from the VINR dashboard under **Developers → Webhooks → Add endpoint**. The module validates the `X-Vinr-Signature` header on every incoming event.
+
+Order status mapping:
+
+<TypeTable
+  type={{
+    "payment.authorized": { type: "Magento status", description: "Sets order to pending_payment." },
+    "payment.completed": { type: "Magento status", description: "Sets order to processing and triggers invoice creation when capture mode is Authorize and Capture." },
+    "payment.captured": { type: "Magento status", description: "Sets order to processing when capture mode is Authorize Only and invoice is raised manually." },
+    "payment.refunded": { type: "Magento status", description: "Sets order to closed after a full refund; partial refund leaves order in processing." },
+    "payment.failed": { type: "Magento status", description: "Sets order to canceled." },
+    "dispute.opened": { type: "Magento status", description: "Adds order comment; status unchanged pending resolution." },
+  }}
+/>
+
+### Multi-store configuration
+
+VINR Payments supports different API credentials per store view. In the Magento Admin, use the **Store View** scope selector (top-left dropdown in **Stores → Configuration**) to switch to the target store view, then enter store-specific API Key and Merchant ID values. This allows separate VINR accounts or merchant IDs for different brands within a single Magento installation.
+
+## Tokenization and saved cards
+
+The VINR plugin integrates with the **Adobe Commerce Vault** framework. When a customer selects **Save for later** at checkout, VINR vaults the card and stores the resulting `pm_` token in the Magento Vault. On subsequent checkouts, the customer can select a saved card from the stored-methods list without re-entering card details.
+
+<TypeTable
+  type={{
+    "Vault enabled": { type: "boolean", description: "Toggle at Stores → Configuration → Sales → Payment Methods → Stored Payment Methods." },
+    "Token lifetime (days)": { type: "integer", description: "How long a saved card remains available. Defaults to 365. Set to 0 for no expiry.", default: "365" },
+    "Guest checkout": { type: "boolean", description: "Vault requires a customer account. Guest orders cannot save payment methods.", default: "false" },
+  }}
+/>
+
+For subscription and recurring billing use cases, the Vault token is compatible with Magento Recurring Payments via a third-party Subscription extension. The VINR token stored in the Vault can be passed as the `paymentMethod` parameter for off-session charges. For the full tokenization API, see [Tokenization](/docs/payments/tokenization).
+
+## In-person payments
+
+VINR for Adobe Commerce supports in-person payments via the **VINR POS module**, a separate Composer package that bridges the Magento order flow to VINR terminal readers. Install it alongside the core module:
+
+```bash
+composer require vinr/magento2-pos
+bin/magento module:enable Vinr_Pos
+bin/magento setup:upgrade && bin/magento cache:clean
+```
+
+The POS module adds a **VINR Terminal** payment method to the Magento Admin order creation flow, allowing staff to initiate a card-present payment from any order. For terminal setup, reader pairing, and go-live steps, see [In-person payments](/docs/payments/in-person).
+
+## Go live
+
+<Steps>
+
+### Set the correct payment action
+
+Confirm **Payment Action** is set to **Authorize and Capture** or **Authorize Only** as appropriate for your fulfillment model.
+
+### Switch to live credentials
+
+In **Stores → Configuration → Sales → Payment Methods → VINR Payments**, replace the test API Key and Merchant ID with your live credentials from the VINR dashboard.
+
+### Flush the cache
+
+```bash
+bin/magento cache:clean
+```
+
+### Place a test order
+
+Complete an end-to-end purchase on your storefront using a real card in a small amount. Confirm the order appears in **Sales → Orders** with status **processing**.
+
+### Verify in both dashboards
+
+Check the VINR dashboard under **Payments** to confirm the transaction appears, and review the Magento order to confirm webhook-driven status transitions are functioning correctly.
+
+</Steps>
+
+## Troubleshooting
+
+<Accordions>
+<Accordion title="Module not appearing in Payment Methods">
+
+Run the full setup sequence and flush all caches:
+
+```bash
+bin/magento setup:upgrade
+bin/magento setup:di:compile
+bin/magento cache:clean
+```
+
+If the module still does not appear, confirm it is listed as enabled:
+
+```bash
+bin/magento module:status Vinr_Payments
+```
+
+If the output shows `disabled`, run `bin/magento module:enable Vinr_Payments` and repeat the setup sequence.
+
+</Accordion>
+<Accordion title="Webhook returning 404">
+
+Confirm that Magento URL rewrites are enabled in **Stores → Configuration → General → Web → Search Engine Optimization → Use Web Server Rewrites** (set to **Yes**). Also verify your `.htaccess` (Apache) or `nginx.conf` routes requests through `index.php`. The webhook path `/vinr/webhook` is a standard Magento front-controller route and requires rewrites to resolve.
+
+</Accordion>
+<Accordion title="Vault not saving cards">
+
+Confirm the Vault feature is enabled at **Stores → Configuration → Sales → Payment Methods → Stored Payment Methods → Enabled** (set to **Yes**). Also confirm the customer is logged in — guest checkouts cannot persist Vault tokens. If Vault is enabled and the customer is logged in but cards are still not saving, check that the `Vinr_Payments` module version matches the `Vinr_Vault` bridge module version.
+
+</Accordion>
+<Accordion title="Orders not updating after payment">
+
+Verify that Magento cron is running. Order status sync (for asynchronous events such as delayed captures and dispute updates) depends on the `vinr_order_sync` cron job defined in `etc/crontab.xml`. Check cron status:
+
+```bash
+bin/magento cron:status
+```
+
+Also confirm the webhook endpoint URL in the VINR dashboard matches your store's base URL exactly, including protocol (`https`) and any path prefix.
+
+</Accordion>
+</Accordions>
+
+<Accordions>
+<Accordion title="Advanced — Adobe Commerce Cloud, PWA Studio, headless, and CI/CD">
+
+### Adobe Commerce Cloud (managed hosting)
+
+On Adobe Commerce Cloud (Magento Cloud), Composer packages are deployed via the standard Cloud CLI build pipeline. Add the VINR repository to `.magento.app.yaml` build hooks and commit the updated `composer.json` and `composer.lock` to your Cloud Git repository. Avoid running `setup:di:compile` manually — the Cloud build step handles compilation automatically.
+
+Set API credentials as environment variables rather than through the Admin UI to prevent them from being stored in the database:
+
+```bash
+magento-cloud variable:create --name VINR_API_KEY --value sk_live_... --sensitive true
+magento-cloud variable:create --name VINR_MERCHANT_ID --value mid_... --sensitive true
+```
+
+Map these in `app/etc/env.php` or via a `setup:config:set` command in your deploy hook.
+
+### GraphQL and PWA Studio (Venia storefront)
+
+The VINR module exposes a `vinrPaymentConfig` GraphQL query compatible with the Magento GraphQL schema. PWA Studio Venia components can consume the VINR payment method through the standard `@magento/peregrine` payment hooks. Pass the VINR `pm_` token returned from VINR Elements (loaded in the Venia checkout) as the `code` argument to `setPaymentMethodOnCart`.
+
+### Headless commerce
+
+For fully headless architectures (React, Next.js, or similar frontend with an Adobe Commerce backend), use the VINR API directly from your frontend for payment collection and pass the resulting `pm_` token to Adobe Commerce via the REST or GraphQL cart API. The VINR Magento module handles order creation, status updates, and webhook processing on the backend regardless of the frontend stack. See [Integration overview](/docs/integration) for the API-first flow.
+
+### CI/CD deployment
+
+For automated deployments, add the following to your deployment script after `composer install`:
+
+```bash
+php bin/magento module:enable Vinr_Payments
+php bin/magento setup:upgrade --keep-generated
+php bin/magento setup:di:compile
+php bin/magento setup:static-content:deploy -f
+php bin/magento cache:clean
+```
+
+Use `--keep-generated` in production deployments where static content has already been deployed separately to avoid regenerating it during the upgrade step.
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card title="Salesforce Commerce Cloud" href="/docs/payments/plugins/salesforce-commerce-cloud" description="Install and configure the VINR cartridge for Salesforce Commerce Cloud (SFCC / Demandware)." />
+  <Card title="Tokenization" href="/docs/payments/tokenization" description="How VINR vaults card data and how to charge stored tokens for recurring and one-click payments." />
+  <Card title="In-person go-live" href="/docs/payments/in-person/go-live" description="Steps to activate VINR terminal readers for card-present payments." />
+</Cards>

@@ -1,0 +1,105 @@
+---
+title: Sub-merchant onboarding
+description: Three ways to onboard sub-merchants under your platform — hosted, embedded, and API-driven.
+---
+
+Before a sub-merchant can accept payments or receive payouts, VINR must verify their identity and register them under your platform account. There are three integration paths.
+
+## Onboarding models
+
+### Hosted onboarding
+
+VINR provides a hosted onboarding page. You redirect the sub-merchant to a VINR-generated URL; they complete identity and bank details; VINR redirects them back to your platform.
+
+**When to use:** fastest integration; acceptable when a redirect is fine UX.
+
+```
+POST /v1/platform/sub-merchants
+{
+  "email": "seller@example.com",
+  "return_url": "https://myplatform.com/onboarding/complete",
+  "refresh_url": "https://myplatform.com/onboarding/retry"
+}
+
+→ { "onboarding_url": "https://onboarding.vinr.com/sm_..." }
+```
+
+Redirect the sub-merchant to `onboarding_url`. When they finish (or need to return), VINR calls your `return_url` or `refresh_url`.
+
+### Embedded onboarding
+
+Render the onboarding flow inside your app using VINR's Embedded Components SDK. The sub-merchant never leaves your site.
+
+**When to use:** branded experience is important; you want to control the visual context.
+
+```html
+<VinrOnboarding
+  subMerchantId="sm_..."
+  onComplete={() => refetch()}
+/>
+```
+
+The component handles multi-step collection (identity, bank account, business details), adaptive document prompts by country, and real-time verification status.
+
+### API-driven onboarding
+
+Collect all information in your own UI and push it to VINR via API. Full control, highest engineering cost.
+
+**When to use:** fully white-labeled product; you already collect this data for other purposes.
+
+```
+POST /v1/platform/sub-merchants
+POST /v1/platform/sub-merchants/{id}/legal-entity
+POST /v1/platform/sub-merchants/{id}/documents
+POST /v1/platform/sub-merchants/{id}/bank-accounts
+```
+
+You are responsible for keeping document and compliance requirements current as regulations change.
+
+---
+
+## Onboarding lifecycle
+
+```
+created → identity_submitted → under_review → active
+                                     ↓
+                              documents_required  (VINR sends webhook)
+                                     ↓
+                              identity_submitted  (re-submission)
+```
+
+| Status | Meaning |
+|---|---|
+| `created` | Sub-merchant record exists; no data submitted yet |
+| `identity_submitted` | KYC/KYB data submitted; VINR reviewing |
+| `documents_required` | Additional documents requested (webhook fired) |
+| `active` | Verification passed; can accept payments and receive payouts |
+| `restricted` | Partial capabilities only (e.g. can receive but not pay out) |
+| `suspended` | Account suspended; contact platform support |
+
+---
+
+## Webhooks
+
+Subscribe to these events to drive onboarding UI state:
+
+| Event | Trigger |
+|---|---|
+| `sub_merchant.created` | New sub-merchant registered |
+| `sub_merchant.verification.documents_required` | Documents needed; payload lists which |
+| `sub_merchant.verification.complete` | Verification passed; account active |
+| `sub_merchant.verification.failed` | Verification failed; payload includes reason |
+| `sub_merchant.suspended` | Account suspended |
+
+---
+
+## Networked onboarding
+
+Sub-merchants who already have a VINR account (from another platform) can reuse their verified identity. They authorize your platform to access their existing account — no re-submission of documents.
+
+---
+
+## Next steps
+
+- [Verification & KYC/KYB](/docs/platforms/verification) — what documents are required and by whom
+- [Platform controls](/docs/platforms/platform-controls) — restrict capabilities until onboarding is complete

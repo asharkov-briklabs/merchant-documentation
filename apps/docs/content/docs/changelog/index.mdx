@@ -86,6 +86,17 @@ After the window, the field or endpoint is removed in a new dated version. Accou
 
 ## Recent changes
 
+### 2026-06-01 — `additive`
+
+Major documentation expansion: VINR payments docs reach Stripe / Adyen / Viva parity across five new areas.
+
+- **In-person payments** — full Terminal API documentation covering cloud and local modes; terminal hardware guide (Nexgo N92, N86Pro, CT20, CT20P; Ciontek CM30); Tap to Pay on iOS and Android; in-person features (tipping, DCC, cashback, MOTO, offline, installments, gift cards); terminal fleet management and remote actions. See [In-person payments](/docs/payments/in-person).
+- **Unified commerce** — cross-channel shopper recognition and shared payment tokens; Click & Collect (BOPIS); Buy Online Return In Store (BORIS); Endless Aisle; Pay by Link in-store; MOTO; cross-channel loyalty; digital receipts; shopper insights. See [Unified commerce](/docs/payments/omnichannel).
+- **Plugins** — pre-built payment plugins for WooCommerce, Adobe Commerce (Magento 2), and Salesforce Commerce Cloud (LINK cartridge). See [Plugins](/docs/payments/plugins).
+- **Deeper online payments** — new pages for tokenization, 3D Secure (native / redirect / data-only / standalone), authorization adjustment, reversal, surcharging, installments, partial authorization, partial payments, donations, and auto-rescue. Integration models overview (Checkout vs Elements vs API-only) and advanced flow guide added. Result codes reference added to Troubleshooting.
+- **API reference** — new In-person API group: Terminals, Terminal Payments, Terminal Actions. New Tokens resource (network tokens, account updater). Payments API extended with `POST /v1/payments/{id}/adjust` and `POST /v1/payments/{id}/reverse`.
+- **Task guides** — three new how-to guides: [Collect an in-person payment](/docs/guides/collect-in-person-payment), [Go omnichannel](/docs/guides/go-omnichannel), [Install the WooCommerce plugin](/docs/guides/install-the-woocommerce-plugin).
+
 ### 2026-05-28 — `additive`
 
 - **Engagement:** added `loyalty.points.expiring` webhook, fired 30 days before a points balance expires so you can prompt redemption. See [Points expiry](/docs/engagement/points-and-currency).

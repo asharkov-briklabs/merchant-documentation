@@ -1,0 +1,339 @@
+---
+title: "Shopper recognition"
+description: "Identify the same shopper across online, mobile, and in-store channels and share payment tokens between them."
+persona: ["developer"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+VINR uses a `shopperReference` — a stable, merchant-assigned identifier, typically the customer's email address or your internal user ID — to link payment methods, order history, and loyalty data across every channel you operate. Pass the same `shopperReference` whether the shopper is on your website, mobile app, or standing at a terminal, and VINR automatically unifies the record behind the scenes. No separate identity service is required.
+
+## shopperReference
+
+A `shopperReference` is the anchor for cross-channel identity. VINR stores it alongside each payment and each saved method, so the same token, history, and preferences follow the shopper wherever they transact.
+
+**Rules:**
+
+- Must be unique per merchant — two different shoppers must never share a reference.
+- Must be stable across sessions — assign it once on account creation and never change it.
+- Must not change for a customer — reassignment will silently orphan their stored methods and history.
+
+Pass `shopperReference` on every payment creation call, online and in-person.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const onlinePayment = await vinr.payments.create({
+  amount: 3200,
+  currency: 'EUR',
+  shopperReference: 'user_8821',
+  shopperEmail: 'ada@example.com',
+  shopperName: 'Ada Lovelace',
+  savePaymentMethod: true,
+  returnUrl: 'https://yoursite.com/checkout/complete',
+});
+
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 3200,
+  currency: 'EUR',
+  shopperReference: 'user_8821',
+  shopperEmail: 'ada@example.com',
+  reference: 'order_9104',
+});
+```
+
+<TypeTable
+  type={{
+    shopperReference: {
+      type: "string",
+      description: "Stable, unique merchant-assigned ID for this shopper. Typically your internal user ID or email. Required to enable cross-channel recognition.",
+    },
+    shopperEmail: {
+      type: "string",
+      description: "Shopper's email address. Used for receipts, dispute evidence, and as a secondary lookup key. Optional but strongly recommended.",
+    },
+    shopperName: {
+      type: "string",
+      description: "Shopper's display name. Appears on receipts and in the Dashboard customer view. Optional.",
+    },
+  }}
+/>
+
+<Callout type="info">
+If you already use [Customers & stored methods](/docs/payments/customers), the `shopperReference` maps to your `customer.id` or a value you store in `metadata`. You do not need to migrate — pass `shopperReference` alongside `customer` and VINR links both records.
+</Callout>
+
+## Shared payment tokens
+
+When a shopper saves a card during an online checkout (by passing `savePaymentMethod: true`), VINR vaults the method and associates the resulting `pm_` token with the shopper's `shopperReference`. That same token is valid at any VINR terminal — present it directly on a terminal payment creation call. The shopper does not need to tap or insert their card.
+
+**Online: save a card**
+
+```typescript
+const onlineSave = await vinr.payments.create({
+  amount: 1500,
+  currency: 'GBP',
+  shopperReference: 'user_8821',
+  shopperEmail: 'ada@example.com',
+  savePaymentMethod: true,
+  returnUrl: 'https://yoursite.com/checkout/complete',
+});
+
+const savedToken = onlineSave.paymentMethod;
+```
+
+**In-store: reuse the same token**
+
+```typescript
+const inStorePurchase = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 900,
+  currency: 'GBP',
+  shopperReference: 'user_8821',
+  paymentMethod: savedToken,
+  reference: 'order_9201',
+});
+```
+
+<Tabs items={["Online save", "In-store reuse", "Mobile reuse"]}>
+  <Tab value="Online save">
+    ```typescript
+    const payment = await vinr.payments.create({
+      amount: 2000,
+      currency: 'USD',
+      shopperReference: 'user_8821',
+      savePaymentMethod: true,
+      returnUrl: 'https://yoursite.com/checkout/complete',
+    });
+    ```
+  </Tab>
+  <Tab value="In-store reuse">
+    ```typescript
+    const payment = await vinr.terminal.payments.create({
+      terminalId: 'term_01HZ5QXYZ',
+      amount: 2000,
+      currency: 'USD',
+      shopperReference: 'user_8821',
+      paymentMethod: 'pm_4Rk9...',
+      reference: 'pos_order_772',
+    });
+    ```
+  </Tab>
+  <Tab value="Mobile reuse">
+    ```typescript
+    const payment = await vinr.payments.create({
+      amount: 2000,
+      currency: 'USD',
+      shopperReference: 'user_8821',
+      paymentMethod: 'pm_4Rk9...',
+      offSession: false,
+      returnUrl: 'https://yourapp.com/checkout/complete',
+    });
+    ```
+  </Tab>
+</Tabs>
+
+<Callout type="warn">
+Presenting a token at a terminal constitutes a card-on-file transaction. Ensure the shopper's consent to store and reuse their card was captured at the time of the original save. See [Privacy and consent](#privacy-and-consent) below.
+</Callout>
+
+## Cross-channel order history
+
+Retrieve all payments for a shopper — across online, in-person, and pay-by-link channels — by querying `vinr.payments.list` with the shopper's reference. Each payment in the response includes a `channel` field indicating where the transaction originated.
+
+```typescript
+const history = await vinr.payments.list({
+  shopperReference: 'user_8821',
+  limit: 50,
+});
+
+for (const payment of history.data) {
+  console.log(payment.id, payment.channel, payment.amount, payment.currency);
+}
+```
+
+<TypeTable
+  type={{
+    id: {
+      type: "string",
+      description: "Payment ID, prefixed pay_ for online and pay_by_link, tpay_ for in-person.",
+    },
+    channel: {
+      type: "'online' | 'in_person' | 'pay_by_link'",
+      description: "The channel through which this payment was initiated.",
+    },
+    amount: {
+      type: "number",
+      description: "Payment amount in the currency's minor unit (e.g. cents).",
+    },
+    currency: {
+      type: "string",
+      description: "ISO 4217 three-letter currency code.",
+    },
+    status: {
+      type: "string",
+      description: "Current payment status: completed, failed, refunded, disputed, etc.",
+    },
+    shopperReference: {
+      type: "string",
+      description: "The merchant-assigned shopper reference passed at payment creation.",
+    },
+    createdAt: {
+      type: "string",
+      description: "ISO 8601 timestamp of payment creation.",
+    },
+  }}
+/>
+
+<Callout type="info">
+The unified history is especially useful for customer service and dispute resolution. When a shopper calls about a transaction, look up `shopperReference` once and see every interaction regardless of channel, without querying separate systems.
+</Callout>
+
+## Privacy and consent
+
+Shopper recognition requires explicit consent. VINR links a shopper's identity across channels only when one of the following consent events has occurred: the shopper saved a card during checkout, opted into a loyalty programme, or created an account with your service. Passive browsing or guest checkout without explicit opt-in does not trigger cross-channel linkage.
+
+<Callout type="warn">
+**GDPR and CCPA compliance** — you must capture, store, and be able to demonstrate the legal basis for processing each shopper's cross-channel data. Record the consent event (type, timestamp, IP, consent text) in your own system and make it available on request. For shoppers in EEA or California, honour deletion requests within the statutory window. See [Data privacy and GDPR](/docs/compliance/gdpr) for VINR's data processing commitments.
+</Callout>
+
+<Steps>
+  <Step>
+    Capture consent at the earliest touchpoint — account creation, card save, or loyalty opt-in — and record the consent event in your system.
+  </Step>
+  <Step>
+    Pass `shopperReference` on payments only after consent has been granted. Omit it for guests who have not consented to cross-channel tracking.
+  </Step>
+  <Step>
+    If a shopper withdraws consent, call `vinr.shoppers.delete` to erase their profile and disassociate stored methods. See [Shopper profile API](#shopper-profile-api) below.
+  </Step>
+</Steps>
+
+## Shopper profile API
+
+The shopper profile provides a single view of a recognised shopper: their identity fields, all associated payment methods, and their first-seen timestamp. Use it for customer service lookups, loyalty integrations, and right-to-erasure workflows.
+
+**Retrieve a profile**
+
+```typescript
+const shopper = await vinr.shoppers.retrieve('user_8821');
+
+console.log(shopper.id);
+console.log(shopper.paymentMethods);
+```
+
+**Update a profile**
+
+```typescript
+const updated = await vinr.shoppers.update('user_8821', {
+  email: 'ada.lovelace@example.com',
+});
+```
+
+**Delete a profile (right to erasure)**
+
+```typescript
+await vinr.shoppers.delete('user_8821');
+```
+
+Deleting a shopper profile disassociates all stored methods from the `shopperReference` and removes personal data held by VINR. Completed payment records are retained for regulatory purposes but are anonymised — `shopperReference`, `shopperEmail`, and `shopperName` are scrubbed.
+
+<TypeTable
+  type={{
+    id: {
+      type: "string",
+      description: "VINR-assigned shopper profile ID, prefixed shpr_.",
+    },
+    shopperReference: {
+      type: "string",
+      description: "Your stable merchant-assigned identifier for this shopper.",
+    },
+    email: {
+      type: "string",
+      description: "Most recently provided email address for this shopper.",
+    },
+    "paymentMethods[]": {
+      type: "PaymentMethod[]",
+      description: "All payment method tokens (pm_) associated with this shopper, across all channels.",
+    },
+    createdAt: {
+      type: "string",
+      description: "ISO 8601 timestamp of when this shopper profile was first created.",
+    },
+  }}
+/>
+
+<Accordions>
+  <Accordion title="Advanced — fuzzy matching, phone recognition, guest promotion, and profile merging">
+
+**Fuzzy email matching**
+
+A shopper may transact with `ada@example.com` online and provide `Ada@Example.Com` at the terminal. VINR normalises email addresses (lowercased, plus-address stripping) before matching, so these resolve to the same profile automatically. Avoid relying on raw string equality in your own lookup code.
+
+**Phone-number-based recognition**
+
+If your integration captures `shopperPhone` at checkout and at the terminal, VINR can match profiles where no email was provided — common in markets where phone-number checkout is the norm. Pass `shopperPhone` in E.164 format (`+441234567890`). Phone matching is additive: if both email and phone are present, VINR requires both to agree before merging.
+
+```typescript
+await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 1200,
+  currency: 'GBP',
+  shopperReference: 'user_8821',
+  shopperPhone: '+441234567890',
+  reference: 'order_9315',
+});
+```
+
+**Guest-to-account promotion**
+
+When a guest shopper later creates an account, promote their in-flight session to a recognised profile by back-filling `shopperReference` on their existing payments.
+
+```typescript
+await vinr.shoppers.promoteGuest({
+  guestToken: 'gtok_...',
+  shopperReference: 'user_8821',
+  shopperEmail: 'ada@example.com',
+});
+```
+
+This associates the guest's saved method (if any) and prior transactions with the new account, so the shopper sees their complete history on first login.
+
+**Merging duplicate shopper profiles**
+
+If the same shopper ends up with two `shopperReference` values (for example after a data migration or a third-party account import), merge them:
+
+```typescript
+await vinr.shoppers.merge({
+  primaryReference: 'user_8821',
+  secondaryReference: 'legacy_ada_001',
+});
+```
+
+The primary profile absorbs all payment methods and transaction history from the secondary. The secondary `shopperReference` is retired and subsequent payments using it are silently redirected to the primary. Merges are irreversible — verify both references belong to the same individual before calling.
+
+  </Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card
+    title="Tokenization"
+    href="/docs/payments/tokenization"
+    description="Understand how VINR vaults card data and issues reusable pm_ tokens across your integration."
+  />
+  <Card
+    title="Cross-channel loyalty"
+    href="/docs/payments/omnichannel/cross-channel-loyalty"
+    description="Earn and redeem loyalty points across online, mobile, and in-store channels using the unified shopper profile."
+  />
+  <Card
+    title="Click and collect"
+    href="/docs/payments/omnichannel/click-and-collect"
+    description="Accept payment online and fulfil in-store, with real-time status sharing between your e-commerce and POS systems."
+  />
+</Cards>

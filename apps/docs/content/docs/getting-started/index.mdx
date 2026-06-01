@@ -1,23 +1,79 @@
 ---
 title: Getting Started
-description: Everything you need to start integrating with VINR.
+description: Everything you need to go from zero to live payments with VINR.
 persona: ["developer", "business-owner"]
+priority: "P0"
 lastUpdated: "2026-05-31"
 ---
 
-## Overview
+VINR is a European payment platform built around three products — **Payments**, **Billing**, and **Engagement** — all sharing one API, one SDK, and one customer record. Whether you're taking a first card payment or wiring up a subscription-plus-loyalty loop, you're always working with the same objects and the same event model.
 
-Get up and running with VINR in minutes. This section covers account setup, your first API call, and understanding the basic payment flow.
+You can start building in sandbox today without KYB, without a sales call, and without real money.
 
-## Prerequisites
+## What are you building?
 
-Before you begin, ensure you have:
+Pick the path that matches your goal. You can combine all three later — a single `cust_` record threads through every product.
 
-- A VINR merchant account (contact sales@vinr.com)
-- API credentials (available in your merchant dashboard)
-- A development environment with HTTPS support for webhooks
+<Cards>
+  <Card title="Accept online payments" href="/docs/getting-started/quick-start" description="Take card and local payment method payments on your site or app. Live in minutes with a hosted redirect, or embed VINR's card fields into your own checkout." />
+  <Card title="Run subscriptions & invoicing" href="/docs/billing" description="Model products, prices, and recurring billing. VINR handles the invoice lifecycle, retries, and revenue recognition." />
+  <Card title="Add loyalty & rewards" href="/docs/engagement" description="Attach a points program to any customer — standalone or layered on top of your existing Payments and Billing integration." />
+  <Card title="Build the full stack" href="/docs/getting-started/integration-overview" description="Use all three products together. One customer object, one set of keys, one webhook endpoint." />
+</Cards>
 
-## Next Steps
+## Your path to production
 
-- [Quick Start Guide](/docs/getting-started/quick-start) — Make your first payment in 5 minutes
-- [Authentication](/docs/getting-started/authentication) — API key management and security
+<Steps>
+
+### Create your account and explore the sandbox
+
+[Sign up at dashboard.vinr.com](https://dashboard.vinr.com/signup) with a work email. You get immediate access to a fully functional sandbox — no KYB, no sales call, no real money. Everything in sandbox behaves identically to production.
+
+See [Account setup](/docs/getting-started/account-setup) for team roles, environment structure, and the difference between sandbox and live keys.
+
+### Choose your integration path
+
+VINR offers three depths for Payments, from a redirect you can ship this afternoon to a fully API-driven flow for PCI-certified environments:
+
+| Path | You build | PCI scope |
+|---|---|---|
+| **Hosted** | A redirect + webhook handler | Lowest (SAQ A) |
+| **Embedded** | Your checkout page, VINR-hosted fields | Low (SAQ A-EP) |
+| **API-direct** | Full client + server flow | Highest (SAQ D) |
+
+Start hosted — it can be migrated to embedded or API-direct later without changing your data model. See [Integration overview](/docs/getting-started/integration-overview).
+
+### Build and test with sandbox keys
+
+Follow the [Quick Start](/docs/getting-started/quick-start) to make your first payment in about five minutes. Use test cards to drive any outcome:
+
+| Card number | Result |
+|---|---|
+| `4242 4242 4242 4242` | Successful payment |
+| `4000 0000 0000 0002` | Declined |
+| `4000 0000 0000 3220` | 3DS challenge |
+
+Install the SDK, set `VINR_SECRET_KEY` to your `sk_test_…` key, and your test charges never touch real funds.
+
+### Complete verification and go live
+
+When you're ready to accept real payments, complete KYB in the dashboard (1–2 business days), add your business IBAN, and swap `sk_test_…` for `sk_live_…`. The [Go-live checklist](/docs/getting-started/go-live-checklist) covers every step.
+
+</Steps>
+
+<Callout type="info">
+KYB verification only gates live mode — it does not block sandbox access. Your engineering team can reach a working integration before compliance review is complete.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Quick Start" href="/docs/getting-started/quick-start" description="Make your first payment in five minutes." />
+  <Card title="Account setup" href="/docs/getting-started/account-setup" description="Team roles, environments, and connecting your bank account." />
+  <Card title="Authentication" href="/docs/getting-started/authentication" description="API key management, scoping, and rotation." />
+  <Card title="Go-live checklist" href="/docs/getting-started/go-live-checklist" description="Everything to verify before switching to live keys." />
+</Cards>
+
+<Callout type="info">
+**Have a question?** The Ask AI panel (bottom-right) is grounded in these docs and can answer questions about integration paths, payment methods, webhooks, and settlement — without leaving the page.
+</Callout>

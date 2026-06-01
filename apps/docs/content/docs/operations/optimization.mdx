@@ -1,0 +1,181 @@
+---
+title: Optimization
+description: Improve authorization rates, reduce fraud exposure, and increase checkout conversion using VINR's Uplift modules.
+persona: ["operations", "developer", "finance-manager"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+VINR Uplift is a suite of data-driven modules that help you increase payment performance without adding friction. Each module targets a specific part of the payment funnel and can be enabled independently. Together they address the four levers of payment performance: tokenization, fraud protection, authentication, and routing.
+
+## Overview
+
+| Module | What it optimizes | Key mechanism |
+|---|---|---|
+| **Tokenize** | Repeat-customer conversion | Network tokens, card-on-file updates |
+| **Protect** | Fraud exposure vs. accept rate | ML-guided risk thresholds |
+| **Authenticate** | 3DS challenge rate | Dynamic, risk-based 3DS exemptions |
+| **Optimize** | Authorization rate | Smart routing, retry logic |
+| **Personalize** | Checkout conversion | Payment method ordering, prefill |
+
+<Callout type="info">
+Uplift modules are available on Growth and Enterprise plans. Some features (smart routing, personalization) require a minimum transaction volume to produce statistically significant recommendations. Contact your account manager to confirm eligibility.
+</Callout>
+
+## Tokenize
+
+**Tokenize** replaces raw PANs with network tokens — issuer-managed references that stay current even when the underlying card is re-issued. This eliminates a major source of recurring-payment failures.
+
+### How it works
+
+When a card is first used, VINR provisions a network token with Visa (VTS), Mastercard (MDES), or Amex. On future charges, the token is used instead of the PAN. If the card is re-issued (expiry, lost/stolen), the issuer updates the token — VINR receives the update automatically via Account Updater and surfaces it as a `card.updated` webhook.
+
+```typescript
+// Save a card and get back a VINR token that wraps the network token
+const method = await vinr.paymentMethods.create({
+  type: 'card',
+  card: { number: '4111111111111111', expMonth: 12, expYear: 2028, cvc: '737' },
+  customer: 'cus_...',
+});
+// method.networkToken.provisioned === true  ← network token issued
+
+// Charge with the saved method — VINR uses the network token automatically
+const payment = await vinr.payments.create({
+  amount: 1990,
+  currency: 'EUR',
+  paymentMethod: method.id,
+  customer: 'cus_...',
+  offSession: true,
+});
+```
+
+### Account Updater
+
+For existing card-on-file tokens without network token coverage, Account Updater polls issuer databases monthly and returns new expiry or PAN when a card is re-issued. Results arrive as `card.updated` or `card.expired` events.
+
+```typescript
+vinr.webhooks.on('card.updated', async (event) => {
+  const { paymentMethodId, previousExpiry, newExpiry } = event.data;
+  await db.cards.update(paymentMethodId, { expiry: newExpiry });
+});
+```
+
+## Protect
+
+**Protect** uses VINR's fraud model in a feedback loop: it observes your dispute outcomes and adjusts the ML thresholds in your risk profile to optimize your fraud rate relative to your accept rate.
+
+### Configure a target
+
+Set a maximum acceptable fraud rate (chargebacks / gross volume). VINR will tune the review/block thresholds over a 30-day learning window to stay at or below that target.
+
+```typescript
+await vinr.uplift.protect.configure({
+  merchantAccountId: 'ma_...',
+  targetFraudRateBps: 20,     // 20 bps = 0.20%
+  learningWindowDays: 30,
+});
+```
+
+The current operating point (fraud rate, accept rate, block rate) is visible in **Dashboard → Uplift → Protect**. The dashboard also surfaces false-positive estimates — legitimate transactions that were blocked — so you can weigh the tradeoff.
+
+## Authenticate
+
+**Authenticate** manages 3D Secure dynamically. Rather than challenging every transaction, it exempts low-risk payments and applies SCA only where the issuer is likely to require it or the fraud risk warrants it.
+
+### Exemption strategy
+
+VINR evaluates each transaction at runtime and requests one of:
+
+| Strategy | When applied |
+|---|---|
+| `low_value` exemption | Amount ≤ EUR 30 and running aggregate ≤ EUR 100 |
+| `low_risk` (TRA) exemption | VINR's fraud rate for the BIN is below the threshold |
+| `trusted_beneficiary` | Customer has whitelisted your merchant with their bank |
+| Full 3DS challenge | High-risk signals, issuer decline with soft decline code |
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 2500,
+  currency: 'EUR',
+  paymentMethod: { type: 'card', token: 'tok_...' },
+  authentication: {
+    strategy: 'auto',    // VINR picks the optimal exemption; fall back to 3DS if needed
+  },
+});
+// payment.authentication.outcome: 'exempted' | 'authenticated' | 'not_required'
+```
+
+<Callout type="info">
+Requesting a TRA exemption shifts liability back to VINR for fraud chargebacks. VINR only applies TRA when it can confidently accept that liability — roughly when the BIN's observed fraud rate is ≤ 0.13% over the prior 90 days.
+</Callout>
+
+## Optimize
+
+**Optimize** improves raw authorization rates through smart routing and intelligent retries.
+
+### Smart routing
+
+For the same payment method, different acquirer-to-issuer paths have different authorization rates. VINR selects the highest-performing route based on real-time data and historical performance by BIN, amount, and geography.
+
+Smart routing is transparent — no configuration required. You can observe the effect in **Dashboard → Uplift → Optimize → Routing breakdown**, which shows per-acquirer approval rates for your traffic.
+
+### Intelligent retry
+
+When an authorization fails with a `soft_decline` (issuer temporarily unavailable, insufficient funds, try again), VINR can re-attempt on a secondary route within the same session, with configurable parameters:
+
+```typescript
+await vinr.uplift.optimize.configure({
+  merchantAccountId: 'ma_...',
+  retry: {
+    enabled: true,
+    maxAttempts: 2,
+    retryableCodes: ['insufficient_funds', 'do_not_honor', 'issuer_unavailable'],
+    backoffMs: 500,
+  },
+});
+```
+
+Each retry attempt appears as a separate authorization in the payment's `attempts[]` array but the merchant-facing payment object stays singular.
+
+## Personalize
+
+**Personalize** reorders and filters payment methods at checkout based on what is most likely to convert for the specific customer and transaction context — device, geography, currency, and payment history.
+
+```typescript
+const session = await vinr.checkout.sessions.create({
+  amount: 4900,
+  currency: 'EUR',
+  customer: 'cus_...',
+  personalize: true,    // enable Personalize for this session
+});
+// session.paymentMethods is pre-ranked for this customer
+```
+
+For returning customers, VINR prefills shipping and billing details from the customer object, reducing keystrokes at checkout. Prefill only happens when the customer has an active session or the payment is initiated server-side with the customer ID.
+
+## Experiments
+
+All Uplift modules support A/B experimentation via **Dashboard → Uplift → Experiments** or the API. Run a variant on a traffic slice, observe the KPIs (authorization rate, fraud rate, challenge rate, conversion rate), and promote or discard.
+
+```typescript
+const exp = await vinr.uplift.experiments.create({
+  name: 'Optimize retry cadence Q3',
+  module: 'optimize',
+  trafficSplit: 0.15,     // 15% on variant
+  variant: {
+    retry: { maxAttempts: 3, backoffMs: 1000 },
+  },
+  startsAt: '2026-07-01T00:00:00Z',
+  endsAt:   '2026-07-28T23:59:59Z',
+});
+```
+
+Results are visible in the experiment dashboard after sufficient sample size (VINR alerts you when significance is reached).
+
+## Next steps
+
+<Cards>
+  <Card title="Risk & fraud" href="/docs/operations/risk-management" description="Configure risk rules that feed into Protect." />
+  <Card title="3D Secure" href="/docs/payments/3d-secure" description="Deep dive on SCA and exemption flow." />
+  <Card title="Tokenization" href="/docs/payments/tokenization" description="Card-on-file and network token details." />
+</Cards>

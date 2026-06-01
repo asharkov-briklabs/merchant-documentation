@@ -1,0 +1,178 @@
+---
+title: "Terminals"
+description: "Choose the right VINR-certified terminal for your environment."
+persona: ["developer", "business-owner", "operations"]
+priority: "P1"
+lastUpdated: "2026-05-31"
+---
+
+Every VINR terminal ships pre-configured, PCI PTS-certified, and ready to activate out of the box. There is no firmware to flash and no certificate to install — plug in or power on, scan the setup QR code, and the device is live in your account within minutes.
+
+## Terminal models
+
+All five models accept contactless (NFC), chip+PIN (EMV), and magnetic stripe payments.
+
+<TypeTable
+  type={{
+    "Nexgo N92": { type: "Handheld — Android", description: "5\" touch screen. 4G / WiFi / Bluetooth. Built-in receipt printer. Best for tableside service and queue-busting." },
+    "Nexgo N86Pro": { type: "Handheld — Android", description: "6\" large touch screen. 4G / WiFi / Bluetooth. No printer. Best for customer-facing forms, delivery, and field sales where screen size matters." },
+    "Nexgo CT20": { type: "Desktop countertop", description: "Fixed receipt printer. Ethernet / WiFi. Best for retail checkout lanes, pharmacies, and cafés." },
+    "Nexgo CT20P": { type: "Desktop countertop", description: "Integrated PIN pad. Ethernet / WiFi. Best for environments that require a separate customer-facing keypad at a fixed counter." },
+    "Ciontek CM30": { type: "Compact mPOS — Android", description: "Pocket-sized. Bluetooth / WiFi. No built-in printer. Best for pop-up stalls, markets, and field agents pairing with a phone." },
+  }}
+/>
+
+<Callout type="info">
+All models are PCI PTS 5.x certified. Key injection is performed at the factory — you never handle encryption keys directly. TDES/DUKPT key management is fully managed by VINR.
+</Callout>
+
+## Countertop terminals
+
+The **Nexgo CT20** and **Nexgo CT20P** are designed for fixed checkout positions with a reliable network connection.
+
+The CT20 suits high-throughput environments where speed matters: supermarkets, retail checkout lanes, and pharmacy counters. Its built-in thermal printer produces receipts immediately without a secondary device.
+
+The CT20P adds an **integrated PIN pad** on the customer-facing side. This is the right choice when regulatory or store policy requires that the cardholder enter their PIN on a physically separate surface from the merchant screen — a common requirement in pharmacies, petrol stations, and table-service restaurants with a fixed pay point.
+
+Both models connect over Ethernet (recommended for reliability) or WiFi, and both support static IP assignment for network-locked POS integrations.
+
+## Handheld terminals
+
+The **Nexgo N92** and **Nexgo N86Pro** run Android and are built for environments where the terminal moves with the staff member.
+
+The N92 is the primary choice for **tableside payments** in restaurants, queue-busting in retail, and last-mile delivery confirmation. Its built-in printer means the full transaction — authorisation and receipt — completes without returning to a counter.
+
+The N86Pro carries a larger screen, making it well suited to scenarios where the customer interacts directly with the display: tipping prompts, digital signature capture, or multi-line order summaries. It does not include a built-in printer; pair it with a Bluetooth receipt printer if paper records are needed.
+
+Both handhelds support 4G cellular, WiFi, and Bluetooth, giving them reliable connectivity across venue floors, car parks, and outdoor service areas.
+
+## Compact mPOS
+
+The **Ciontek CM30** is a pocket-sized Android mPOS that pairs with a merchant's phone or tablet over Bluetooth or WiFi. It accepts all three card entry methods — contactless, chip+PIN, and magnetic stripe — in a device small enough to carry in a jacket pocket.
+
+The CM30 is the right fit for **pop-up retail**, markets, festival concessions, and field sales representatives who need to accept card payments without committing to a full terminal deployment. Because there is no built-in printer, digital receipts (SMS or email) are the default — configure them in your dashboard receipt settings.
+
+For software setup and pairing instructions see [Mobile solutions](/docs/payments/in-person/mobile-solutions).
+
+## Order and activate
+
+<Steps>
+
+<Step>
+**Place your order**
+
+Order terminals through the VINR dashboard under **Hardware > Order terminals**, or contact your account manager for volume pricing and custom configurations. Specify the model, quantity, and any accessory bundles at this stage.
+</Step>
+
+<Step>
+**Terminals ship pre-configured**
+
+Each device arrives with your merchant credentials already provisioned. The packaging includes a summary card with the device serial number and a one-time activation QR code. No firmware downloads or manual configuration are required.
+</Step>
+
+<Step>
+**Activate the device**
+
+Power on the terminal. When prompted, either scan the activation QR code from your dashboard or type the six-digit activation code printed on the summary card. The terminal contacts VINR's provisioning service, validates the code, and completes the setup automatically.
+</Step>
+
+<Step>
+**Assign to a location**
+
+In the dashboard under **Hardware > Terminals**, find the newly activated device by its serial number and assign it to a location and register. Location assignment controls which currency, tax rules, and receipt template the terminal uses. See [Terminal management](/docs/payments/in-person/terminal-management) for details on reassignment, deactivation, and remote reboot.
+</Step>
+
+</Steps>
+
+<Callout type="warn">
+An activation code is single-use and expires 72 hours after the terminal ships. If your code has expired, generate a replacement from the terminal's detail page in the dashboard.
+</Callout>
+
+## Accessories
+
+VINR-certified accessories are available through the same dashboard ordering flow as hardware.
+
+<TypeTable
+  type={{
+    "Thermal receipt paper (10-roll pack)": { type: "Consumable", description: "58 mm wide rolls compatible with the N92, CT20, and CT20P printers. BPA-free." },
+    "Charging base — N92 / N86Pro": { type: "Accessory", description: "Dock for counter or shelf mounting. Charges via USB-C pass-through. Sold individually or in four-slot gang charger configuration." },
+    "Protective carry case — N92": { type: "Accessory", description: "Drop-rated rubber case with belt clip. Recommended for delivery and queue-busting deployments." },
+    "Protective carry case — CM30": { type: "Accessory", description: "Slim silicone sleeve with lanyard loop. Keeps the device ready in a pocket or around the neck." },
+    "Countertop security mount — CT20 / CT20P": { type: "Accessory", description: "Kensington-compatible locking bracket for bolting the terminal to a counter surface." },
+  }}
+/>
+
+<Accordions>
+<Accordion title="Advanced — Fleet provisioning, custom branding, and key injection">
+
+**Fleet provisioning via Management API**
+
+For deployments of 10 or more terminals, use the Management API to provision devices programmatically rather than activating them one at a time.
+
+<Tabs items={["SDK", "REST"]}>
+<Tab value="SDK">
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminal = await vinr.terminals.activate({
+  activationCode: 'ABC123',
+  locationId: 'loc_7Xk4p...',
+  label: 'Counter 3 — Main Floor',
+});
+
+// terminal.id → "term_9Kp2v..."
+// terminal.status → "active"
+```
+
+</Tab>
+<Tab value="REST">
+
+```bash
+curl -X POST https://api.vinr.com/v1/terminals/activate \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "activationCode": "ABC123",
+    "locationId": "loc_7Xk4p...",
+    "label": "Counter 3 — Main Floor"
+  }'
+```
+
+</Tab>
+</Tabs>
+
+Use `vinr.terminals.list({ locationId })` to enumerate all devices at a location and `vinr.terminals.update()` to relabel or reassign them in bulk. Webhook events `terminal.activated` and `terminal.deactivated` integrate with your asset management tooling.
+
+**Custom terminal branding**
+
+Enterprise accounts can upload a logo and set a brand colour that appears on the idle screen and receipt header. Submit assets via the dashboard under **Settings > Terminal branding** or via `vinr.terminals.branding.update()`. Assets must be PNG, maximum 512 × 512 px, and under 200 KB. Changes propagate to all active terminals at next heartbeat (typically under 60 seconds).
+
+**TDES/DUKPT key injection**
+
+Encryption key injection — the process of loading Triple-DES (TDES) keys under DUKPT key management — is performed at VINR's certified Key Injection Facility (KIF) before the device ships. You never receive, handle, or rotate encryption keys directly. If a key compromise is suspected, contact VINR support to initiate remote key re-injection; the terminal is placed in a suspended state until re-injection completes and the device reconnects to the provisioning service.
+
+</Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card
+    href="/docs/payments/in-person/architecture"
+    title="In-person architecture"
+    description="Understand how terminals connect to VINR's payment infrastructure and what happens during a transaction."
+  />
+  <Card
+    href="/docs/payments/in-person/accept-a-payment"
+    title="Accept a payment"
+    description="Create a PaymentIntent and present it to a terminal using the SDK or REST API."
+  />
+  <Card
+    href="/docs/payments/in-person/terminal-management"
+    title="Terminal management"
+    description="Assign terminals to locations, monitor device health, and handle remote reboot or deactivation."
+  />
+</Cards>

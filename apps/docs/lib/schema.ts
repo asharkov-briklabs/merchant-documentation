@@ -35,6 +35,8 @@ export const CategoryEnum = z.enum([
   "engagement",
   "compliance",
   "operations",
+  "platforms",
+  "industries-and-markets",
   "api-reference",
   "troubleshooting",
   "changelog",

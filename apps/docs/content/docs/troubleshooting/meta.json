@@ -4,6 +4,7 @@
   "icon": "LifeBuoy",
   "pages": [
     "index",
+    "result-codes",
     "error-codes",
     "declines-and-failures",
     "debugging",

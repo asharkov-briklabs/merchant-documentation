@@ -1,0 +1,297 @@
+---
+title: "Digital receipts"
+description: "Send email or SMS receipts for any payment channel — terminal, online, or pay-by-link — with a consistent merchant brand."
+persona: ["developer", "business-owner"]
+priority: "P2"
+lastUpdated: "2026-05-31"
+---
+
+VINR generates and delivers a receipt for every payment, regardless of whether the shopper bought online, tapped a card at a terminal, or paid via a link sent to their phone. A unified receipt template means the shopper sees the same merchant brand, the same structure, and the same return link whether they bought in store or on a laptop at midnight. Receipts automatically include the core transaction details, earned loyalty points when the loyalty module is active, and a return or exchange link that routes back to your configured returns policy URL.
+
+## Receipt channels
+
+VINR supports four delivery channels. Which channels are available depends on how the payment was initiated; some are triggered automatically and others are presented to the shopper as a choice.
+
+<TypeTable
+  type={{
+    Email: {
+      type: "channel",
+      description: "Available for online payments, in-person terminal payments, and pay-by-link. Triggered automatically when shopperEmail is supplied; presented as a shopper choice at the terminal when no email is on file.",
+    },
+    SMS: {
+      type: "channel",
+      description: "Available for online payments, in-person terminal payments, and pay-by-link. Triggered automatically when shopperPhone is supplied; presented as a shopper choice at the terminal. Requires the SMS add-on enabled under Settings → Receipts.",
+    },
+    "Print (terminal)": {
+      type: "channel",
+      description: "Available for in-person terminal payments only. Printed immediately on supported devices (Nexgo N92, Nexgo CT20/CT20P). Not available on devices without a built-in or paired printer — digital channels are offered instead.",
+    },
+    "QR code (terminal screen)": {
+      type: "channel",
+      description: "Available for in-person terminal payments when the QR receipt feature flag is enabled. A QR code is shown on the terminal screen after authorisation; the shopper scans it to open a hosted digital receipt. No email or phone number required.",
+    },
+  }}
+/>
+
+## Configure receipt settings
+
+Global defaults are configured in **Dashboard → Settings → Receipts**. You can override defaults per-payment on both terminal and online payment calls.
+
+<Tabs items={["Terminal payment", "Online payment"]}>
+<Tab value="Terminal payment">
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 3500,
+  currency: 'GBP',
+  reference: 'order_1042',
+  receipt: {
+    channels: ['email', 'sms'],
+    requireConsent: true,
+  },
+});
+```
+
+</Tab>
+<Tab value="Online payment">
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 3500,
+  currency: 'GBP',
+  shopperEmail: 'shopper@example.com',
+  shopperReference: 'cust_xyz789',
+  receipt: {
+    channels: ['email', 'sms'],
+    requireConsent: true,
+  },
+});
+```
+
+</Tab>
+</Tabs>
+
+When `requireConsent: true` is set, VINR checks the shopper profile for a stored consent record before dispatching. If no consent is on file and none was passed on the request, the receipt is queued but not sent until consent is confirmed. See [GDPR and consent](#gdpr-and-consent) below.
+
+Per-channel settings — such as the SMS sender name and the email reply-to address — are configured in **Dashboard → Settings → Receipts → Channel settings**.
+
+## Branding
+
+Upload your logo, choose a brand colour, and set custom footer text in **Dashboard → Settings → Receipts → Branding**. These settings apply across all receipt channels — email, SMS link, and QR-hosted receipt — so your shopper sees the same look regardless of how they received the receipt.
+
+<Steps>
+  <Step>
+    Open **Dashboard → Settings → Receipts → Branding**.
+  </Step>
+  <Step>
+    Upload a PNG logo, minimum 300 × 300 px, maximum 1 MB. Transparent backgrounds are supported.
+  </Step>
+  <Step>
+    Set a **primary brand colour** using the hex picker. This colour is used for the receipt header bar and call-to-action buttons in email receipts.
+  </Step>
+  <Step>
+    Enter optional **footer text** — for example a returns policy note, a support email, or a promotional message. Maximum 200 characters.
+  </Step>
+  <Step>
+    Click **Save**. A preview renders inline before you save.
+  </Step>
+</Steps>
+
+<Callout type="warn">
+Branding changes apply to receipts generated after the save. Previously delivered receipts are not retroactively updated.
+</Callout>
+
+## Custom receipt fields
+
+Append order-specific data to any receipt by passing a `receiptData` object on the payment. The fields appear as a labelled section at the bottom of the receipt, above the footer text.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 8900,
+  currency: 'EUR',
+  shopperEmail: 'shopper@example.com',
+  shopperReference: 'cust_xyz789',
+  receiptData: {
+    orderId: 'ORD-20260531-0042',
+    itemSummary: '2x Wireless Headphones, 1x USB-C Cable',
+    returnByDate: '2026-06-30',
+  },
+});
+```
+
+<TypeTable
+  type={{
+    orderId: {
+      type: "string",
+      description: "Your internal order reference. Displayed prominently on the receipt as the order number. Maximum 100 characters.",
+    },
+    itemSummary: {
+      type: "string",
+      description: "Plain text description of the items purchased. Displayed in the items section of the receipt. Maximum 500 characters. No HTML or Markdown — the text is rendered verbatim.",
+    },
+    returnByDate: {
+      type: "string",
+      description: "ISO 8601 date string (YYYY-MM-DD) indicating the last date on which the shopper can initiate a return or exchange. Rendered as a human-readable date in the receipt locale.",
+    },
+  }}
+/>
+
+The `itemSummary` field accepts plain text only (max 500 characters). For structured line-item rendering, use a custom receipt template — see the Advanced section below.
+
+## Loyalty on receipts
+
+When loyalty is enabled for your account and a `shopperReference` is supplied on the payment, VINR automatically appends a loyalty summary to the receipt. The summary shows the points earned on this transaction and the shopper's updated balance.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 5000,
+  currency: 'USD',
+  shopperEmail: 'shopper@example.com',
+  shopperReference: 'cust_xyz789',
+  receipt: {
+    channels: ['email'],
+  },
+});
+```
+
+No additional configuration is needed — VINR resolves the loyalty account from `shopperReference` and populates the earned points and current balance fields automatically. If the shopper is not enrolled in your loyalty programme, the loyalty section is omitted from the receipt silently.
+
+See [Cross-channel loyalty](/docs/payments/omnichannel/cross-channel-loyalty) for how to set up the loyalty module and configure earning rules across channels.
+
+## GDPR and consent
+
+Email and SMS receipt delivery requires a lawful basis under GDPR and equivalent privacy regulations. The recommended approach is to capture explicit consent at the point of collection — for example, a tick-box at online checkout or a screen prompt at the terminal.
+
+Pass the consent flag alongside the shopper's contact details:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 4200,
+  currency: 'EUR',
+  shopperEmail: 'shopper@example.com',
+  shopperReference: 'cust_xyz789',
+  shopperConsent: {
+    receiptEmail: true,
+    receiptSms: false,
+    capturedAt: new Date().toISOString(),
+    method: 'checkout_checkbox',
+  },
+  receipt: {
+    channels: ['email'],
+  },
+});
+```
+
+VINR stores the consent record with the shopper profile. On future payments that reference the same `shopperReference`, stored consent is applied automatically — you do not need to pass `shopperConsent` again unless the shopper updates their preferences.
+
+<Callout type="warn">
+If `shopperEmail` is passed without a `shopperConsent` flag, VINR sends the receipt but records the delivery as unconsented in the audit log attached to the shopper profile. This supports legitimate-interest use cases but the unconsented flag is visible in compliance exports. Prefer explicit consent capture wherever possible. See [Privacy and data handling](/docs/compliance/gdpr) for full guidance.
+</Callout>
+
+<Accordions>
+  <Accordion title="Advanced — Custom HTML templates, multi-language receipts, receipt resend API, and receipt webhooks">
+
+**Custom receipt HTML templates**
+
+For full control over layout — fonts, logo position, table-style line items — upload a custom receipt template via **Dashboard → Settings → Receipts → Templates**. Templates use Handlebars syntax. VINR injects the payment object, `receiptData`, and loyalty data as template variables.
+
+```handlebars
+<table>
+  <tr><td>Order</td><td>{{receiptData.orderId}}</td></tr>
+  <tr><td>Amount</td><td>{{payment.formattedAmount}}</td></tr>
+  {{#if loyalty}}
+  <tr><td>Points earned</td><td>{{loyalty.pointsEarned}}</td></tr>
+  {{/if}}
+</table>
+```
+
+Templates are assigned per-channel. You can have a rich HTML template for email and a plain-text fallback for SMS. Test templates against a live payment in the dashboard **Preview** tool before assigning them to production.
+
+**Multi-language receipts**
+
+VINR detects the receipt locale from the browser's `Accept-Language` header for online payments, and from the terminal's configured language for in-person payments. To override per-transaction, pass `receipt.locale`:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 3000,
+  currency: 'EUR',
+  shopperEmail: 'shopper@example.com',
+  receipt: {
+    channels: ['email'],
+    locale: 'de',
+  },
+});
+```
+
+Supported locales: `en`, `fr`, `de`, `es`, `it`, `nl`, `pt`, `pl`. Auto-populated fields are translated; `receiptData` values are printed as supplied.
+
+**Receipt resend API**
+
+Resend a receipt for any completed payment — useful when a shopper reports they did not receive it or wants it sent to a different address.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+await vinr.receipts.resend('pay_abc123', {
+  channels: ['email'],
+  shopperEmail: 'newemail@example.com',
+});
+```
+
+Resends are logged on the payment record. You can also trigger a resend from the payment detail view in the dashboard.
+
+**Receipt webhooks**
+
+To handle receipt delivery with your own system — for example to push receipts through your existing CRM or ESP — subscribe to the `receipt.requested` webhook event. VINR fires the event instead of (or in addition to) its own delivery, depending on your account setting in **Dashboard → Settings → Receipts → Delivery mode**.
+
+The event payload includes the full rendered receipt as an HTML string and a plain-text fallback, along with the shopper's contact details and the originating payment reference.
+
+  </Accordion>
+</Accordions>
+
+## Next steps
+
+<Cards>
+  <Card
+    href="/docs/payments/in-person/receipts-and-engagement"
+    title="Receipts & shopper engagement"
+    description="Configure terminal receipt prompts, collect email addresses at the point of sale, and display loyalty balances on printed receipts."
+  />
+  <Card
+    href="/docs/payments/omnichannel/cross-channel-loyalty"
+    title="Cross-channel loyalty"
+    description="Set up a loyalty programme that awards and redeems points consistently across online, in-person, and pay-by-link payments."
+  />
+  <Card
+    href="/docs/payments/payment-links"
+    title="Payment links"
+    description="Create shareable payment links for remote or asynchronous sales, with receipt delivery configured at link creation time."
+  />
+</Cards>

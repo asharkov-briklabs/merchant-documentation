@@ -1,0 +1,119 @@
+---
+title: Split payments
+description: Route a single charge across multiple recipients — sub-merchant share, platform commission, fees, VAT, and tips.
+---
+
+A split tells VINR how to divide the gross payment amount into components at authorization or capture time. Each component is routed to a different balance account.
+
+## Split components
+
+| Type | Description |
+|---|---|
+| `balance_account` | Funds credited to a sub-merchant's balance account |
+| `commission` | Platform fee deducted from the transaction; credited to your platform account |
+| `payment_fee` | Processing and interchange fees; debited from the transaction |
+| `vat` | Tax amount withheld (EU merchant of record flows) |
+| `tip` | Gratuity routed separately (restaurant / hospitality) |
+| `remainder` | Catch-all for any amount not explicitly allocated; routed to the platform |
+
+All component amounts must sum to ≤ the original transaction amount (the platform absorbs any unallocated remainder).
+
+---
+
+## Creating a split
+
+Pass a `splits` array on the payment or capture request:
+
+```json
+POST /v1/payments
+{
+  "amount": 10000,
+  "currency": "USD",
+  "payment_method": "pm_...",
+  "splits": [
+    {
+      "type": "balance_account",
+      "balance_account_id": "ba_seller_abc",
+      "amount": 8500,
+      "description": "Seller earnings"
+    },
+    {
+      "type": "commission",
+      "amount": 1000,
+      "description": "Platform 10%"
+    },
+    {
+      "type": "payment_fee",
+      "amount": 500
+    }
+  ]
+}
+```
+
+The `balance_account_id` field is required for `balance_account` components; all other types route to the platform by default.
+
+---
+
+## Split timing
+
+### Authorization-time split
+Split is specified when the payment is authorized. Funds are reserved against each component's balance account.
+
+### Capture-time split
+Split is specified (or adjusted) when the payment is captured. The authorization-time split (if any) is overridden. Use this when the final split isn't known until fulfillment — for example, a marketplace order where the seller is confirmed after auth.
+
+```json
+POST /v1/payments/{payment_id}/capture
+{
+  "splits": [ ... ]
+}
+```
+
+---
+
+## Multi-seller split
+
+Route a single payment to multiple sub-merchants (e.g. a bundle of products from different sellers):
+
+```json
+"splits": [
+  { "type": "balance_account", "balance_account_id": "ba_seller_1", "amount": 4000 },
+  { "type": "balance_account", "balance_account_id": "ba_seller_2", "amount": 3500 },
+  { "type": "commission",      "amount": 1500 },
+  { "type": "payment_fee",     "amount":  500 }
+]
+```
+
+There is no limit on the number of `balance_account` components per payment.
+
+---
+
+## Refunds with splits
+
+When a split payment is refunded, VINR reverses each component proportionally by default. You can override this with explicit refund splits:
+
+```json
+POST /v1/payments/{payment_id}/refunds
+{
+  "amount": 4500,
+  "splits": [
+    { "type": "balance_account", "balance_account_id": "ba_seller_1", "amount": 4000 },
+    { "type": "commission", "amount": 500 }
+  ]
+}
+```
+
+Platform commission is only reversed if explicitly included in the refund splits.
+
+---
+
+## Disputes (chargebacks)
+
+When a buyer raises a chargeback on a split payment, VINR debits the full disputed amount from the platform's balance account. Your platform is responsible for recovering any sub-merchant portion. This is a key reason to maintain adequate [reserve accounts](/docs/platforms/fund-management#reserves).
+
+---
+
+## Next steps
+
+- [Fund management](/docs/platforms/fund-management) — balance accounts and reserves
+- [Payouts](/docs/platforms/payouts) — when and how split funds reach sub-merchant bank accounts
