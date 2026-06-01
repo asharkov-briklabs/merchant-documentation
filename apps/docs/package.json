@@ -12,7 +12,8 @@
     "pretype-check": "fumadocs-mdx",
     "type-check": "tsc --noEmit",
     "check-links": "node scripts/check-internal-links.mjs",
-    "generate": "fumadocs-mdx"
+    "generate": "fumadocs-mdx",
+    "generate:api": "node scripts/generate-api.mjs && fumadocs-mdx"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.0.0",
@@ -24,12 +25,14 @@
     "clsx": "^2.1.0",
     "fumadocs-core": "13.4.10",
     "fumadocs-mdx": "10.0.2",
+    "fumadocs-openapi": "^4.4.2",
     "fumadocs-ui": "13.4.10",
     "lucide-react": "^0.400.0",
     "next": "^14.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-markdown": "^10.1.0",
+    "shiki": "^4.1.0",
     "tailwind-merge": "^2.3.0",
     "zod": "^3.23.0"
   },

@@ -1,0 +1,1091 @@
+---
+title: Subscriptions
+description: >-
+  Create and manage subscriptions. Subscriptions let you charge a customer on a
+  recurring basis.
+full: true
+---
+
+import { Root, API, APIInfo, APIExample, Responses, Response, ResponseTypes, ExampleResponse, TypeScriptResponse, Property, ObjectCollapsible, Requests, Request, APIPlayground } from "fumadocs-openapi/ui";
+
+<Root baseUrl={"https://api.vinr.com/v1"}>
+
+<API>
+
+<APIInfo method={"GET"} route={"/subscriptions"}>
+
+## List all subscriptions
+
+By default, returns a list of subscriptions that have not been canceled.
+
+<APIPlayground authorization={{"type":"string","name":"Authorization","defaultValue":"Bearer","isRequired":true,"description":"The Authorization access token"}} method={"GET"} route={"/subscriptions"} bodyType={"json"} path={[]} query={[{"name":"limit","type":"number","defaultValue":"","isRequired":false},{"name":"starting_after","type":"string","defaultValue":"","isRequired":false},{"name":"ending_before","type":"string","defaultValue":"","isRequired":false},{"name":"customer","type":"string","defaultValue":"","isRequired":false},{"name":"status","type":"string","defaultValue":"","isRequired":false}]} header={[]} body={undefined} schemas={{}}>
+
+</APIPlayground>
+
+### Authorization
+
+<Property name={"Authorization"} type={"Bearer <token>"} required={true}>
+
+Use your secret API key (`sk_live_...` or `sk_test_...`) as a bearer token.
+
+In: `header`
+
+</Property>
+
+### Query Parameters
+
+<Property name={"limit"} type={"integer"} required={false} deprecated={false}>
+
+A limit on the number of objects to be returned, between 1 and 100.
+
+<span>Default: `10`</span>
+
+<span>Minimum: `1`</span>
+
+<span>Maximum: `100`</span>
+
+</Property>
+
+<Property name={"starting_after"} type={"string"} required={false} deprecated={false}>
+
+A cursor for use in pagination. `starting_after` is an object ID that defines your place in the list.
+
+</Property>
+
+<Property name={"ending_before"} type={"string"} required={false} deprecated={false}>
+
+A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list.
+
+</Property>
+
+<Property name={"customer"} type={"string"} required={false} deprecated={false}>
+
+The ID of the customer whose subscriptions will be retrieved.
+
+</Property>
+
+<Property name={"status"} type={"string"} required={false} deprecated={false}>
+
+The status of the subscriptions to retrieve.
+
+<span>Value in: `"active" | "past_due" | "canceled" | "unpaid" | "incomplete" | "incomplete_expired" | "trialing" | "all"`</span>
+
+</Property>
+
+| Status code | Description |
+| ----------- | ----------- |
+| `200` | Returns a list of subscription objects. |
+
+</APIInfo>
+
+<APIExample>
+
+<Requests items={["cURL","JavaScript"]}>
+
+<Request value={"cURL"}>
+
+```bash
+curl -X GET "https://api.vinr.com/v1/subscriptions?limit=10&starting_after=string&ending_before=string&customer=string&status=active"
+```
+
+</Request>
+
+<Request value={"JavaScript"}>
+
+```js
+fetch("https://api.vinr.com/v1/subscriptions?limit=10&starting_after=string&ending_before=string&customer=string&status=active", {
+  method: "GET"
+});
+```
+
+</Request>
+
+</Requests>
+
+<Responses items={["200"]}>
+
+<Response value={"200"}>
+
+<ResponseTypes>
+
+<ExampleResponse>
+
+```json
+{
+  "object": "list",
+  "has_more": true,
+  "url": "string",
+  "data": [
+    {
+      "id": "sub_1Abc",
+      "object": "subscription",
+      "customer": "cust_8aZ2",
+      "status": "active",
+      "current_period_start": 0,
+      "current_period_end": 0,
+      "cancel_at_period_end": true,
+      "canceled_at": 0,
+      "trial_start": 0,
+      "trial_end": 0,
+      "items": {
+        "object": "list",
+        "data": [
+          {
+            "id": "string",
+            "price": "string",
+            "quantity": 0
+          }
+        ]
+      },
+      "metadata": {
+        "property1": "string",
+        "property2": "string"
+      },
+      "livemode": true,
+      "created": 0
+    }
+  ]
+}
+```
+
+</ExampleResponse>
+
+<TypeScriptResponse>
+
+```ts
+export type Response = {
+  object: "list";
+  /**
+   * Whether there are more items beyond this page.
+   */
+  has_more: boolean;
+  /**
+   * The URL for this list.
+   */
+  url: string;
+} & {
+  data?: {
+    /**
+     * Unique identifier for the subscription.
+     */
+    id: string;
+    object: "subscription";
+    /**
+     * ID of the customer who owns the subscription.
+     */
+    customer: string;
+    /**
+     * The status of the subscription.
+     */
+    status: "active" | "past_due" | "canceled" | "unpaid" | "incomplete" | "incomplete_expired" | "trialing";
+    /**
+     * Start of the current period that the subscription has been invoiced for, as a Unix timestamp.
+     */
+    current_period_start?: number;
+    /**
+     * End of the current period that the subscription has been invoiced for, as a Unix timestamp.
+     */
+    current_period_end?: number;
+    /**
+     * If `true`, the subscription has been canceled but will not expire until the end of the current period.
+     */
+    cancel_at_period_end?: boolean;
+    /**
+     * If the subscription has been canceled, the date of that cancellation.
+     */
+    canceled_at?: number;
+    /**
+     * If the subscription has a trial, the beginning of that trial.
+     */
+    trial_start?: number;
+    /**
+     * If the subscription has a trial, the end of that trial.
+     */
+    trial_end?: number;
+    /**
+     * List of subscription items, each with an attached price.
+     */
+    items?: {
+      object?: "list";
+      data?: {
+        id?: string;
+        price?: string;
+        quantity?: number;
+      }[];
+    };
+    metadata?: {
+      [k: string]: string;
+    };
+    livemode: boolean;
+    created: number;
+  }[];
+};
+```
+
+</TypeScriptResponse>
+
+</ResponseTypes>
+
+</Response>
+
+</Responses>
+
+</APIExample>
+
+</API>
+
+<API>
+
+<APIInfo method={"POST"} route={"/subscriptions"}>
+
+## Create a subscription
+
+Creates a new subscription on an existing customer.
+
+<APIPlayground authorization={{"type":"string","name":"Authorization","defaultValue":"Bearer","isRequired":true,"description":"The Authorization access token"}} method={"POST"} route={"/subscriptions"} bodyType={"json"} path={[]} query={[]} header={[]} body={{"type":"object","isRequired":true,"properties":{"customer":{"type":"ref","isRequired":true,"schema":"0"},"items":{"type":"ref","isRequired":true,"schema":"1"},"trial_period_days":{"type":"ref","isRequired":false,"schema":"5"},"cancel_at_period_end":{"type":"ref","isRequired":false,"schema":"6"},"default_payment_method":{"type":"ref","isRequired":false,"schema":"7"},"metadata":{"type":"ref","isRequired":false,"schema":"8"}}}} schemas={{"0":{"type":"string","defaultValue":"","isRequired":false,"description":"The identifier of the customer to subscribe."},"1":{"type":"array","description":"A list of up to 20 subscription items, each with an attached price.","isRequired":false,"items":"2"},"2":{"type":"object","isRequired":false,"properties":{"price":{"type":"ref","isRequired":true,"schema":"3"},"quantity":{"type":"ref","isRequired":false,"schema":"4"}}},"3":{"type":"string","defaultValue":"","isRequired":false,"description":"The ID of the price to subscribe to."},"4":{"type":"number","defaultValue":"","isRequired":false,"description":"Quantity of the plan to which the customer should subscribe."},"5":{"type":"number","defaultValue":"","isRequired":false,"description":"Integer representing the number of trial period days before the customer is charged for the first time."},"6":{"type":"boolean","defaultValue":"","isRequired":false,"description":"Boolean indicating whether this subscription should cancel at the end of the current period."},"7":{"type":"string","defaultValue":"","isRequired":false,"description":"ID of the default payment method for the subscription."},"8":{"type":"object","isRequired":false,"properties":{},"additionalProperties":"9"},"9":{"type":"string","defaultValue":"","isRequired":false}}}>
+
+</APIPlayground>
+
+### Authorization
+
+<Property name={"Authorization"} type={"Bearer <token>"} required={true}>
+
+Use your secret API key (`sk_live_...` or `sk_test_...`) as a bearer token.
+
+In: `header`
+
+</Property>
+
+### Request Body
+
+<Property name={"customer"} type={"string"} required={true} deprecated={undefined}>
+
+The identifier of the customer to subscribe.
+
+</Property>
+
+<Property name={"items"} type={"array<object>"} required={true} deprecated={undefined}>
+
+A list of up to 20 subscription items, each with an attached price.
+
+<ObjectCollapsible name={"Object 1"}>
+
+<Property name={"price"} type={"string"} required={true} deprecated={undefined}>
+
+The ID of the price to subscribe to.
+
+</Property>
+
+<Property name={"quantity"} type={"integer"} required={false} deprecated={undefined}>
+
+Quantity of the plan to which the customer should subscribe.
+
+<span>Default: `1`</span>
+
+</Property>
+
+</ObjectCollapsible>
+
+</Property>
+
+<Property name={"trial_period_days"} type={"integer"} required={false} deprecated={undefined}>
+
+Integer representing the number of trial period days before the customer is charged for the first time.
+
+</Property>
+
+<Property name={"cancel_at_period_end"} type={"boolean"} required={false} deprecated={undefined}>
+
+Boolean indicating whether this subscription should cancel at the end of the current period.
+
+<span>Default: `false`</span>
+
+</Property>
+
+<Property name={"default_payment_method"} type={"string"} required={false} deprecated={undefined}>
+
+ID of the default payment method for the subscription.
+
+</Property>
+
+<Property name={"metadata"} type={"object"} required={false} deprecated={undefined}>
+
+<ObjectCollapsible name={"metadata"}>
+
+<Property name={"[key: string]"} type={"string"} required={false} deprecated={undefined}>
+
+</Property>
+
+</ObjectCollapsible>
+
+</Property>
+
+| Status code | Description |
+| ----------- | ----------- |
+| `200` | Returns a subscription object. |
+
+</APIInfo>
+
+<APIExample>
+
+<Requests items={["cURL","JavaScript"]}>
+
+<Request value={"cURL"}>
+
+```bash
+curl -X POST "https://api.vinr.com/v1/subscriptions" \
+  -d '{
+  "customer": "string",
+  "items": [
+    {
+      "price": "string",
+      "quantity": 1
+    }
+  ],
+  "trial_period_days": 0,
+  "cancel_at_period_end": false,
+  "default_payment_method": "string",
+  "metadata": {
+    "property1": "string",
+    "property2": "string"
+  }
+}'
+```
+
+</Request>
+
+<Request value={"JavaScript"}>
+
+```js
+fetch("https://api.vinr.com/v1/subscriptions", {
+  method: "POST",
+  body: JSON.stringify({
+    "customer": "string",
+    "items": [
+      {
+        "price": "string",
+        "quantity": 1
+      }
+    ],
+    "trial_period_days": 0,
+    "cancel_at_period_end": false,
+    "default_payment_method": "string",
+    "metadata": {
+      "property1": "string",
+      "property2": "string"
+    }
+  })
+});
+```
+
+</Request>
+
+</Requests>
+
+<Responses items={["200"]}>
+
+<Response value={"200"}>
+
+<ResponseTypes>
+
+<ExampleResponse>
+
+```json
+{
+  "id": "sub_1Abc",
+  "object": "subscription",
+  "customer": "cust_8aZ2",
+  "status": "active",
+  "current_period_start": 0,
+  "current_period_end": 0,
+  "cancel_at_period_end": true,
+  "canceled_at": 0,
+  "trial_start": 0,
+  "trial_end": 0,
+  "items": {
+    "object": "list",
+    "data": [
+      {
+        "id": "string",
+        "price": "string",
+        "quantity": 0
+      }
+    ]
+  },
+  "metadata": {
+    "property1": "string",
+    "property2": "string"
+  },
+  "livemode": true,
+  "created": 0
+}
+```
+
+</ExampleResponse>
+
+<TypeScriptResponse>
+
+```ts
+export interface Response {
+  /**
+   * Unique identifier for the subscription.
+   */
+  id: string;
+  object: "subscription";
+  /**
+   * ID of the customer who owns the subscription.
+   */
+  customer: string;
+  /**
+   * The status of the subscription.
+   */
+  status: "active" | "past_due" | "canceled" | "unpaid" | "incomplete" | "incomplete_expired" | "trialing";
+  /**
+   * Start of the current period that the subscription has been invoiced for, as a Unix timestamp.
+   */
+  current_period_start?: number;
+  /**
+   * End of the current period that the subscription has been invoiced for, as a Unix timestamp.
+   */
+  current_period_end?: number;
+  /**
+   * If `true`, the subscription has been canceled but will not expire until the end of the current period.
+   */
+  cancel_at_period_end?: boolean;
+  /**
+   * If the subscription has been canceled, the date of that cancellation.
+   */
+  canceled_at?: number;
+  /**
+   * If the subscription has a trial, the beginning of that trial.
+   */
+  trial_start?: number;
+  /**
+   * If the subscription has a trial, the end of that trial.
+   */
+  trial_end?: number;
+  /**
+   * List of subscription items, each with an attached price.
+   */
+  items?: {
+    object?: "list";
+    data?: {
+      id?: string;
+      price?: string;
+      quantity?: number;
+    }[];
+  };
+  metadata?: {
+    [k: string]: string;
+  };
+  livemode: boolean;
+  created: number;
+}
+```
+
+</TypeScriptResponse>
+
+</ResponseTypes>
+
+</Response>
+
+</Responses>
+
+</APIExample>
+
+</API>
+
+<API>
+
+<APIInfo method={"GET"} route={"/subscriptions/{id}"}>
+
+## Retrieve a subscription
+
+Retrieves the subscription with the given ID.
+
+<APIPlayground authorization={{"type":"string","name":"Authorization","defaultValue":"Bearer","isRequired":true,"description":"The Authorization access token"}} method={"GET"} route={"/subscriptions/{id}"} bodyType={"json"} path={[{"name":"id","type":"string","defaultValue":"","isRequired":true}]} query={[]} header={[]} body={undefined} schemas={{}}>
+
+</APIPlayground>
+
+### Authorization
+
+<Property name={"Authorization"} type={"Bearer <token>"} required={true}>
+
+Use your secret API key (`sk_live_...` or `sk_test_...`) as a bearer token.
+
+In: `header`
+
+</Property>
+
+### Path Parameters
+
+<Property name={"id"} type={"string"} required={true} deprecated={false}>
+
+</Property>
+
+| Status code | Description |
+| ----------- | ----------- |
+| `200` | Returns the subscription object. |
+
+</APIInfo>
+
+<APIExample>
+
+<Requests items={["cURL","JavaScript"]}>
+
+<Request value={"cURL"}>
+
+```bash
+curl -X GET "https://api.vinr.com/v1/subscriptions/string"
+```
+
+</Request>
+
+<Request value={"JavaScript"}>
+
+```js
+fetch("https://api.vinr.com/v1/subscriptions/string", {
+  method: "GET"
+});
+```
+
+</Request>
+
+</Requests>
+
+<Responses items={["200"]}>
+
+<Response value={"200"}>
+
+<ResponseTypes>
+
+<ExampleResponse>
+
+```json
+{
+  "id": "sub_1Abc",
+  "object": "subscription",
+  "customer": "cust_8aZ2",
+  "status": "active",
+  "current_period_start": 0,
+  "current_period_end": 0,
+  "cancel_at_period_end": true,
+  "canceled_at": 0,
+  "trial_start": 0,
+  "trial_end": 0,
+  "items": {
+    "object": "list",
+    "data": [
+      {
+        "id": "string",
+        "price": "string",
+        "quantity": 0
+      }
+    ]
+  },
+  "metadata": {
+    "property1": "string",
+    "property2": "string"
+  },
+  "livemode": true,
+  "created": 0
+}
+```
+
+</ExampleResponse>
+
+<TypeScriptResponse>
+
+```ts
+export interface Response {
+  /**
+   * Unique identifier for the subscription.
+   */
+  id: string;
+  object: "subscription";
+  /**
+   * ID of the customer who owns the subscription.
+   */
+  customer: string;
+  /**
+   * The status of the subscription.
+   */
+  status: "active" | "past_due" | "canceled" | "unpaid" | "incomplete" | "incomplete_expired" | "trialing";
+  /**
+   * Start of the current period that the subscription has been invoiced for, as a Unix timestamp.
+   */
+  current_period_start?: number;
+  /**
+   * End of the current period that the subscription has been invoiced for, as a Unix timestamp.
+   */
+  current_period_end?: number;
+  /**
+   * If `true`, the subscription has been canceled but will not expire until the end of the current period.
+   */
+  cancel_at_period_end?: boolean;
+  /**
+   * If the subscription has been canceled, the date of that cancellation.
+   */
+  canceled_at?: number;
+  /**
+   * If the subscription has a trial, the beginning of that trial.
+   */
+  trial_start?: number;
+  /**
+   * If the subscription has a trial, the end of that trial.
+   */
+  trial_end?: number;
+  /**
+   * List of subscription items, each with an attached price.
+   */
+  items?: {
+    object?: "list";
+    data?: {
+      id?: string;
+      price?: string;
+      quantity?: number;
+    }[];
+  };
+  metadata?: {
+    [k: string]: string;
+  };
+  livemode: boolean;
+  created: number;
+}
+```
+
+</TypeScriptResponse>
+
+</ResponseTypes>
+
+</Response>
+
+</Responses>
+
+</APIExample>
+
+</API>
+
+<API>
+
+<APIInfo method={"POST"} route={"/subscriptions/{id}"}>
+
+## Update a subscription
+
+Updates an existing subscription. When you update a subscription, we will immediately attempt to collect payment if applicable.
+
+<APIPlayground authorization={{"type":"string","name":"Authorization","defaultValue":"Bearer","isRequired":true,"description":"The Authorization access token"}} method={"POST"} route={"/subscriptions/{id}"} bodyType={"json"} path={[{"name":"id","type":"string","defaultValue":"","isRequired":true}]} query={[]} header={[]} body={{"type":"object","isRequired":true,"properties":{"cancel_at_period_end":{"type":"ref","isRequired":false,"schema":"0"},"default_payment_method":{"type":"ref","isRequired":false,"schema":"1"},"items":{"type":"ref","isRequired":false,"schema":"2"},"metadata":{"type":"ref","isRequired":false,"schema":"7"}}}} schemas={{"0":{"type":"boolean","defaultValue":"","isRequired":false,"description":"Boolean indicating whether this subscription should cancel at the end of the current period."},"1":{"type":"string","defaultValue":"","isRequired":false,"description":"ID of the default payment method for the subscription."},"2":{"type":"array","isRequired":false,"items":"3"},"3":{"type":"object","isRequired":false,"properties":{"id":{"type":"ref","isRequired":false,"schema":"4"},"price":{"type":"ref","isRequired":false,"schema":"5"},"quantity":{"type":"ref","isRequired":false,"schema":"6"}}},"4":{"type":"string","defaultValue":"","isRequired":false,"description":"Subscription item to update."},"5":{"type":"string","defaultValue":"","isRequired":false,"description":"The ID of the price object."},"6":{"type":"number","defaultValue":"","isRequired":false},"7":{"type":"object","isRequired":false,"properties":{},"additionalProperties":"8"},"8":{"type":"string","defaultValue":"","isRequired":false}}}>
+
+</APIPlayground>
+
+### Authorization
+
+<Property name={"Authorization"} type={"Bearer <token>"} required={true}>
+
+Use your secret API key (`sk_live_...` or `sk_test_...`) as a bearer token.
+
+In: `header`
+
+</Property>
+
+### Request Body (Optional)
+
+<Property name={"cancel_at_period_end"} type={"boolean"} required={false} deprecated={undefined}>
+
+Boolean indicating whether this subscription should cancel at the end of the current period.
+
+</Property>
+
+<Property name={"default_payment_method"} type={"string"} required={false} deprecated={undefined}>
+
+ID of the default payment method for the subscription.
+
+</Property>
+
+<Property name={"items"} type={"array<object>"} required={false} deprecated={undefined}>
+
+<ObjectCollapsible name={"Object 1"}>
+
+<Property name={"id"} type={"string"} required={false} deprecated={undefined}>
+
+Subscription item to update.
+
+</Property>
+
+<Property name={"price"} type={"string"} required={false} deprecated={undefined}>
+
+The ID of the price object.
+
+</Property>
+
+<Property name={"quantity"} type={"integer"} required={false} deprecated={undefined}>
+
+</Property>
+
+</ObjectCollapsible>
+
+</Property>
+
+<Property name={"metadata"} type={"object"} required={false} deprecated={undefined}>
+
+<ObjectCollapsible name={"metadata"}>
+
+<Property name={"[key: string]"} type={"string"} required={false} deprecated={undefined}>
+
+</Property>
+
+</ObjectCollapsible>
+
+</Property>
+
+### Path Parameters
+
+<Property name={"id"} type={"string"} required={true} deprecated={false}>
+
+</Property>
+
+| Status code | Description |
+| ----------- | ----------- |
+| `200` | Returns the updated subscription object. |
+
+</APIInfo>
+
+<APIExample>
+
+<Requests items={["cURL","JavaScript"]}>
+
+<Request value={"cURL"}>
+
+```bash
+curl -X POST "https://api.vinr.com/v1/subscriptions/string" \
+  -d '{
+  "cancel_at_period_end": true,
+  "default_payment_method": "string",
+  "items": [
+    {
+      "id": "string",
+      "price": "string",
+      "quantity": 0
+    }
+  ],
+  "metadata": {
+    "property1": "string",
+    "property2": "string"
+  }
+}'
+```
+
+</Request>
+
+<Request value={"JavaScript"}>
+
+```js
+fetch("https://api.vinr.com/v1/subscriptions/string", {
+  method: "POST",
+  body: JSON.stringify({
+    "cancel_at_period_end": true,
+    "default_payment_method": "string",
+    "items": [
+      {
+        "id": "string",
+        "price": "string",
+        "quantity": 0
+      }
+    ],
+    "metadata": {
+      "property1": "string",
+      "property2": "string"
+    }
+  })
+});
+```
+
+</Request>
+
+</Requests>
+
+<Responses items={["200"]}>
+
+<Response value={"200"}>
+
+<ResponseTypes>
+
+<ExampleResponse>
+
+```json
+{
+  "id": "sub_1Abc",
+  "object": "subscription",
+  "customer": "cust_8aZ2",
+  "status": "active",
+  "current_period_start": 0,
+  "current_period_end": 0,
+  "cancel_at_period_end": true,
+  "canceled_at": 0,
+  "trial_start": 0,
+  "trial_end": 0,
+  "items": {
+    "object": "list",
+    "data": [
+      {
+        "id": "string",
+        "price": "string",
+        "quantity": 0
+      }
+    ]
+  },
+  "metadata": {
+    "property1": "string",
+    "property2": "string"
+  },
+  "livemode": true,
+  "created": 0
+}
+```
+
+</ExampleResponse>
+
+<TypeScriptResponse>
+
+```ts
+export interface Response {
+  /**
+   * Unique identifier for the subscription.
+   */
+  id: string;
+  object: "subscription";
+  /**
+   * ID of the customer who owns the subscription.
+   */
+  customer: string;
+  /**
+   * The status of the subscription.
+   */
+  status: "active" | "past_due" | "canceled" | "unpaid" | "incomplete" | "incomplete_expired" | "trialing";
+  /**
+   * Start of the current period that the subscription has been invoiced for, as a Unix timestamp.
+   */
+  current_period_start?: number;
+  /**
+   * End of the current period that the subscription has been invoiced for, as a Unix timestamp.
+   */
+  current_period_end?: number;
+  /**
+   * If `true`, the subscription has been canceled but will not expire until the end of the current period.
+   */
+  cancel_at_period_end?: boolean;
+  /**
+   * If the subscription has been canceled, the date of that cancellation.
+   */
+  canceled_at?: number;
+  /**
+   * If the subscription has a trial, the beginning of that trial.
+   */
+  trial_start?: number;
+  /**
+   * If the subscription has a trial, the end of that trial.
+   */
+  trial_end?: number;
+  /**
+   * List of subscription items, each with an attached price.
+   */
+  items?: {
+    object?: "list";
+    data?: {
+      id?: string;
+      price?: string;
+      quantity?: number;
+    }[];
+  };
+  metadata?: {
+    [k: string]: string;
+  };
+  livemode: boolean;
+  created: number;
+}
+```
+
+</TypeScriptResponse>
+
+</ResponseTypes>
+
+</Response>
+
+</Responses>
+
+</APIExample>
+
+</API>
+
+<API>
+
+<APIInfo method={"DELETE"} route={"/subscriptions/{id}"}>
+
+## Cancel a subscription
+
+Cancels a customer's subscription immediately. The customer will not be charged again for the subscription.
+
+<APIPlayground authorization={{"type":"string","name":"Authorization","defaultValue":"Bearer","isRequired":true,"description":"The Authorization access token"}} method={"DELETE"} route={"/subscriptions/{id}"} bodyType={"json"} path={[{"name":"id","type":"string","defaultValue":"","isRequired":true}]} query={[]} header={[]} body={undefined} schemas={{}}>
+
+</APIPlayground>
+
+### Authorization
+
+<Property name={"Authorization"} type={"Bearer <token>"} required={true}>
+
+Use your secret API key (`sk_live_...` or `sk_test_...`) as a bearer token.
+
+In: `header`
+
+</Property>
+
+### Path Parameters
+
+<Property name={"id"} type={"string"} required={true} deprecated={false}>
+
+</Property>
+
+| Status code | Description |
+| ----------- | ----------- |
+| `200` | Returns the canceled subscription object with `status: canceled`. |
+
+</APIInfo>
+
+<APIExample>
+
+<Requests items={["cURL","JavaScript"]}>
+
+<Request value={"cURL"}>
+
+```bash
+curl -X DELETE "https://api.vinr.com/v1/subscriptions/string"
+```
+
+</Request>
+
+<Request value={"JavaScript"}>
+
+```js
+fetch("https://api.vinr.com/v1/subscriptions/string", {
+  method: "DELETE"
+});
+```
+
+</Request>
+
+</Requests>
+
+<Responses items={["200"]}>
+
+<Response value={"200"}>
+
+<ResponseTypes>
+
+<ExampleResponse>
+
+```json
+{
+  "id": "sub_1Abc",
+  "object": "subscription",
+  "customer": "cust_8aZ2",
+  "status": "active",
+  "current_period_start": 0,
+  "current_period_end": 0,
+  "cancel_at_period_end": true,
+  "canceled_at": 0,
+  "trial_start": 0,
+  "trial_end": 0,
+  "items": {
+    "object": "list",
+    "data": [
+      {
+        "id": "string",
+        "price": "string",
+        "quantity": 0
+      }
+    ]
+  },
+  "metadata": {
+    "property1": "string",
+    "property2": "string"
+  },
+  "livemode": true,
+  "created": 0
+}
+```
+
+</ExampleResponse>
+
+<TypeScriptResponse>
+
+```ts
+export interface Response {
+  /**
+   * Unique identifier for the subscription.
+   */
+  id: string;
+  object: "subscription";
+  /**
+   * ID of the customer who owns the subscription.
+   */
+  customer: string;
+  /**
+   * The status of the subscription.
+   */
+  status: "active" | "past_due" | "canceled" | "unpaid" | "incomplete" | "incomplete_expired" | "trialing";
+  /**
+   * Start of the current period that the subscription has been invoiced for, as a Unix timestamp.
+   */
+  current_period_start?: number;
+  /**
+   * End of the current period that the subscription has been invoiced for, as a Unix timestamp.
+   */
+  current_period_end?: number;
+  /**
+   * If `true`, the subscription has been canceled but will not expire until the end of the current period.
+   */
+  cancel_at_period_end?: boolean;
+  /**
+   * If the subscription has been canceled, the date of that cancellation.
+   */
+  canceled_at?: number;
+  /**
+   * If the subscription has a trial, the beginning of that trial.
+   */
+  trial_start?: number;
+  /**
+   * If the subscription has a trial, the end of that trial.
+   */
+  trial_end?: number;
+  /**
+   * List of subscription items, each with an attached price.
+   */
+  items?: {
+    object?: "list";
+    data?: {
+      id?: string;
+      price?: string;
+      quantity?: number;
+    }[];
+  };
+  metadata?: {
+    [k: string]: string;
+  };
+  livemode: boolean;
+  created: number;
+}
+```
+
+</TypeScriptResponse>
+
+</ResponseTypes>
+
+</Response>
+
+</Responses>
+
+</APIExample>
+
+</API>
+
+</Root>

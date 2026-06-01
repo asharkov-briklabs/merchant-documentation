@@ -63,6 +63,24 @@ export function SiteFooter({ t }: SiteFooterProps) {
                 Dashboard
               </a>
             </div>
+
+            <div>
+              <h4 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.06em] text-white/45">
+                Support
+              </h4>
+              <Link href="/docs/troubleshooting/support" className="mb-2 block text-[12px] text-white/55 transition-colors hover:text-vinr-50">
+                Contact support
+              </Link>
+              <Link href="/ask" className="mb-2 block text-[12px] text-white/55 transition-colors hover:text-vinr-50">
+                Ask the AI assistant
+              </Link>
+              <Link href="/docs/changelog" className="mb-2 block text-[12px] text-white/55 transition-colors hover:text-vinr-50">
+                Changelog
+              </Link>
+              <Link href="/api-reference" className="mb-2 block text-[12px] text-white/55 transition-colors hover:text-vinr-50">
+                API reference
+              </Link>
+            </div>
           </div>
         </div>
 

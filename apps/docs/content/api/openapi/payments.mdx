@@ -1,0 +1,1147 @@
+---
+title: Payments
+description: >-
+  Create and manage payments. A payment represents a single charge or
+  authorization to move money from a customer to your account.
+full: true
+---
+
+import { Root, API, APIInfo, APIExample, Responses, Response, ResponseTypes, ExampleResponse, TypeScriptResponse, Property, ObjectCollapsible, Requests, Request, APIPlayground } from "fumadocs-openapi/ui";
+
+<Root baseUrl={"https://api.vinr.com/v1"}>
+
+<API>
+
+<APIInfo method={"GET"} route={"/payments"}>
+
+## List all payments
+
+Returns a list of payments. Payments are sorted by creation date, with the most recent payments appearing first.
+
+<APIPlayground authorization={{"type":"string","name":"Authorization","defaultValue":"Bearer","isRequired":true,"description":"The Authorization access token"}} method={"GET"} route={"/payments"} bodyType={"json"} path={[]} query={[{"name":"limit","type":"number","defaultValue":"","isRequired":false},{"name":"starting_after","type":"string","defaultValue":"","isRequired":false},{"name":"ending_before","type":"string","defaultValue":"","isRequired":false},{"name":"customer","type":"string","defaultValue":"","isRequired":false},{"name":"created","type":"number","defaultValue":"","isRequired":false}]} header={[]} body={undefined} schemas={{}}>
+
+</APIPlayground>
+
+### Authorization
+
+<Property name={"Authorization"} type={"Bearer <token>"} required={true}>
+
+Use your secret API key (`sk_live_...` or `sk_test_...`) as a bearer token.
+
+In: `header`
+
+</Property>
+
+### Query Parameters
+
+<Property name={"limit"} type={"integer"} required={false} deprecated={false}>
+
+A limit on the number of objects to be returned, between 1 and 100.
+
+<span>Default: `10`</span>
+
+<span>Minimum: `1`</span>
+
+<span>Maximum: `100`</span>
+
+</Property>
+
+<Property name={"starting_after"} type={"string"} required={false} deprecated={false}>
+
+A cursor for use in pagination. `starting_after` is an object ID that defines your place in the list.
+
+</Property>
+
+<Property name={"ending_before"} type={"string"} required={false} deprecated={false}>
+
+A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list.
+
+</Property>
+
+<Property name={"customer"} type={"string"} required={false} deprecated={false}>
+
+Only return payments for the customer specified by this customer ID.
+
+</Property>
+
+<Property name={"created"} type={"integer"} required={false} deprecated={false}>
+
+Only return payments created during the given date interval (Unix timestamp).
+
+</Property>
+
+| Status code | Description |
+| ----------- | ----------- |
+| `200` | A dictionary with a `data` property that contains an array of payments. |
+
+</APIInfo>
+
+<APIExample>
+
+<Requests items={["cURL","JavaScript"]}>
+
+<Request value={"cURL"}>
+
+```bash
+curl -X GET "https://api.vinr.com/v1/payments?limit=10&starting_after=string&ending_before=string&customer=string&created=0"
+```
+
+</Request>
+
+<Request value={"JavaScript"}>
+
+```js
+fetch("https://api.vinr.com/v1/payments?limit=10&starting_after=string&ending_before=string&customer=string&created=0", {
+  method: "GET"
+});
+```
+
+</Request>
+
+</Requests>
+
+<Responses items={["200"]}>
+
+<Response value={"200"}>
+
+<ResponseTypes>
+
+<ExampleResponse>
+
+```json
+{
+  "object": "list",
+  "has_more": true,
+  "url": "string",
+  "data": [
+    {
+      "id": "pay_3Nx8a2Lk",
+      "object": "payment",
+      "amount": 2000,
+      "amount_captured": 2000,
+      "currency": "usd",
+      "status": "succeeded",
+      "customer": "cust_8aZ2",
+      "description": "string",
+      "payment_method": "pm_1abc",
+      "capture_method": "automatic",
+      "metadata": {
+        "property1": "string",
+        "property2": "string"
+      },
+      "receipt_url": "string",
+      "livemode": true,
+      "created": 0
+    }
+  ]
+}
+```
+
+</ExampleResponse>
+
+<TypeScriptResponse>
+
+```ts
+export type Response = {
+  object: "list";
+  /**
+   * Whether there are more items beyond this page.
+   */
+  has_more: boolean;
+  /**
+   * The URL for this list.
+   */
+  url: string;
+} & {
+  data?: {
+    /**
+     * Unique identifier for the payment.
+     */
+    id: string;
+    object: "payment";
+    /**
+     * Amount intended to be collected, in the smallest currency unit (e.g. cents for USD).
+     */
+    amount: number;
+    /**
+     * Amount that was collected. Equal to `amount` for a non-refunded payment.
+     */
+    amount_captured?: number;
+    /**
+     * Three-letter ISO currency code, in lowercase.
+     */
+    currency: string;
+    /**
+     * The status of the payment.
+     */
+    status: "succeeded" | "requires_action" | "requires_capture" | "processing" | "failed" | "canceled";
+    /**
+     * ID of the customer this payment is for, if one exists.
+     */
+    customer?: string;
+    /**
+     * An arbitrary string attached to the object. Often useful for displaying to users.
+     */
+    description?: string;
+    /**
+     * ID of the payment method used.
+     */
+    payment_method?: string;
+    /**
+     * Controls when the funds will be captured from the customer's account.
+     */
+    capture_method?: "automatic" | "manual";
+    /**
+     * Set of key-value pairs for storing additional structured information.
+     */
+    metadata?: {
+      [k: string]: string;
+    };
+    /**
+     * A URL that can be used to view a receipt for this payment.
+     */
+    receipt_url?: string;
+    /**
+     * Has the value `true` if the object exists in live mode, `false` in test mode.
+     */
+    livemode: boolean;
+    /**
+     * Time at which the object was created, as a Unix timestamp.
+     */
+    created: number;
+  }[];
+};
+```
+
+</TypeScriptResponse>
+
+</ResponseTypes>
+
+</Response>
+
+</Responses>
+
+</APIExample>
+
+</API>
+
+<API>
+
+<APIInfo method={"POST"} route={"/payments"}>
+
+## Create a payment
+
+Creates a new payment object. To be used when you intend to create a payment and accept
+payment in a single call. If you want to authorize and capture payment separately, set
+`capture_method` to `manual`.
+
+
+<APIPlayground authorization={{"type":"string","name":"Authorization","defaultValue":"Bearer","isRequired":true,"description":"The Authorization access token"}} method={"POST"} route={"/payments"} bodyType={"json"} path={[]} query={[]} header={[]} body={{"type":"object","isRequired":true,"properties":{"amount":{"type":"ref","isRequired":true,"schema":"0"},"currency":{"type":"ref","isRequired":true,"schema":"1"},"customer":{"type":"ref","isRequired":false,"schema":"2"},"payment_method":{"type":"ref","isRequired":false,"schema":"3"},"capture_method":{"type":"ref","isRequired":false,"schema":"4"},"description":{"type":"ref","isRequired":false,"schema":"5"},"metadata":{"type":"ref","isRequired":false,"schema":"6"},"receipt_email":{"type":"ref","isRequired":false,"schema":"8"}}}} schemas={{"0":{"type":"number","defaultValue":2000,"isRequired":false,"description":"Amount intended to be collected by this payment, in the smallest currency unit."},"1":{"type":"string","defaultValue":"usd","isRequired":false,"description":"Three-letter ISO currency code, in lowercase."},"2":{"type":"string","defaultValue":"","isRequired":false,"description":"ID of the customer this payment is intended for, if one exists."},"3":{"type":"string","defaultValue":"","isRequired":false,"description":"ID of the payment method to attach to this payment."},"4":{"type":"string","defaultValue":"","isRequired":false,"description":"Controls when the funds will be captured."},"5":{"type":"string","defaultValue":"","isRequired":false,"description":"An arbitrary string attached to the object. Often useful for displaying to users."},"6":{"type":"object","isRequired":false,"description":"Set of key-value pairs for storing additional structured information.","properties":{},"additionalProperties":"7"},"7":{"type":"string","defaultValue":"","isRequired":false},"8":{"type":"string","defaultValue":"","isRequired":false,"description":"Email address that the receipt for the resulting payment will be sent to."}}}>
+
+</APIPlayground>
+
+### Authorization
+
+<Property name={"Authorization"} type={"Bearer <token>"} required={true}>
+
+Use your secret API key (`sk_live_...` or `sk_test_...`) as a bearer token.
+
+In: `header`
+
+</Property>
+
+### Request Body
+
+<Property name={"amount"} type={"integer"} required={true} deprecated={undefined}>
+
+Amount intended to be collected by this payment, in the smallest currency unit.
+
+<span>Example: `2000`</span>
+
+</Property>
+
+<Property name={"currency"} type={"string"} required={true} deprecated={undefined}>
+
+Three-letter ISO currency code, in lowercase.
+
+<span>Example: `"usd"`</span>
+
+</Property>
+
+<Property name={"customer"} type={"string"} required={false} deprecated={undefined}>
+
+ID of the customer this payment is intended for, if one exists.
+
+</Property>
+
+<Property name={"payment_method"} type={"string"} required={false} deprecated={undefined}>
+
+ID of the payment method to attach to this payment.
+
+</Property>
+
+<Property name={"capture_method"} type={"string"} required={false} deprecated={undefined}>
+
+Controls when the funds will be captured.
+
+<span>Default: `"automatic"`</span>
+
+<span>Value in: `"automatic" | "manual"`</span>
+
+</Property>
+
+<Property name={"description"} type={"string"} required={false} deprecated={undefined}>
+
+An arbitrary string attached to the object. Often useful for displaying to users.
+
+</Property>
+
+<Property name={"metadata"} type={"object"} required={false} deprecated={undefined}>
+
+Set of key-value pairs for storing additional structured information.
+
+<ObjectCollapsible name={"metadata"}>
+
+<Property name={"[key: string]"} type={"string"} required={false} deprecated={undefined}>
+
+</Property>
+
+</ObjectCollapsible>
+
+</Property>
+
+<Property name={"receipt_email"} type={"string"} required={false} deprecated={undefined}>
+
+Email address that the receipt for the resulting payment will be sent to.
+
+</Property>
+
+| Status code | Description |
+| ----------- | ----------- |
+| `200` | Returns a payment object. |
+| `400` | Bad request. |
+| `401` | No valid API key provided. |
+
+</APIInfo>
+
+<APIExample>
+
+<Requests items={["cURL","JavaScript"]}>
+
+<Request value={"cURL"}>
+
+```bash
+curl -X POST "https://api.vinr.com/v1/payments" \
+  -d '{
+  "amount": 2000,
+  "currency": "usd",
+  "customer": "string",
+  "payment_method": "string",
+  "capture_method": "automatic",
+  "description": "string",
+  "metadata": {
+    "property1": "string",
+    "property2": "string"
+  },
+  "receipt_email": "string"
+}'
+```
+
+</Request>
+
+<Request value={"JavaScript"}>
+
+```js
+fetch("https://api.vinr.com/v1/payments", {
+  method: "POST",
+  body: JSON.stringify({
+    "amount": 2000,
+    "currency": "usd",
+    "customer": "string",
+    "payment_method": "string",
+    "capture_method": "automatic",
+    "description": "string",
+    "metadata": {
+      "property1": "string",
+      "property2": "string"
+    },
+    "receipt_email": "string"
+  })
+});
+```
+
+</Request>
+
+</Requests>
+
+<Responses items={["200","400","401"]}>
+
+<Response value={"200"}>
+
+<ResponseTypes>
+
+<ExampleResponse>
+
+```json
+{
+  "id": "pay_3Nx8a2Lk",
+  "object": "payment",
+  "amount": 2000,
+  "amount_captured": 2000,
+  "currency": "usd",
+  "status": "succeeded",
+  "customer": "cust_8aZ2",
+  "description": "string",
+  "payment_method": "pm_1abc",
+  "capture_method": "automatic",
+  "metadata": {
+    "property1": "string",
+    "property2": "string"
+  },
+  "receipt_url": "string",
+  "livemode": true,
+  "created": 0
+}
+```
+
+</ExampleResponse>
+
+<TypeScriptResponse>
+
+```ts
+export interface Response {
+  /**
+   * Unique identifier for the payment.
+   */
+  id: string;
+  object: "payment";
+  /**
+   * Amount intended to be collected, in the smallest currency unit (e.g. cents for USD).
+   */
+  amount: number;
+  /**
+   * Amount that was collected. Equal to `amount` for a non-refunded payment.
+   */
+  amount_captured?: number;
+  /**
+   * Three-letter ISO currency code, in lowercase.
+   */
+  currency: string;
+  /**
+   * The status of the payment.
+   */
+  status: "succeeded" | "requires_action" | "requires_capture" | "processing" | "failed" | "canceled";
+  /**
+   * ID of the customer this payment is for, if one exists.
+   */
+  customer?: string;
+  /**
+   * An arbitrary string attached to the object. Often useful for displaying to users.
+   */
+  description?: string;
+  /**
+   * ID of the payment method used.
+   */
+  payment_method?: string;
+  /**
+   * Controls when the funds will be captured from the customer's account.
+   */
+  capture_method?: "automatic" | "manual";
+  /**
+   * Set of key-value pairs for storing additional structured information.
+   */
+  metadata?: {
+    [k: string]: string;
+  };
+  /**
+   * A URL that can be used to view a receipt for this payment.
+   */
+  receipt_url?: string;
+  /**
+   * Has the value `true` if the object exists in live mode, `false` in test mode.
+   */
+  livemode: boolean;
+  /**
+   * Time at which the object was created, as a Unix timestamp.
+   */
+  created: number;
+}
+```
+
+</TypeScriptResponse>
+
+</ResponseTypes>
+
+</Response>
+
+<Response value={"400"}>
+
+<ResponseTypes>
+
+<ExampleResponse>
+
+```json
+{
+  "error": {
+    "type": "api_error",
+    "code": "string",
+    "message": "string",
+    "param": "string"
+  }
+}
+```
+
+</ExampleResponse>
+
+<TypeScriptResponse>
+
+```ts
+export interface Response {
+  error?: {
+    /**
+     * The type of error returned.
+     */
+    type: "api_error" | "authentication_error" | "card_error" | "invalid_request_error" | "rate_limit_error";
+    /**
+     * A short string indicating the error code.
+     */
+    code?: string;
+    /**
+     * A human-readable message providing more details about the error.
+     */
+    message: string;
+    /**
+     * The parameter the error relates to, if applicable.
+     */
+    param?: string;
+  };
+}
+```
+
+</TypeScriptResponse>
+
+</ResponseTypes>
+
+</Response>
+
+<Response value={"401"}>
+
+<ResponseTypes>
+
+<ExampleResponse>
+
+```json
+{
+  "error": {
+    "type": "api_error",
+    "code": "string",
+    "message": "string",
+    "param": "string"
+  }
+}
+```
+
+</ExampleResponse>
+
+<TypeScriptResponse>
+
+```ts
+export interface Response {
+  error?: {
+    /**
+     * The type of error returned.
+     */
+    type: "api_error" | "authentication_error" | "card_error" | "invalid_request_error" | "rate_limit_error";
+    /**
+     * A short string indicating the error code.
+     */
+    code?: string;
+    /**
+     * A human-readable message providing more details about the error.
+     */
+    message: string;
+    /**
+     * The parameter the error relates to, if applicable.
+     */
+    param?: string;
+  };
+}
+```
+
+</TypeScriptResponse>
+
+</ResponseTypes>
+
+</Response>
+
+</Responses>
+
+</APIExample>
+
+</API>
+
+<API>
+
+<APIInfo method={"GET"} route={"/payments/{id}"}>
+
+## Retrieve a payment
+
+Retrieves the details of a payment that has previously been created.
+
+<APIPlayground authorization={{"type":"string","name":"Authorization","defaultValue":"Bearer","isRequired":true,"description":"The Authorization access token"}} method={"GET"} route={"/payments/{id}"} bodyType={"json"} path={[{"name":"id","type":"string","defaultValue":"","isRequired":true}]} query={[]} header={[]} body={undefined} schemas={{}}>
+
+</APIPlayground>
+
+### Authorization
+
+<Property name={"Authorization"} type={"Bearer <token>"} required={true}>
+
+Use your secret API key (`sk_live_...` or `sk_test_...`) as a bearer token.
+
+In: `header`
+
+</Property>
+
+### Path Parameters
+
+<Property name={"id"} type={"string"} required={true} deprecated={false}>
+
+The identifier of the payment to retrieve.
+
+</Property>
+
+| Status code | Description |
+| ----------- | ----------- |
+| `200` | Returns a payment object. |
+| `404` | Payment not found. |
+
+</APIInfo>
+
+<APIExample>
+
+<Requests items={["cURL","JavaScript"]}>
+
+<Request value={"cURL"}>
+
+```bash
+curl -X GET "https://api.vinr.com/v1/payments/string"
+```
+
+</Request>
+
+<Request value={"JavaScript"}>
+
+```js
+fetch("https://api.vinr.com/v1/payments/string", {
+  method: "GET"
+});
+```
+
+</Request>
+
+</Requests>
+
+<Responses items={["200","404"]}>
+
+<Response value={"200"}>
+
+<ResponseTypes>
+
+<ExampleResponse>
+
+```json
+{
+  "id": "pay_3Nx8a2Lk",
+  "object": "payment",
+  "amount": 2000,
+  "amount_captured": 2000,
+  "currency": "usd",
+  "status": "succeeded",
+  "customer": "cust_8aZ2",
+  "description": "string",
+  "payment_method": "pm_1abc",
+  "capture_method": "automatic",
+  "metadata": {
+    "property1": "string",
+    "property2": "string"
+  },
+  "receipt_url": "string",
+  "livemode": true,
+  "created": 0
+}
+```
+
+</ExampleResponse>
+
+<TypeScriptResponse>
+
+```ts
+export interface Response {
+  /**
+   * Unique identifier for the payment.
+   */
+  id: string;
+  object: "payment";
+  /**
+   * Amount intended to be collected, in the smallest currency unit (e.g. cents for USD).
+   */
+  amount: number;
+  /**
+   * Amount that was collected. Equal to `amount` for a non-refunded payment.
+   */
+  amount_captured?: number;
+  /**
+   * Three-letter ISO currency code, in lowercase.
+   */
+  currency: string;
+  /**
+   * The status of the payment.
+   */
+  status: "succeeded" | "requires_action" | "requires_capture" | "processing" | "failed" | "canceled";
+  /**
+   * ID of the customer this payment is for, if one exists.
+   */
+  customer?: string;
+  /**
+   * An arbitrary string attached to the object. Often useful for displaying to users.
+   */
+  description?: string;
+  /**
+   * ID of the payment method used.
+   */
+  payment_method?: string;
+  /**
+   * Controls when the funds will be captured from the customer's account.
+   */
+  capture_method?: "automatic" | "manual";
+  /**
+   * Set of key-value pairs for storing additional structured information.
+   */
+  metadata?: {
+    [k: string]: string;
+  };
+  /**
+   * A URL that can be used to view a receipt for this payment.
+   */
+  receipt_url?: string;
+  /**
+   * Has the value `true` if the object exists in live mode, `false` in test mode.
+   */
+  livemode: boolean;
+  /**
+   * Time at which the object was created, as a Unix timestamp.
+   */
+  created: number;
+}
+```
+
+</TypeScriptResponse>
+
+</ResponseTypes>
+
+</Response>
+
+<Response value={"404"}>
+
+<ResponseTypes>
+
+<ExampleResponse>
+
+```json
+{
+  "error": {
+    "type": "api_error",
+    "code": "string",
+    "message": "string",
+    "param": "string"
+  }
+}
+```
+
+</ExampleResponse>
+
+<TypeScriptResponse>
+
+```ts
+export interface Response {
+  error?: {
+    /**
+     * The type of error returned.
+     */
+    type: "api_error" | "authentication_error" | "card_error" | "invalid_request_error" | "rate_limit_error";
+    /**
+     * A short string indicating the error code.
+     */
+    code?: string;
+    /**
+     * A human-readable message providing more details about the error.
+     */
+    message: string;
+    /**
+     * The parameter the error relates to, if applicable.
+     */
+    param?: string;
+  };
+}
+```
+
+</TypeScriptResponse>
+
+</ResponseTypes>
+
+</Response>
+
+</Responses>
+
+</APIExample>
+
+</API>
+
+<API>
+
+<APIInfo method={"POST"} route={"/payments/{id}/capture"}>
+
+## Capture a payment
+
+Capture the funds of an existing uncaptured payment created with `capture_method: manual`.
+You can only capture up to the amount of the original payment. Pass an `amount_to_capture`
+to capture less than the full amount.
+
+
+<APIPlayground authorization={{"type":"string","name":"Authorization","defaultValue":"Bearer","isRequired":true,"description":"The Authorization access token"}} method={"POST"} route={"/payments/{id}/capture"} bodyType={"json"} path={[{"name":"id","type":"string","defaultValue":"","isRequired":true}]} query={[]} header={[]} body={{"type":"object","isRequired":true,"properties":{"amount_to_capture":{"type":"ref","isRequired":false,"schema":"0"}}}} schemas={{"0":{"type":"number","defaultValue":"","isRequired":false,"description":"The amount to capture from the payment. Defaults to the full `amount`."}}}>
+
+</APIPlayground>
+
+### Authorization
+
+<Property name={"Authorization"} type={"Bearer <token>"} required={true}>
+
+Use your secret API key (`sk_live_...` or `sk_test_...`) as a bearer token.
+
+In: `header`
+
+</Property>
+
+### Request Body (Optional)
+
+<Property name={"amount_to_capture"} type={"integer"} required={false} deprecated={undefined}>
+
+The amount to capture from the payment. Defaults to the full `amount`.
+
+</Property>
+
+### Path Parameters
+
+<Property name={"id"} type={"string"} required={true} deprecated={false}>
+
+</Property>
+
+| Status code | Description |
+| ----------- | ----------- |
+| `200` | Returns a payment object with status `succeeded`. |
+
+</APIInfo>
+
+<APIExample>
+
+<Requests items={["cURL","JavaScript"]}>
+
+<Request value={"cURL"}>
+
+```bash
+curl -X POST "https://api.vinr.com/v1/payments/string/capture" \
+  -d '{
+  "amount_to_capture": 0
+}'
+```
+
+</Request>
+
+<Request value={"JavaScript"}>
+
+```js
+fetch("https://api.vinr.com/v1/payments/string/capture", {
+  method: "POST",
+  body: JSON.stringify({
+    "amount_to_capture": 0
+  })
+});
+```
+
+</Request>
+
+</Requests>
+
+<Responses items={["200"]}>
+
+<Response value={"200"}>
+
+<ResponseTypes>
+
+<ExampleResponse>
+
+```json
+{
+  "id": "pay_3Nx8a2Lk",
+  "object": "payment",
+  "amount": 2000,
+  "amount_captured": 2000,
+  "currency": "usd",
+  "status": "succeeded",
+  "customer": "cust_8aZ2",
+  "description": "string",
+  "payment_method": "pm_1abc",
+  "capture_method": "automatic",
+  "metadata": {
+    "property1": "string",
+    "property2": "string"
+  },
+  "receipt_url": "string",
+  "livemode": true,
+  "created": 0
+}
+```
+
+</ExampleResponse>
+
+<TypeScriptResponse>
+
+```ts
+export interface Response {
+  /**
+   * Unique identifier for the payment.
+   */
+  id: string;
+  object: "payment";
+  /**
+   * Amount intended to be collected, in the smallest currency unit (e.g. cents for USD).
+   */
+  amount: number;
+  /**
+   * Amount that was collected. Equal to `amount` for a non-refunded payment.
+   */
+  amount_captured?: number;
+  /**
+   * Three-letter ISO currency code, in lowercase.
+   */
+  currency: string;
+  /**
+   * The status of the payment.
+   */
+  status: "succeeded" | "requires_action" | "requires_capture" | "processing" | "failed" | "canceled";
+  /**
+   * ID of the customer this payment is for, if one exists.
+   */
+  customer?: string;
+  /**
+   * An arbitrary string attached to the object. Often useful for displaying to users.
+   */
+  description?: string;
+  /**
+   * ID of the payment method used.
+   */
+  payment_method?: string;
+  /**
+   * Controls when the funds will be captured from the customer's account.
+   */
+  capture_method?: "automatic" | "manual";
+  /**
+   * Set of key-value pairs for storing additional structured information.
+   */
+  metadata?: {
+    [k: string]: string;
+  };
+  /**
+   * A URL that can be used to view a receipt for this payment.
+   */
+  receipt_url?: string;
+  /**
+   * Has the value `true` if the object exists in live mode, `false` in test mode.
+   */
+  livemode: boolean;
+  /**
+   * Time at which the object was created, as a Unix timestamp.
+   */
+  created: number;
+}
+```
+
+</TypeScriptResponse>
+
+</ResponseTypes>
+
+</Response>
+
+</Responses>
+
+</APIExample>
+
+</API>
+
+<API>
+
+<APIInfo method={"POST"} route={"/payments/{id}/cancel"}>
+
+## Cancel a payment
+
+A payment that is not yet captured can be canceled. Canceling a payment voids the
+authorization and does not trigger any application fee refunds.
+
+
+<APIPlayground authorization={{"type":"string","name":"Authorization","defaultValue":"Bearer","isRequired":true,"description":"The Authorization access token"}} method={"POST"} route={"/payments/{id}/cancel"} bodyType={"json"} path={[{"name":"id","type":"string","defaultValue":"","isRequired":true}]} query={[]} header={[]} body={undefined} schemas={{}}>
+
+</APIPlayground>
+
+### Authorization
+
+<Property name={"Authorization"} type={"Bearer <token>"} required={true}>
+
+Use your secret API key (`sk_live_...` or `sk_test_...`) as a bearer token.
+
+In: `header`
+
+</Property>
+
+### Path Parameters
+
+<Property name={"id"} type={"string"} required={true} deprecated={false}>
+
+</Property>
+
+| Status code | Description |
+| ----------- | ----------- |
+| `200` | Returns a payment object with status `canceled`. |
+
+</APIInfo>
+
+<APIExample>
+
+<Requests items={["cURL","JavaScript"]}>
+
+<Request value={"cURL"}>
+
+```bash
+curl -X POST "https://api.vinr.com/v1/payments/string/cancel"
+```
+
+</Request>
+
+<Request value={"JavaScript"}>
+
+```js
+fetch("https://api.vinr.com/v1/payments/string/cancel", {
+  method: "POST"
+});
+```
+
+</Request>
+
+</Requests>
+
+<Responses items={["200"]}>
+
+<Response value={"200"}>
+
+<ResponseTypes>
+
+<ExampleResponse>
+
+```json
+{
+  "id": "pay_3Nx8a2Lk",
+  "object": "payment",
+  "amount": 2000,
+  "amount_captured": 2000,
+  "currency": "usd",
+  "status": "succeeded",
+  "customer": "cust_8aZ2",
+  "description": "string",
+  "payment_method": "pm_1abc",
+  "capture_method": "automatic",
+  "metadata": {
+    "property1": "string",
+    "property2": "string"
+  },
+  "receipt_url": "string",
+  "livemode": true,
+  "created": 0
+}
+```
+
+</ExampleResponse>
+
+<TypeScriptResponse>
+
+```ts
+export interface Response {
+  /**
+   * Unique identifier for the payment.
+   */
+  id: string;
+  object: "payment";
+  /**
+   * Amount intended to be collected, in the smallest currency unit (e.g. cents for USD).
+   */
+  amount: number;
+  /**
+   * Amount that was collected. Equal to `amount` for a non-refunded payment.
+   */
+  amount_captured?: number;
+  /**
+   * Three-letter ISO currency code, in lowercase.
+   */
+  currency: string;
+  /**
+   * The status of the payment.
+   */
+  status: "succeeded" | "requires_action" | "requires_capture" | "processing" | "failed" | "canceled";
+  /**
+   * ID of the customer this payment is for, if one exists.
+   */
+  customer?: string;
+  /**
+   * An arbitrary string attached to the object. Often useful for displaying to users.
+   */
+  description?: string;
+  /**
+   * ID of the payment method used.
+   */
+  payment_method?: string;
+  /**
+   * Controls when the funds will be captured from the customer's account.
+   */
+  capture_method?: "automatic" | "manual";
+  /**
+   * Set of key-value pairs for storing additional structured information.
+   */
+  metadata?: {
+    [k: string]: string;
+  };
+  /**
+   * A URL that can be used to view a receipt for this payment.
+   */
+  receipt_url?: string;
+  /**
+   * Has the value `true` if the object exists in live mode, `false` in test mode.
+   */
+  livemode: boolean;
+  /**
+   * Time at which the object was created, as a Unix timestamp.
+   */
+  created: number;
+}
+```
+
+</TypeScriptResponse>
+
+</ResponseTypes>
+
+</Response>
+
+</Responses>
+
+</APIExample>
+
+</API>
+
+</Root>

@@ -7,6 +7,11 @@ export const { docs, meta } = defineDocs({
   },
 });
 
+export const { docs: apiDocs, meta: apiMeta } = defineDocs({
+  docs: { dir: "content/api/openapi" },
+  meta: { dir: "content/api/openapi" },
+});
+
 export default defineConfig({
   mdxOptions: {
     rehypeCodeOptions: {

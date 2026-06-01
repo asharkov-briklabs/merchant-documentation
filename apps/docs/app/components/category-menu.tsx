@@ -3,59 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Activity,
-  ArrowLeftRight,
-  ArrowUpRight,
-  BadgeCheck,
-  BookCheck,
-  Code2,
-  CreditCard,
-  FileBarChart2,
-  GitBranch,
-  Globe,
-  Layers,
-  LayoutGrid,
-  MessageSquareWarning,
-  ShieldAlert,
-  SlidersHorizontal,
-  Sparkles,
-  Store,
-  TrendingUp,
-  Trophy,
-  UserPlus,
-  Users,
-  Wallet,
-  Wrench,
-} from "lucide-react";
 import { NAV_GROUPS } from "@/lib/nav-taxonomy";
 import type { getTranslations } from "@/lib/translations";
-
-const NAV_ICONS: Record<string, React.FC<{ className?: string }>> = {
-  Activity,
-  ArrowLeftRight,
-  ArrowUpRight,
-  BadgeCheck,
-  BookCheck,
-  Code2,
-  CreditCard,
-  FileBarChart2,
-  GitBranch,
-  Globe,
-  Layers,
-  LayoutGrid,
-  MessageSquareWarning,
-  ShieldAlert,
-  SlidersHorizontal,
-  Sparkles,
-  Store,
-  TrendingUp,
-  Trophy,
-  UserPlus,
-  Users,
-  Wallet,
-  Wrench,
-};
 
 type T = ReturnType<typeof getTranslations>;
 
@@ -134,49 +83,21 @@ export function CategoryMenu({ t }: CategoryMenuProps) {
                 </svg>
               </button>
 
-              {isOpen && (() => {
-                const isRich = group.items.some((item) => item.description);
-                return (
-                  <div className="absolute left-0 top-full z-50 pt-2">
-                    <div className={[
-                      "overflow-hidden rounded-xl border border-white/[0.1] bg-vinr-800 p-1.5 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.6)]",
-                      isRich ? "min-w-[300px]" : "min-w-[230px]",
-                    ].join(" ")}>
-                      {group.items.map((item) => {
-                        if (isRich) {
-                          const Icon = item.icon ? NAV_ICONS[item.icon] : undefined;
-                          return (
-                            <Link
-                              key={item.path}
-                              href={item.path}
-                              className="flex items-center gap-3 rounded-lg p-2.5 transition-colors hover:bg-white/[0.06]"
-                            >
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/[0.06]">
-                                {Icon && <Icon className="h-5 w-5 text-vinr-50/70" />}
-                              </div>
-                              <div>
-                                <div className="text-[13px] font-semibold text-vinr-50">{item.label}</div>
-                                {item.description && (
-                                  <div className="mt-0.5 text-[12px] leading-snug text-vinr-300">{item.description}</div>
-                                )}
-                              </div>
-                            </Link>
-                          );
-                        }
-                        return (
-                          <Link
-                            key={item.path}
-                            href={item.path}
-                            className="block rounded-lg px-3 py-2 text-[13px] text-vinr-50/[0.78] transition-colors hover:bg-white/[0.06] hover:text-vinr-50"
-                          >
-                            {item.label}
-                          </Link>
-                        );
-                      })}
-                    </div>
+              {isOpen && (
+                <div className="absolute left-0 top-full z-50 pt-2">
+                  <div className="min-w-[230px] overflow-hidden rounded-xl border border-white/[0.1] bg-vinr-800 p-1.5 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.6)]">
+                    {group.items.map((item) => (
+                      <Link
+                        key={item.path}
+                        href={item.path}
+                        className="block rounded-lg px-3 py-2 text-[13px] text-vinr-50/[0.78] transition-colors hover:bg-white/[0.06] hover:text-vinr-50"
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
                   </div>
-                );
-              })()}
+                </div>
+              )}
             </div>
           );
         })}
@@ -212,9 +133,6 @@ export function CategoryMenu({ t }: CategoryMenuProps) {
                       className="rounded-md py-2 text-[14px] text-vinr-50/[0.78] transition-colors hover:text-vinr-50"
                     >
                       {item.label}
-                      {item.description && (
-                        <span className="block text-[12px] text-vinr-300">{item.description}</span>
-                      )}
                     </Link>
                   ))}
                 </div>

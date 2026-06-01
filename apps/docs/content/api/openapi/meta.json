@@ -1,0 +1,15 @@
+{
+  "title": "VINR API",
+  "pages": [
+    "index",
+    "payments",
+    "customers",
+    "payment--methods",
+    "subscriptions",
+    "invoices",
+    "refunds",
+    "payouts",
+    "disputes",
+    "webhook--endpoints"
+  ]
+}

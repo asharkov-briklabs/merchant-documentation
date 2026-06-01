@@ -1,0 +1,494 @@
+---
+title: Refunds
+description: >-
+  Create and manage refunds. Refunds allow you to return some or all of a
+  payment's captured amount.
+full: true
+---
+
+import { Root, API, APIInfo, APIExample, Responses, Response, ResponseTypes, ExampleResponse, TypeScriptResponse, Property, ObjectCollapsible, Requests, Request, APIPlayground } from "fumadocs-openapi/ui";
+
+<Root baseUrl={"https://api.vinr.com/v1"}>
+
+<API>
+
+<APIInfo method={"GET"} route={"/refunds"}>
+
+## List all refunds
+
+Returns a list of all refunds you've previously created.
+
+<APIPlayground authorization={{"type":"string","name":"Authorization","defaultValue":"Bearer","isRequired":true,"description":"The Authorization access token"}} method={"GET"} route={"/refunds"} bodyType={"json"} path={[]} query={[{"name":"limit","type":"number","defaultValue":"","isRequired":false},{"name":"starting_after","type":"string","defaultValue":"","isRequired":false},{"name":"ending_before","type":"string","defaultValue":"","isRequired":false},{"name":"payment","type":"string","defaultValue":"","isRequired":false}]} header={[]} body={undefined} schemas={{}}>
+
+</APIPlayground>
+
+### Authorization
+
+<Property name={"Authorization"} type={"Bearer <token>"} required={true}>
+
+Use your secret API key (`sk_live_...` or `sk_test_...`) as a bearer token.
+
+In: `header`
+
+</Property>
+
+### Query Parameters
+
+<Property name={"limit"} type={"integer"} required={false} deprecated={false}>
+
+A limit on the number of objects to be returned, between 1 and 100.
+
+<span>Default: `10`</span>
+
+<span>Minimum: `1`</span>
+
+<span>Maximum: `100`</span>
+
+</Property>
+
+<Property name={"starting_after"} type={"string"} required={false} deprecated={false}>
+
+A cursor for use in pagination. `starting_after` is an object ID that defines your place in the list.
+
+</Property>
+
+<Property name={"ending_before"} type={"string"} required={false} deprecated={false}>
+
+A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list.
+
+</Property>
+
+<Property name={"payment"} type={"string"} required={false} deprecated={false}>
+
+Only return refunds for the payment specified by this payment ID.
+
+</Property>
+
+| Status code | Description |
+| ----------- | ----------- |
+| `200` | Returns a list of refund objects. |
+
+</APIInfo>
+
+<APIExample>
+
+<Requests items={["cURL","JavaScript"]}>
+
+<Request value={"cURL"}>
+
+```bash
+curl -X GET "https://api.vinr.com/v1/refunds?limit=10&starting_after=string&ending_before=string&payment=string"
+```
+
+</Request>
+
+<Request value={"JavaScript"}>
+
+```js
+fetch("https://api.vinr.com/v1/refunds?limit=10&starting_after=string&ending_before=string&payment=string", {
+  method: "GET"
+});
+```
+
+</Request>
+
+</Requests>
+
+<Responses items={["200"]}>
+
+<Response value={"200"}>
+
+<ResponseTypes>
+
+<ExampleResponse>
+
+```json
+{
+  "object": "list",
+  "has_more": true,
+  "url": "string",
+  "data": [
+    {
+      "id": "ref_1Abc",
+      "object": "refund",
+      "amount": 0,
+      "currency": "usd",
+      "payment": "pay_3Nx8a2Lk",
+      "reason": "duplicate",
+      "status": "pending",
+      "metadata": {
+        "property1": "string",
+        "property2": "string"
+      },
+      "created": 0
+    }
+  ]
+}
+```
+
+</ExampleResponse>
+
+<TypeScriptResponse>
+
+```ts
+export type Response = {
+  object: "list";
+  /**
+   * Whether there are more items beyond this page.
+   */
+  has_more: boolean;
+  /**
+   * The URL for this list.
+   */
+  url: string;
+} & {
+  data?: {
+    /**
+     * Unique identifier for the refund.
+     */
+    id: string;
+    object: "refund";
+    /**
+     * Amount, in the smallest currency unit, refunded.
+     */
+    amount: number;
+    currency: string;
+    /**
+     * ID of the payment that was refunded.
+     */
+    payment: string;
+    /**
+     * Reason for the refund.
+     */
+    reason?: "duplicate" | "fraudulent" | "requested_by_customer";
+    /**
+     * Status of the refund.
+     */
+    status: "pending" | "succeeded" | "failed" | "canceled";
+    metadata?: {
+      [k: string]: string;
+    };
+    created: number;
+  }[];
+};
+```
+
+</TypeScriptResponse>
+
+</ResponseTypes>
+
+</Response>
+
+</Responses>
+
+</APIExample>
+
+</API>
+
+<API>
+
+<APIInfo method={"POST"} route={"/refunds"}>
+
+## Create a refund
+
+When you create a new refund, you must specify either a payment or a charge.
+
+<APIPlayground authorization={{"type":"string","name":"Authorization","defaultValue":"Bearer","isRequired":true,"description":"The Authorization access token"}} method={"POST"} route={"/refunds"} bodyType={"json"} path={[]} query={[]} header={[]} body={{"type":"object","isRequired":true,"properties":{"payment":{"type":"ref","isRequired":true,"schema":"0"},"amount":{"type":"ref","isRequired":false,"schema":"1"},"reason":{"type":"ref","isRequired":false,"schema":"2"},"metadata":{"type":"ref","isRequired":false,"schema":"3"}}}} schemas={{"0":{"type":"string","defaultValue":"","isRequired":false,"description":"The identifier of the payment to be refunded."},"1":{"type":"number","defaultValue":"","isRequired":false,"description":"A positive integer representing how much to refund. Defaults to the full amount of the payment."},"2":{"type":"string","defaultValue":"","isRequired":false,"description":"The reason for the refund."},"3":{"type":"object","isRequired":false,"properties":{},"additionalProperties":"4"},"4":{"type":"string","defaultValue":"","isRequired":false}}}>
+
+</APIPlayground>
+
+### Authorization
+
+<Property name={"Authorization"} type={"Bearer <token>"} required={true}>
+
+Use your secret API key (`sk_live_...` or `sk_test_...`) as a bearer token.
+
+In: `header`
+
+</Property>
+
+### Request Body
+
+<Property name={"payment"} type={"string"} required={true} deprecated={undefined}>
+
+The identifier of the payment to be refunded.
+
+</Property>
+
+<Property name={"amount"} type={"integer"} required={false} deprecated={undefined}>
+
+A positive integer representing how much to refund. Defaults to the full amount of the payment.
+
+</Property>
+
+<Property name={"reason"} type={"string"} required={false} deprecated={undefined}>
+
+The reason for the refund.
+
+<span>Value in: `"duplicate" | "fraudulent" | "requested_by_customer"`</span>
+
+</Property>
+
+<Property name={"metadata"} type={"object"} required={false} deprecated={undefined}>
+
+<ObjectCollapsible name={"metadata"}>
+
+<Property name={"[key: string]"} type={"string"} required={false} deprecated={undefined}>
+
+</Property>
+
+</ObjectCollapsible>
+
+</Property>
+
+| Status code | Description |
+| ----------- | ----------- |
+| `200` | Returns a refund object. |
+
+</APIInfo>
+
+<APIExample>
+
+<Requests items={["cURL","JavaScript"]}>
+
+<Request value={"cURL"}>
+
+```bash
+curl -X POST "https://api.vinr.com/v1/refunds" \
+  -d '{
+  "payment": "string",
+  "amount": 0,
+  "reason": "duplicate",
+  "metadata": {
+    "property1": "string",
+    "property2": "string"
+  }
+}'
+```
+
+</Request>
+
+<Request value={"JavaScript"}>
+
+```js
+fetch("https://api.vinr.com/v1/refunds", {
+  method: "POST",
+  body: JSON.stringify({
+    "payment": "string",
+    "amount": 0,
+    "reason": "duplicate",
+    "metadata": {
+      "property1": "string",
+      "property2": "string"
+    }
+  })
+});
+```
+
+</Request>
+
+</Requests>
+
+<Responses items={["200"]}>
+
+<Response value={"200"}>
+
+<ResponseTypes>
+
+<ExampleResponse>
+
+```json
+{
+  "id": "ref_1Abc",
+  "object": "refund",
+  "amount": 0,
+  "currency": "usd",
+  "payment": "pay_3Nx8a2Lk",
+  "reason": "duplicate",
+  "status": "pending",
+  "metadata": {
+    "property1": "string",
+    "property2": "string"
+  },
+  "created": 0
+}
+```
+
+</ExampleResponse>
+
+<TypeScriptResponse>
+
+```ts
+export interface Response {
+  /**
+   * Unique identifier for the refund.
+   */
+  id: string;
+  object: "refund";
+  /**
+   * Amount, in the smallest currency unit, refunded.
+   */
+  amount: number;
+  currency: string;
+  /**
+   * ID of the payment that was refunded.
+   */
+  payment: string;
+  /**
+   * Reason for the refund.
+   */
+  reason?: "duplicate" | "fraudulent" | "requested_by_customer";
+  /**
+   * Status of the refund.
+   */
+  status: "pending" | "succeeded" | "failed" | "canceled";
+  metadata?: {
+    [k: string]: string;
+  };
+  created: number;
+}
+```
+
+</TypeScriptResponse>
+
+</ResponseTypes>
+
+</Response>
+
+</Responses>
+
+</APIExample>
+
+</API>
+
+<API>
+
+<APIInfo method={"GET"} route={"/refunds/{id}"}>
+
+## Retrieve a refund
+
+Retrieves the details of an existing refund.
+
+<APIPlayground authorization={{"type":"string","name":"Authorization","defaultValue":"Bearer","isRequired":true,"description":"The Authorization access token"}} method={"GET"} route={"/refunds/{id}"} bodyType={"json"} path={[{"name":"id","type":"string","defaultValue":"","isRequired":true}]} query={[]} header={[]} body={undefined} schemas={{}}>
+
+</APIPlayground>
+
+### Authorization
+
+<Property name={"Authorization"} type={"Bearer <token>"} required={true}>
+
+Use your secret API key (`sk_live_...` or `sk_test_...`) as a bearer token.
+
+In: `header`
+
+</Property>
+
+### Path Parameters
+
+<Property name={"id"} type={"string"} required={true} deprecated={false}>
+
+</Property>
+
+| Status code | Description |
+| ----------- | ----------- |
+| `200` | Returns a refund object. |
+
+</APIInfo>
+
+<APIExample>
+
+<Requests items={["cURL","JavaScript"]}>
+
+<Request value={"cURL"}>
+
+```bash
+curl -X GET "https://api.vinr.com/v1/refunds/string"
+```
+
+</Request>
+
+<Request value={"JavaScript"}>
+
+```js
+fetch("https://api.vinr.com/v1/refunds/string", {
+  method: "GET"
+});
+```
+
+</Request>
+
+</Requests>
+
+<Responses items={["200"]}>
+
+<Response value={"200"}>
+
+<ResponseTypes>
+
+<ExampleResponse>
+
+```json
+{
+  "id": "ref_1Abc",
+  "object": "refund",
+  "amount": 0,
+  "currency": "usd",
+  "payment": "pay_3Nx8a2Lk",
+  "reason": "duplicate",
+  "status": "pending",
+  "metadata": {
+    "property1": "string",
+    "property2": "string"
+  },
+  "created": 0
+}
+```
+
+</ExampleResponse>
+
+<TypeScriptResponse>
+
+```ts
+export interface Response {
+  /**
+   * Unique identifier for the refund.
+   */
+  id: string;
+  object: "refund";
+  /**
+   * Amount, in the smallest currency unit, refunded.
+   */
+  amount: number;
+  currency: string;
+  /**
+   * ID of the payment that was refunded.
+   */
+  payment: string;
+  /**
+   * Reason for the refund.
+   */
+  reason?: "duplicate" | "fraudulent" | "requested_by_customer";
+  /**
+   * Status of the refund.
+   */
+  status: "pending" | "succeeded" | "failed" | "canceled";
+  metadata?: {
+    [k: string]: string;
+  };
+  created: number;
+}
+```
+
+</TypeScriptResponse>
+
+</ResponseTypes>
+
+</Response>
+
+</Responses>
+
+</APIExample>
+
+</API>
+
+</Root>

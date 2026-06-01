@@ -1,0 +1,644 @@
+---
+title: Disputes
+description: >-
+  Manage disputes. A dispute occurs when a customer questions a charge with
+  their card issuer.
+full: true
+---
+
+import { Root, API, APIInfo, APIExample, Responses, Response, ResponseTypes, ExampleResponse, TypeScriptResponse, Property, ObjectCollapsible, Requests, Request, APIPlayground } from "fumadocs-openapi/ui";
+
+<Root baseUrl={"https://api.vinr.com/v1"}>
+
+<API>
+
+<APIInfo method={"GET"} route={"/disputes"}>
+
+## List all disputes
+
+Returns a list of your disputes.
+
+<APIPlayground authorization={{"type":"string","name":"Authorization","defaultValue":"Bearer","isRequired":true,"description":"The Authorization access token"}} method={"GET"} route={"/disputes"} bodyType={"json"} path={[]} query={[{"name":"limit","type":"number","defaultValue":"","isRequired":false},{"name":"starting_after","type":"string","defaultValue":"","isRequired":false},{"name":"ending_before","type":"string","defaultValue":"","isRequired":false},{"name":"payment","type":"string","defaultValue":"","isRequired":false}]} header={[]} body={undefined} schemas={{}}>
+
+</APIPlayground>
+
+### Authorization
+
+<Property name={"Authorization"} type={"Bearer <token>"} required={true}>
+
+Use your secret API key (`sk_live_...` or `sk_test_...`) as a bearer token.
+
+In: `header`
+
+</Property>
+
+### Query Parameters
+
+<Property name={"limit"} type={"integer"} required={false} deprecated={false}>
+
+A limit on the number of objects to be returned, between 1 and 100.
+
+<span>Default: `10`</span>
+
+<span>Minimum: `1`</span>
+
+<span>Maximum: `100`</span>
+
+</Property>
+
+<Property name={"starting_after"} type={"string"} required={false} deprecated={false}>
+
+A cursor for use in pagination. `starting_after` is an object ID that defines your place in the list.
+
+</Property>
+
+<Property name={"ending_before"} type={"string"} required={false} deprecated={false}>
+
+A cursor for use in pagination. `ending_before` is an object ID that defines your place in the list.
+
+</Property>
+
+<Property name={"payment"} type={"string"} required={false} deprecated={false}>
+
+Only return disputes associated with the payment specified by this payment ID.
+
+</Property>
+
+| Status code | Description |
+| ----------- | ----------- |
+| `200` | Returns a list of dispute objects. |
+
+</APIInfo>
+
+<APIExample>
+
+<Requests items={["cURL","JavaScript"]}>
+
+<Request value={"cURL"}>
+
+```bash
+curl -X GET "https://api.vinr.com/v1/disputes?limit=10&starting_after=string&ending_before=string&payment=string"
+```
+
+</Request>
+
+<Request value={"JavaScript"}>
+
+```js
+fetch("https://api.vinr.com/v1/disputes?limit=10&starting_after=string&ending_before=string&payment=string", {
+  method: "GET"
+});
+```
+
+</Request>
+
+</Requests>
+
+<Responses items={["200"]}>
+
+<Response value={"200"}>
+
+<ResponseTypes>
+
+<ExampleResponse>
+
+```json
+{
+  "object": "list",
+  "has_more": true,
+  "url": "string",
+  "data": [
+    {
+      "id": "dp_1Abc",
+      "object": "dispute",
+      "amount": 0,
+      "currency": "usd",
+      "payment": "string",
+      "reason": "duplicate",
+      "status": "warning_needs_response",
+      "evidence": {
+        "customer_email_address": "string",
+        "customer_name": "string",
+        "customer_purchase_ip": "string",
+        "product_description": "string",
+        "receipt": "string",
+        "shipping_documentation": "string"
+      },
+      "evidence_due_by": 0,
+      "created": 0
+    }
+  ]
+}
+```
+
+</ExampleResponse>
+
+<TypeScriptResponse>
+
+```ts
+export type Response = {
+  object: "list";
+  /**
+   * Whether there are more items beyond this page.
+   */
+  has_more: boolean;
+  /**
+   * The URL for this list.
+   */
+  url: string;
+} & {
+  data?: {
+    /**
+     * Unique identifier for the dispute.
+     */
+    id: string;
+    object: "dispute";
+    /**
+     * Disputed amount in the smallest currency unit.
+     */
+    amount: number;
+    currency: string;
+    /**
+     * ID of the payment that was disputed.
+     */
+    payment: string;
+    /**
+     * Reason given by cardholder for dispute.
+     */
+    reason?:
+      | "duplicate"
+      | "fraudulent"
+      | "subscription_canceled"
+      | "product_unacceptable"
+      | "product_not_received"
+      | "unrecognized"
+      | "credit_not_processed"
+      | "general"
+      | "incorrect_account_details"
+      | "insufficient_funds"
+      | "bank_cannot_process"
+      | "debit_not_authorized"
+      | "customer_initiated";
+    /**
+     * Current status of dispute.
+     */
+    status:
+      | "warning_needs_response"
+      | "warning_under_review"
+      | "warning_closed"
+      | "needs_response"
+      | "under_review"
+      | "charge_refunded"
+      | "won"
+      | "lost";
+    /**
+     * Evidence to submit to the card network.
+     */
+    evidence?: {
+      customer_email_address?: string;
+      customer_name?: string;
+      customer_purchase_ip?: string;
+      product_description?: string;
+      receipt?: string;
+      shipping_documentation?: string;
+    };
+    /**
+     * Date by which evidence must be submitted in order to successfully challenge dispute.
+     */
+    evidence_due_by?: number;
+    created: number;
+  }[];
+};
+```
+
+</TypeScriptResponse>
+
+</ResponseTypes>
+
+</Response>
+
+</Responses>
+
+</APIExample>
+
+</API>
+
+<API>
+
+<APIInfo method={"GET"} route={"/disputes/{id}"}>
+
+## Retrieve a dispute
+
+Retrieves the dispute with the given ID.
+
+<APIPlayground authorization={{"type":"string","name":"Authorization","defaultValue":"Bearer","isRequired":true,"description":"The Authorization access token"}} method={"GET"} route={"/disputes/{id}"} bodyType={"json"} path={[{"name":"id","type":"string","defaultValue":"","isRequired":true}]} query={[]} header={[]} body={undefined} schemas={{}}>
+
+</APIPlayground>
+
+### Authorization
+
+<Property name={"Authorization"} type={"Bearer <token>"} required={true}>
+
+Use your secret API key (`sk_live_...` or `sk_test_...`) as a bearer token.
+
+In: `header`
+
+</Property>
+
+### Path Parameters
+
+<Property name={"id"} type={"string"} required={true} deprecated={false}>
+
+</Property>
+
+| Status code | Description |
+| ----------- | ----------- |
+| `200` | Returns a dispute object. |
+
+</APIInfo>
+
+<APIExample>
+
+<Requests items={["cURL","JavaScript"]}>
+
+<Request value={"cURL"}>
+
+```bash
+curl -X GET "https://api.vinr.com/v1/disputes/string"
+```
+
+</Request>
+
+<Request value={"JavaScript"}>
+
+```js
+fetch("https://api.vinr.com/v1/disputes/string", {
+  method: "GET"
+});
+```
+
+</Request>
+
+</Requests>
+
+<Responses items={["200"]}>
+
+<Response value={"200"}>
+
+<ResponseTypes>
+
+<ExampleResponse>
+
+```json
+{
+  "id": "dp_1Abc",
+  "object": "dispute",
+  "amount": 0,
+  "currency": "usd",
+  "payment": "string",
+  "reason": "duplicate",
+  "status": "warning_needs_response",
+  "evidence": {
+    "customer_email_address": "string",
+    "customer_name": "string",
+    "customer_purchase_ip": "string",
+    "product_description": "string",
+    "receipt": "string",
+    "shipping_documentation": "string"
+  },
+  "evidence_due_by": 0,
+  "created": 0
+}
+```
+
+</ExampleResponse>
+
+<TypeScriptResponse>
+
+```ts
+export interface Response {
+  /**
+   * Unique identifier for the dispute.
+   */
+  id: string;
+  object: "dispute";
+  /**
+   * Disputed amount in the smallest currency unit.
+   */
+  amount: number;
+  currency: string;
+  /**
+   * ID of the payment that was disputed.
+   */
+  payment: string;
+  /**
+   * Reason given by cardholder for dispute.
+   */
+  reason?:
+    | "duplicate"
+    | "fraudulent"
+    | "subscription_canceled"
+    | "product_unacceptable"
+    | "product_not_received"
+    | "unrecognized"
+    | "credit_not_processed"
+    | "general"
+    | "incorrect_account_details"
+    | "insufficient_funds"
+    | "bank_cannot_process"
+    | "debit_not_authorized"
+    | "customer_initiated";
+  /**
+   * Current status of dispute.
+   */
+  status:
+    | "warning_needs_response"
+    | "warning_under_review"
+    | "warning_closed"
+    | "needs_response"
+    | "under_review"
+    | "charge_refunded"
+    | "won"
+    | "lost";
+  /**
+   * Evidence to submit to the card network.
+   */
+  evidence?: {
+    customer_email_address?: string;
+    customer_name?: string;
+    customer_purchase_ip?: string;
+    product_description?: string;
+    receipt?: string;
+    shipping_documentation?: string;
+  };
+  /**
+   * Date by which evidence must be submitted in order to successfully challenge dispute.
+   */
+  evidence_due_by?: number;
+  created: number;
+}
+```
+
+</TypeScriptResponse>
+
+</ResponseTypes>
+
+</Response>
+
+</Responses>
+
+</APIExample>
+
+</API>
+
+<API>
+
+<APIInfo method={"POST"} route={"/disputes/{id}"}>
+
+## Update a dispute
+
+When you get a dispute, contacting your customer is always the best first step. If that doesn't work, you can submit evidence to help us resolve the dispute in your favor.
+
+<APIPlayground authorization={{"type":"string","name":"Authorization","defaultValue":"Bearer","isRequired":true,"description":"The Authorization access token"}} method={"POST"} route={"/disputes/{id}"} bodyType={"json"} path={[{"name":"id","type":"string","defaultValue":"","isRequired":true}]} query={[]} header={[]} body={{"type":"object","isRequired":true,"properties":{"evidence":{"type":"ref","isRequired":false,"schema":"0"},"submit":{"type":"ref","isRequired":false,"schema":"7"},"metadata":{"type":"ref","isRequired":false,"schema":"8"}}}} schemas={{"0":{"type":"object","isRequired":false,"properties":{"customer_email_address":{"type":"ref","isRequired":false,"schema":"1"},"customer_name":{"type":"ref","isRequired":false,"schema":"2"},"customer_purchase_ip":{"type":"ref","isRequired":false,"schema":"3"},"product_description":{"type":"ref","isRequired":false,"schema":"4"},"receipt":{"type":"ref","isRequired":false,"schema":"5"},"shipping_documentation":{"type":"ref","isRequired":false,"schema":"6"}}},"1":{"type":"string","defaultValue":"","isRequired":false},"2":{"type":"string","defaultValue":"","isRequired":false},"3":{"type":"string","defaultValue":"","isRequired":false},"4":{"type":"string","defaultValue":"","isRequired":false},"5":{"type":"string","defaultValue":"","isRequired":false},"6":{"type":"string","defaultValue":"","isRequired":false},"7":{"type":"boolean","defaultValue":"","isRequired":false,"description":"Whether to immediately submit evidence to the bank."},"8":{"type":"object","isRequired":false,"properties":{},"additionalProperties":"9"},"9":{"type":"string","defaultValue":"","isRequired":false}}}>
+
+</APIPlayground>
+
+### Authorization
+
+<Property name={"Authorization"} type={"Bearer <token>"} required={true}>
+
+Use your secret API key (`sk_live_...` or `sk_test_...`) as a bearer token.
+
+In: `header`
+
+</Property>
+
+### Request Body (Optional)
+
+<Property name={"evidence"} type={"object"} required={false} deprecated={undefined}>
+
+<ObjectCollapsible name={"evidence"}>
+
+<Property name={"customer_email_address"} type={"string"} required={false} deprecated={undefined}>
+
+</Property>
+
+<Property name={"customer_name"} type={"string"} required={false} deprecated={undefined}>
+
+</Property>
+
+<Property name={"customer_purchase_ip"} type={"string"} required={false} deprecated={undefined}>
+
+</Property>
+
+<Property name={"product_description"} type={"string"} required={false} deprecated={undefined}>
+
+</Property>
+
+<Property name={"receipt"} type={"string"} required={false} deprecated={undefined}>
+
+</Property>
+
+<Property name={"shipping_documentation"} type={"string"} required={false} deprecated={undefined}>
+
+</Property>
+
+</ObjectCollapsible>
+
+</Property>
+
+<Property name={"submit"} type={"boolean"} required={false} deprecated={undefined}>
+
+Whether to immediately submit evidence to the bank.
+
+</Property>
+
+<Property name={"metadata"} type={"object"} required={false} deprecated={undefined}>
+
+<ObjectCollapsible name={"metadata"}>
+
+<Property name={"[key: string]"} type={"string"} required={false} deprecated={undefined}>
+
+</Property>
+
+</ObjectCollapsible>
+
+</Property>
+
+### Path Parameters
+
+<Property name={"id"} type={"string"} required={true} deprecated={false}>
+
+</Property>
+
+| Status code | Description |
+| ----------- | ----------- |
+| `200` | Returns the dispute object. |
+
+</APIInfo>
+
+<APIExample>
+
+<Requests items={["cURL","JavaScript"]}>
+
+<Request value={"cURL"}>
+
+```bash
+curl -X POST "https://api.vinr.com/v1/disputes/string" \
+  -d '{
+  "evidence": {
+    "customer_email_address": "string",
+    "customer_name": "string",
+    "customer_purchase_ip": "string",
+    "product_description": "string",
+    "receipt": "string",
+    "shipping_documentation": "string"
+  },
+  "submit": true,
+  "metadata": {
+    "property1": "string",
+    "property2": "string"
+  }
+}'
+```
+
+</Request>
+
+<Request value={"JavaScript"}>
+
+```js
+fetch("https://api.vinr.com/v1/disputes/string", {
+  method: "POST",
+  body: JSON.stringify({
+    "evidence": {
+      "customer_email_address": "string",
+      "customer_name": "string",
+      "customer_purchase_ip": "string",
+      "product_description": "string",
+      "receipt": "string",
+      "shipping_documentation": "string"
+    },
+    "submit": true,
+    "metadata": {
+      "property1": "string",
+      "property2": "string"
+    }
+  })
+});
+```
+
+</Request>
+
+</Requests>
+
+<Responses items={["200"]}>
+
+<Response value={"200"}>
+
+<ResponseTypes>
+
+<ExampleResponse>
+
+```json
+{
+  "id": "dp_1Abc",
+  "object": "dispute",
+  "amount": 0,
+  "currency": "usd",
+  "payment": "string",
+  "reason": "duplicate",
+  "status": "warning_needs_response",
+  "evidence": {
+    "customer_email_address": "string",
+    "customer_name": "string",
+    "customer_purchase_ip": "string",
+    "product_description": "string",
+    "receipt": "string",
+    "shipping_documentation": "string"
+  },
+  "evidence_due_by": 0,
+  "created": 0
+}
+```
+
+</ExampleResponse>
+
+<TypeScriptResponse>
+
+```ts
+export interface Response {
+  /**
+   * Unique identifier for the dispute.
+   */
+  id: string;
+  object: "dispute";
+  /**
+   * Disputed amount in the smallest currency unit.
+   */
+  amount: number;
+  currency: string;
+  /**
+   * ID of the payment that was disputed.
+   */
+  payment: string;
+  /**
+   * Reason given by cardholder for dispute.
+   */
+  reason?:
+    | "duplicate"
+    | "fraudulent"
+    | "subscription_canceled"
+    | "product_unacceptable"
+    | "product_not_received"
+    | "unrecognized"
+    | "credit_not_processed"
+    | "general"
+    | "incorrect_account_details"
+    | "insufficient_funds"
+    | "bank_cannot_process"
+    | "debit_not_authorized"
+    | "customer_initiated";
+  /**
+   * Current status of dispute.
+   */
+  status:
+    | "warning_needs_response"
+    | "warning_under_review"
+    | "warning_closed"
+    | "needs_response"
+    | "under_review"
+    | "charge_refunded"
+    | "won"
+    | "lost";
+  /**
+   * Evidence to submit to the card network.
+   */
+  evidence?: {
+    customer_email_address?: string;
+    customer_name?: string;
+    customer_purchase_ip?: string;
+    product_description?: string;
+    receipt?: string;
+    shipping_documentation?: string;
+  };
+  /**
+   * Date by which evidence must be submitted in order to successfully challenge dispute.
+   */
+  evidence_due_by?: number;
+  created: number;
+}
+```
+
+</TypeScriptResponse>
+
+</ResponseTypes>
+
+</Response>
+
+</Responses>
+
+</APIExample>
+
+</API>
+
+</Root>
