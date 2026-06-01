@@ -84,21 +84,8 @@ export function SiteFooter({ t }: SiteFooterProps) {
           </div>
         </div>
 
-        <div className="flex items-center justify-between border-t border-white/[0.07] pb-8 pt-6">
+        <div className="border-t border-white/[0.07] pb-8 pt-6">
           <span className="font-mono text-[11px] text-white/30">{t.footerCopy}</span>
-          <div className="flex gap-2">
-            <span className="flex items-center gap-[5px] rounded-full border border-white/[0.1] px-2 py-[3px] text-[10px] font-medium tracking-[0.03em] text-white/40">
-              <span className="h-[5px] w-[5px] rounded-full bg-lime-500" />
-              {t.complianceBadge1}
-            </span>
-            <span className="flex items-center gap-[5px] rounded-full border border-white/[0.1] px-2 py-[3px] text-[10px] font-medium tracking-[0.03em] text-white/40">
-              <span className="h-[5px] w-[5px] rounded-full bg-lime-500" />
-              {t.complianceBadge2}
-            </span>
-            <span className="flex items-center gap-[5px] rounded-full border border-white/[0.1] px-2 py-[3px] text-[10px] font-medium tracking-[0.03em] text-white/40">
-              {t.complianceBadge3}
-            </span>
-          </div>
         </div>
       </div>
     </footer>

@@ -23,6 +23,11 @@ export function AskAIPanel() {
   const close = useCallback(() => setIsOpen(false), []);
 
   useEffect(() => {
+    document.body.classList.toggle("ai-panel-open", isOpen);
+    return () => document.body.classList.remove("ai-panel-open");
+  }, [isOpen]);
+
+  useEffect(() => {
     function onOpen(e: Event) {
       const detail = (e as CustomEvent<{ message?: string }>).detail;
       setInitialMessage(detail?.message ?? "");
@@ -110,16 +115,6 @@ export function AskAIPanel() {
 
   return (
     <>
-      {/* Backdrop */}
-      <div
-        className={[
-          "fixed inset-0 z-40 bg-black/40 transition-opacity duration-300",
-          isOpen ? "opacity-100" : "pointer-events-none opacity-0",
-        ].join(" ")}
-        onClick={close}
-        aria-hidden="true"
-      />
-
       {/* Panel */}
       <div
         role="dialog"
