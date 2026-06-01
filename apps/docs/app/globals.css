@@ -133,6 +133,14 @@
 #nd-docs-layout {
   --fd-banner-height: 100px;
 }
+/* fumadocs v16 places nav.component inside its CSS grid as a direct child.
+   By default it auto-places into column 3 (the main content column), so the
+   sidebar column appears to the left of the nav. Force it to span all 5
+   columns so SiteNav fills the full viewport width, matching the home page. */
+#nd-docs-layout > nav {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
 /* Suppress the fumadocs v16 root-folder streaming tab strip. In v16 it renders
    as a React streaming boundary that becomes a direct <body> child above
    #nd-docs-layout, independent of the DocsLayout tabs={false} prop.
