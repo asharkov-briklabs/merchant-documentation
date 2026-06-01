@@ -1,0 +1,49 @@
+---
+title: Balances and settlement time
+description: How funds move through your VINR balance before reaching your bank.
+persona: ["finance-manager", "operations"]
+priority: P1
+lastUpdated: "2026-06-01"
+---
+
+When a payment succeeds, funds move through your VINR balance before being paid out to your bank. Understanding settlement timing helps with cash flow planning and reconciliation.
+
+## The balance ledger
+
+Your VINR balance holds funds in two states:
+
+- **Pending** — captured by the card network or payment method but not yet settled to VINR. Funds at this stage are still reversible (e.g. through a dispute or ACH return).
+- **Available** — fully settled, reserved for payout to your linked bank account on your payout schedule.
+
+Funds move from pending to available on the timeline below. You can always see both balances in **Dashboard → Balance**.
+
+## Settlement timing by method
+
+| Method | Typical timing | Notes |
+|---|---|---|
+| Cards (domestic) | T+1 to T+2 | Varies by card network |
+| Cards (international) | T+2 to T+3 | FX settlement adds one day |
+| Bank debits (ACH) | T+3 to T+5 | Return window extends pending period |
+| Bank debits (SEPA) | T+3 | EU mandate timing |
+| Real-time payments (Pix, UPI) | T+0 | Instant settlement |
+| Stablecoins | T+0 after conversion | On-chain confirmation takes minutes |
+
+T is the business day the payment is captured. Days are banking days; weekends and holidays shift the window forward.
+
+## Multi-currency balances
+
+VINR holds a sub-balance per currency. EUR collected stays in your EUR sub-balance until you instruct a payout. You can hold and convert at a time you choose rather than auto-converting at settlement — useful if you want to manage FX exposure or wait for a favorable rate. See [Multicurrency](/docs/payments/multicurrency) for conversion options.
+
+## Payout schedule
+
+By default, VINR initiates a daily payout of your available balance to your linked bank account. You can change this to **weekly** or **monthly** in **Dashboard → Settings → Payouts**. Manual payouts are available at any time for the current available balance.
+
+Your first payout may be held for a short verification period while VINR confirms your bank details — this happens once and does not recur.
+
+## Instant Payouts
+
+Eligible merchants can receive available funds within minutes via a linked debit card, available 24/7 including weekends and holidays. A per-payout fee applies (higher than standard payout fees). Enable in **Dashboard → Payouts → Instant Payouts**.
+
+<Callout type="info">
+For managing linked bank accounts, multi-currency payouts, and your full payout history, see [Payouts](/docs/operations/payouts).
+</Callout>

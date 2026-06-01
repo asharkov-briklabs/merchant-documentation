@@ -1,0 +1,82 @@
+---
+title: Receipts
+description: Automatic payment receipts — configuration, customization, and suppression.
+persona: ["developer", "operations"]
+priority: P2
+lastUpdated: "2026-06-01"
+---
+
+VINR sends an automatic email receipt after a successful payment or refund. This page covers how to control, customize, and suppress those receipts.
+
+## Automatic receipts
+
+By default, VINR sends a receipt when a PaymentIntent reaches `succeeded` status and a recipient email is available. The receipt includes: your merchant name, the amount and currency, the card last 4 and brand, the transaction date, and your configured support URL.
+
+No code is required — receipts are enabled globally and fire automatically. You only need to ensure a recipient email is set.
+
+## Setting the recipient email
+
+VINR resolves the receipt address in priority order:
+
+1. `receipt_email` on the PaymentIntent — takes highest priority, overrides everything else
+2. `email` on the Customer object — used when `receipt_email` is not explicitly set on the PaymentIntent
+
+If neither is present, no receipt is sent.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ apiKey: process.env.VINR_SECRET_KEY });
+
+const paymentIntent = await vinr.paymentIntents.create({
+  amount: 4900,
+  currency: 'usd',
+  receipt_email: 'customer@example.com',
+  payment_method: 'pm_...',
+  confirm: true,
+});
+```
+
+## Customizing receipt content
+
+Go to **Dashboard → Settings → Branding** to configure:
+
+- **Logo** — appears at the top of the receipt email
+- **Brand color** — used as the accent color on buttons and links
+- **Support phone and URL** — displayed in the footer of every receipt
+- **Custom message** — short text appended to every receipt; useful for return policy reminders or order confirmation notes
+
+Changes apply to all future receipts immediately. Existing sent receipts are not retroactively updated.
+
+## Suppressing receipts
+
+To suppress a receipt for a single payment, pass `receipt_email: null` explicitly on the PaymentIntent:
+
+```typescript
+const paymentIntent = await vinr.paymentIntents.create({
+  amount: 4900,
+  currency: 'usd',
+  receipt_email: null, // suppress for this payment only
+  payment_method: 'pm_...',
+  confirm: true,
+});
+```
+
+To suppress receipts globally, disable automatic receipts in **Dashboard → Settings → Email**. This is the right approach if you send your own transactional emails from your platform.
+
+## Refund receipts
+
+When a refund is created, VINR sends a refund receipt to the original `receipt_email`. The refund receipt includes the refund amount, original charge amount, and estimated timeline. Refund receipts are suppressed using the same mechanisms as payment receipts — per-payment via `receipt_email: null` on the Refund object, or globally via Dashboard settings. See [Refunds](/docs/payments/refunds) for the full refund workflow.
+
+## Custom receipt pages
+
+To fully replace VINR receipts with your own:
+
+1. Suppress VINR receipts globally in Dashboard settings
+2. Listen for the `payment_intent.succeeded` webhook on your server
+3. Send your own receipt email from your transactional email provider
+4. Redirect customers to your order confirmation page via the `return_url` set on PaymentIntent confirmation
+
+<Callout type="info">
+Receipt emails sent to EU customers are transactional communications under GDPR — the transaction itself provides the legal basis for sending them. Customers can opt out of marketing emails separately; receipts are not affected by marketing opt-outs.
+</Callout>

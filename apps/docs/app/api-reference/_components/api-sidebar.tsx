@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSearchContext } from "fumadocs-ui/provider";
 import {
   createContext,
   useContext,
@@ -54,6 +55,69 @@ export function ApiNavToggle() {
   );
 }
 
+/** Search + Ask AI row shown at the top of the API sidebar (mirrors Stripe). */
+function SearchAndAsk() {
+  const { setOpenSearch } = useSearchContext();
+
+  // `/` keyboard shortcut to open search (when not in an input).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (
+        e.key !== "/" ||
+        e.metaKey ||
+        e.ctrlKey ||
+        (e.target instanceof HTMLElement &&
+          (e.target.tagName === "INPUT" ||
+            e.target.tagName === "TEXTAREA" ||
+            e.target.isContentEditable))
+      )
+        return;
+      e.preventDefault();
+      setOpenSearch(true);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [setOpenSearch]);
+
+  function openAskAI() {
+    window.dispatchEvent(new CustomEvent("ask-ai:open", { detail: { message: "" } }));
+  }
+
+  return (
+    <div className="mb-3 flex items-center gap-1.5 px-1">
+      {/* Search trigger */}
+      <button
+        type="button"
+        onClick={() => setOpenSearch(true)}
+        aria-label="Search"
+        className="flex h-8 flex-1 items-center gap-2 rounded-md border border-white/[0.10] bg-white/[0.04] px-2.5 text-vinr-50/40 transition-colors hover:border-vinr-500/40 hover:bg-white/[0.07] hover:text-vinr-50/60"
+      >
+        <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <circle cx="11" cy="11" r="7" />
+          <path d="M21 21l-4-4" strokeLinecap="round" />
+        </svg>
+        <span className="flex-1 text-left text-[12.5px]">Find anything</span>
+        <kbd className="rounded border border-white/[0.10] bg-white/[0.06] px-1 py-px font-mono text-[10px] text-vinr-50/30">
+          /
+        </kbd>
+      </button>
+
+      {/* Ask AI button */}
+      <button
+        type="button"
+        onClick={openAskAI}
+        aria-label="Ask AI"
+        className="flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-vinr-500/30 bg-vinr-500/[0.12] px-2.5 text-[12.5px] font-medium text-vinr-300 transition-colors hover:border-vinr-500/50 hover:bg-vinr-500/[0.20]"
+      >
+        <svg className="h-3 w-3" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+          <path d="M8 1l1.2 4.8L14 8l-4.8 1.2L8 15l-1.2-4.8L2 8l4.8-1.2z" />
+        </svg>
+        Ask AI
+      </button>
+    </div>
+  );
+}
+
 /** Left navigation column listing every API-reference page, grouped by section. */
 export function ApiSidebar({ nav }: { nav: ApiNavNode[] }) {
   const { open, setOpen } = useApiNav();
@@ -82,6 +146,7 @@ export function ApiSidebar({ nav }: { nav: ApiNavNode[] }) {
           open ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         ].join(" ")}
       >
+        <SearchAndAsk />
         <ul className="flex flex-col gap-0.5">
           {nav.map((node, i) =>
             node.type === "section" ? (

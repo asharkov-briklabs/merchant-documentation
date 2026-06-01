@@ -1,0 +1,54 @@
+---
+title: Faster checkout with Link
+description: Let customers check out in one click using VINR Link.
+persona: [developer, business-owner]
+priority: P1
+lastUpdated: "2026-06-01"
+---
+
+Link is VINR's accelerated checkout network. Returning Link customers see their saved payment method pre-filled and can confirm in a single tap — no re-entering details.
+
+## How it works
+
+1. The customer enters their email on your checkout form.
+2. If they have a Link account, VINR sends a one-time code to their phone.
+3. After verification, their saved card or bank account is pre-populated in the Payment Element.
+4. They confirm — done in one tap.
+
+First-time Link users are enrolled automatically when they save a payment method through any Link-enabled checkout. Their credentials follow them to every merchant using Link.
+
+## Integration
+
+Link activates automatically inside the Payment Element — no additional configuration required. Mount the element as you normally would and Link surfaces for eligible customers without any extra code.
+
+```ts
+// Client: mount the Payment Element — Link is included automatically
+import { loadVinr } from '@vinr/sdk';
+
+const vinr = await loadVinr('pk_live_...');
+const elements = vinr.elements({ clientSecret });
+
+const paymentElement = elements.create('payment');
+paymentElement.mount('#payment-element');
+```
+
+Link also works in VINR Checkout and Payment Links with zero setup — it is on by default for all hosted payment surfaces.
+
+## Instant Bank Payments
+
+Customers who connect a bank account to their Link account unlock Instant Bank Payments — a direct bank rail with lower interchange than cards. From your side, settlement works exactly the same as a card payment; you receive fiat funds on your normal payout schedule. The customer simply opts into a faster, often cheaper path at the moment of checkout.
+
+No additional integration is required to support Instant Bank Payments. If a customer has a linked bank account, the option appears automatically within Link.
+
+## Benefits
+
+| Benefit | Detail |
+|---|---|
+| Conversion lift | Pre-filled fields reduce drop-off at the payment step |
+| Bank-rail pricing | Lower interchange for opted-in customers using Instant Bank Payments |
+| Cross-device | Works on mobile and desktop; verification via SMS |
+| Zero maintenance | New Link features reach your checkout without code changes |
+
+<Callout type="info">
+  Customers manage their Link account — including saved cards, bank accounts, and linked merchants — at link.vinr.com. You never store or manage their Link credentials.
+</Callout>

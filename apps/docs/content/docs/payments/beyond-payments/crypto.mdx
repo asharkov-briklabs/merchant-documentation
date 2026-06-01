@@ -1,0 +1,84 @@
+---
+title: Crypto
+description: Accept stablecoin payments, pay out in crypto, and offer a fiat-to-crypto onramp.
+priority: P1
+lastUpdated: "2026-06-01"
+---
+
+VINR's crypto platform goes beyond accepting stablecoin at checkout — it includes stablecoin-denominated disbursements and an embeddable fiat-to-crypto onramp for your users.
+
+<Callout type="info">
+For adding stablecoins as a checkout payment method (customer pays USDC, merchant receives fiat), see [Payment methods → Stablecoins](/docs/payments/payment-methods/stablecoins). This page covers the broader crypto platform: disbursements and the onramp.
+</Callout>
+
+## Stablecoin payment acceptance
+
+Customers pay in USDC, USDT, or other supported stablecoins. VINR converts to fiat and settles to your VINR balance as normal. You receive fiat — no price volatility risk, no crypto custody obligation on your end.
+
+| Supported chain | Settlement speed |
+|---|---|
+| Ethereum | T+0 to T+1 after conversion |
+| Solana | T+0 to T+1 after conversion |
+| Polygon | T+0 to T+1 after conversion |
+
+## Stablecoin payouts
+
+Platforms can disburse to connected accounts or end users in stablecoin instead of fiat. Funds arrive in the recipient's wallet denominated in USDC or USDT, depending on your configuration.
+
+Common use cases:
+
+- Gig economy workers who prefer USDC for cross-border portability
+- International payouts where fiat corridors are slow or expensive
+- Platform incentive programs denominated in stablecoin
+
+<Callout type="warn">
+Stablecoin payouts are currently in private preview. Contact your VINR account team to request access before building against this API.
+</Callout>
+
+```typescript
+import { Vinr } from '@vinr/sdk'
+
+const vinr = new Vinr({ apiKey: process.env.VINR_SECRET_KEY })
+
+const payout = await vinr.payouts.create({
+  amount: 5000, // in cents
+  currency: 'usdc',
+  destination: {
+    type: 'crypto_wallet',
+    address: '0xRecipientAddress',
+    chain: 'ethereum',
+  },
+})
+```
+
+## Fiat-to-crypto onramp
+
+An embeddable widget that lets users convert fiat (card or bank) to crypto within your app. The converted funds go directly to the user's nominated wallet — your platform never touches the crypto.
+
+Available as two integration modes:
+
+| Mode | Description |
+|---|---|
+| Hosted redirect | Send the user to a VINR-hosted onramp URL; no frontend code required |
+| Embeddable SDK | Web, iOS, and Android drop-in component rendered inside your app |
+
+```typescript
+import { Vinr } from '@vinr/sdk'
+
+const vinr = new Vinr({ apiKey: process.env.VINR_SECRET_KEY })
+
+const session = await vinr.onramp.sessions.create({
+  destination_currency: 'usdc',
+  destination_network: 'solana',
+  wallet_address: userWalletAddress,
+  return_url: 'https://yourapp.com/onramp/complete',
+})
+
+// Redirect or embed: session.url
+```
+
+## Compliance
+
+<Callout type="warn">
+Crypto features are subject to regulatory availability by country. VINR conducts KYC/AML checks on onramp transactions automatically, but availability in a given market depends on local licensing. Check with your VINR account team before enabling crypto features in a new geography.
+</Callout>

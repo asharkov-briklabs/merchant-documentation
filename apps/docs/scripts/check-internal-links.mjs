@@ -57,16 +57,53 @@ for (const dir of SCAN_DIRS) {
   }
 }
 
-if (broken.size === 0) {
+// ── NAV_GROUPS explicit path check ───────────────────────────────────────────
+// The scan above catches /docs/... literals in lib/ via regex, but the nav
+// items use `path:` fields that may also include anchors (#section) and
+// non-/docs/ paths (/api-reference). This second pass explicitly validates
+// every path: value in NAV_GROUPS, strips anchors before resolving, and
+// emits a nav-specific error pointing to the exact item label so the broken
+// link is easy to locate.
+const NAV_FILE = join(ROOT, "lib", "nav-taxonomy.ts");
+const navText = readFileSync(NAV_FILE, "utf8");
+// Capture the label that precedes each path for context in error output.
+// Matches: label: "...", ... path: "..." (within ~200 chars of each other)
+const NAV_ITEM_RE =
+  /label:\s*["']([^"']+)["'][^}]{0,200}?path:\s*["']([^"']+)["']/gs;
+const navBroken = []; // { label, rawPath }
+
+for (const [, label, rawPath] of navText.matchAll(NAV_ITEM_RE)) {
+  if (!rawPath.startsWith("/docs")) continue; // skip /api-reference etc.
+  const docPath = rawPath.split("#")[0]; // strip anchor before resolving
+  if (resolves(docPath)) continue;
+  navBroken.push({ label, rawPath });
+}
+
+const totalBroken = broken.size + navBroken.length;
+
+if (totalBroken === 0) {
   console.log("✔ internal docs links: all resolve to content pages");
+  console.log("✔ nav-taxonomy.ts paths: all resolve to content pages");
   process.exit(0);
 }
 
-console.error(`✖ ${broken.size} internal docs link(s) point to missing content pages:\n`);
-for (const [docPath, files] of broken) {
-  console.error(`  ${docPath}`);
-  for (const f of files) console.error(`      ↳ ${f}`);
+if (broken.size > 0) {
+  console.error(`✖ ${broken.size} internal docs link(s) point to missing content pages:\n`);
+  for (const [docPath, files] of broken) {
+    console.error(`  ${docPath}`);
+    for (const f of files) console.error(`      ↳ ${f}`);
+  }
 }
+
+if (navBroken.length > 0) {
+  console.error(
+    `\n✖ ${navBroken.length} NAV_GROUPS path(s) in lib/nav-taxonomy.ts point to missing content pages:\n`
+  );
+  for (const { label, rawPath } of navBroken) {
+    console.error(`  ${rawPath}  (label: "${label}")`);
+  }
+}
+
 console.error(
   "\nEither create the content page or update the link. These links are hand-" +
     "maintained (lib/nav-taxonomy.ts, app/[locale]/page.tsx) and not derived\n" +

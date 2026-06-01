@@ -1,0 +1,112 @@
+---
+title: Reporting
+description: Prebuilt reports, revenue recognition, bank reconciliation, and scheduled exports on VINR.
+persona: ["finance-manager", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-06-01"
+---
+
+VINR reporting gives you the financial visibility to understand your business, close your books, and satisfy your auditors. Use prebuilt reports for everyday analysis, revenue recognition for accrual accounting, bank reconciliation to match payouts to your bank statement, and scheduled exports to automate your reporting workflow.
+
+## Prebuilt reports
+
+VINR ships a set of prebuilt reports that cover the most common financial analysis needs. View them in the Dashboard or download as CSV for your accounting tool.
+
+| Report | What it shows |
+|---|---|
+| **Balance** | Running balance, inflows, outflows, and fee breakdown. |
+| **Payout reconciliation** | Each transaction included in a payout, with fees and net. |
+| **Gross revenue** | Total revenue by period, broken down by product and currency. |
+| **Refunds** | Refunded amounts by period, reason code, and customer. |
+| **Disputes** | Chargebacks, outcomes, and recovered amounts. |
+
+```bash
+curl https://api.vinr.com/v1/reports/balance \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -d "period_start=2026-05-01" \
+  -d "period_end=2026-05-31" \
+  -d "format=csv"
+```
+
+Each report accepts `period_start`, `period_end`, `currency`, and `format` (`csv` or `json`). Reports are generated asynchronously and delivered via webhook or polled from a report URL.
+
+## Revenue recognition
+
+Revenue recognition translates billing activity — invoices, refunds, and credit notes — into recognized and deferred revenue over time, in line with ASC 606 / IFRS 15. See [Revenue recognition](/docs/billing/revenue-recognition) for the full reference.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const schedule = await vinr.revenue.schedules.retrieve('inv_8Qz1Kp');
+console.log(schedule.recognized);  // Earned to date
+console.log(schedule.deferred);    // Still a liability
+```
+
+Key recognition methods:
+- **Ratable** — spreads revenue evenly across the service period (default for subscriptions)
+- **Immediate** — recognizes the full amount at finalization (for one-off fees)
+- **Milestone** — recognizes on explicit completion events
+
+Refunds, credit notes, and mid-cycle proration generate their own schedule entries automatically — you never edit recognized revenue by hand.
+
+## Bank reconciliation
+
+Bank reconciliation automates comparing your VINR financial records to your actual bank statement, so closing your books does not require manual matching.
+
+VINR produces a payout-level statement that breaks every payout down to individual transactions, fees, and adjustments — in the same order they appear in your bank feed.
+
+```bash
+curl https://api.vinr.com/v1/reports/payout-reconciliation \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -d "payout_id=po_4Vk9Mx"
+```
+
+The response includes:
+
+| Field | Description |
+|---|---|
+| `gross` | Amount charged to customers in this payout period. |
+| `fees` | VINR processing and platform fees. |
+| `refunds` | Net refund amounts. |
+| `disputes` | Chargeback amounts and recoveries. |
+| `net` | The amount deposited to your bank account. |
+
+<Callout type="info">
+Bank reconciliation works at the payout level. If you use [daily payouts](/docs/operations/payouts), each line in your bank statement corresponds to one payout report.
+</Callout>
+
+## Scheduled reports
+
+Automate report delivery on a recurring cadence so your finance team always has fresh data without manually triggering exports.
+
+```typescript
+await vinr.reports.schedules.create({
+  reportType: 'balance_change_from_activity',
+  frequency: 'monthly',
+  deliveryMethod: {
+    type: 'email',
+    recipients: ['finance@example.com'],
+  },
+  format: 'csv',
+});
+```
+
+Supported frequencies: `daily`, `weekly`, `monthly`. Scheduled reports can be delivered by email or pushed to an S3-compatible bucket via webhook. Each run creates an immutable snapshot — rerunning the same period produces the same numbers.
+
+## Accounting integrations
+
+VINR exports are compatible with the major accounting tools. Pull transaction-level data from the API and import into:
+
+- **Xero** — use the VINR Xero connector for automatic sync
+- **QuickBooks** — use the VINR QuickBooks app
+- **NetSuite** — import CSV exports or use the REST connector
+- **Any accounting tool** — download standard CSV exports from the Dashboard
+
+## Next steps
+
+<Cards>
+  <Card title="Revenue recognition" href="/docs/billing/revenue-recognition" description="Accrual accounting schedules per invoice line." />
+  <Card title="Data" href="/docs/billing/data" description="Custom SQL queries and data warehouse sync." />
+  <Card title="Operations reporting" href="/docs/operations/reporting" description="Operational and settlement reports." />
+</Cards>

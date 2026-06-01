@@ -1,0 +1,84 @@
+---
+title: Flexible acquiring
+description: Extended authorization, incremental auth, multicapture, and overcapture.
+persona: [developer]
+priority: P1
+lastUpdated: "2026-06-01"
+---
+
+Flexible acquiring lets you adjust what you authorized versus what you ultimately capture — critical for hotels, car rentals, and marketplaces where the final amount is unknown at checkout.
+
+## Extended authorization
+
+A standard authorization hold is valid for 7 days. Extended authorization extends that window up to 31 days on Visa and Mastercard, giving you more time before you need to capture or risk the hold dropping.
+
+Enable it by setting `request_extended_authorization: 'if_available'` in `payment_method_options.card` on the PaymentIntent:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ apiKey: process.env.VINR_SECRET_KEY });
+
+await vinr.paymentIntents.create({
+  amount: 25000,
+  currency: 'usd',
+  capture_method: 'manual',
+  payment_method_options: {
+    card: { request_extended_authorization: 'if_available' },
+  },
+});
+```
+
+## Incremental authorization
+
+Increase the authorized amount before capture without requiring the customer to re-authenticate. A hotel that authorizes $200 at check-in can add $50 for a late checkout before charging out.
+
+```typescript
+await vinr.paymentIntents.incrementAuthorization(paymentIntent.id, {
+  amount: 25000, // new total in minor units — replaces, not adds to, the original
+});
+```
+
+The PaymentIntent must be in `requires_capture` status. The new amount replaces the previous authorized total.
+
+## Multicapture
+
+Split a single authorization into multiple capture calls — useful for marketplaces fulfilling a multi-item order in stages or when partial shipment is the norm. Enable by combining `capture_method: 'manual'` with `request_multicapture: 'if_available'`:
+
+```typescript
+await vinr.paymentIntents.create({
+  amount: 10000,
+  currency: 'usd',
+  capture_method: 'manual',
+  payment_method_options: {
+    card: { request_multicapture: 'if_available' },
+  },
+});
+```
+
+Call `capture()` multiple times, passing `amount_to_capture` each time. VINR tracks the remaining authorized balance and marks the PaymentIntent `succeeded` once the authorization is exhausted or you finalize it.
+
+## Overcapture
+
+Capture slightly more than the original authorized amount — the primary use case is tip flows, where a restaurant presents the bill, the customer adds a tip on the receipt, and the final capture includes the tip. Pass `amount_to_capture` higher than the original `amount` in the capture call:
+
+```typescript
+await vinr.paymentIntents.capture(paymentIntent.id, {
+  amount_to_capture: 2300, // original auth was $20.00; customer tipped $3.00
+});
+```
+
+Card networks typically allow 15–20% over the original authorization. Amounts beyond that are declined at capture.
+
+## Network support
+
+| Feature | Visa | Mastercard | Amex |
+|---------|------|------------|------|
+| Extended auth | Yes | Yes | Yes |
+| Incremental auth | Yes | Yes | No |
+| Multicapture | Yes | Yes | Limited |
+| Overcapture | Yes | Yes | Limited |
+
+<Callout type="warn">
+Not all issuers honor these features even when the network supports them. Always handle decline responses on capture and implement a fallback flow — for example, contacting the customer to re-authorize when an incremental auth is refused.
+</Callout>

@@ -1,0 +1,10 @@
+{
+  "title": "Advanced integrations",
+  "pages": [
+    "index",
+    "custom-payment-flows",
+    "flexible-acquiring",
+    "off-session-payments",
+    "multiprocessor-orchestration"
+  ]
+}

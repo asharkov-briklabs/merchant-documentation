@@ -1,19 +1,16 @@
 {
   "root": true,
-  "title": "Billing",
+  "title": "Revenue",
   "icon": "ReceiptText",
   "pages": [
     "index",
-    "---Core concepts---",
+    "---Billing---",
     "how-billing-works",
     "products-and-prices",
     "pricing-models",
     "customers-and-methods",
-    "---Subscriptions---",
     "subscriptions",
-    "---Invoicing---",
     "invoices",
-    "---Capabilities---",
     "usage-based-billing",
     "quotes",
     "coupons-and-discounts",
@@ -21,7 +18,12 @@
     "dunning-and-recovery",
     "credit-notes",
     "customer-portal",
+    "---Tax---",
     "tax",
-    "revenue-recognition"
+    "---Reporting---",
+    "reporting",
+    "revenue-recognition",
+    "---Data---",
+    "data"
   ]
 }

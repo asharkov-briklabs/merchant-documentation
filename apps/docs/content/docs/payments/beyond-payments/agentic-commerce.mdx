@@ -1,0 +1,78 @@
+---
+title: Agentic commerce
+description: Enable AI agents to browse, cart, and complete purchases on behalf of users.
+priority: P1
+lastUpdated: "2026-06-01"
+---
+
+Agentic commerce describes a model where AI agents act as purchasing intermediaries — browsing catalogs, comparing options, and completing transactions inside a conversational interface, without a human manually operating a browser.
+
+VINR is built to support this model from both sides: sellers who want to be discoverable and purchasable by agents, and agent builders who need a reliable, scoped payment primitive.
+
+## The three-participant model
+
+| Participant | Role |
+|---|---|
+| Seller | Exposes products for machine discovery; accepts machine-initiated payments via VINR |
+| Agent | Intermediates between the buyer's intent and the seller's checkout; may redirect or embed |
+| Buyer | Authorizes the agent's scope upfront; authenticates when required |
+
+## For sellers
+
+Expose structured product data using UCP/ACP protocols so AI systems can browse your catalog without scraping. Configure VINR to accept machine-initiated payments on your checkout. VINR Checkout links are natively agent-traversable — no storefront changes are required if you already use VINR Checkout.
+
+## For agents
+
+Two integration paths are available depending on the user experience you're building:
+
+**Redirect flow** — the agent sends the buyer to a VINR Checkout page. The buyer completes payment in their browser with standard authentication. Best for high-value or first-time purchases where buyer confirmation is appropriate.
+
+**Embedded flow** — the agent calls the VINR Payments API server-side using the buyer's pre-authorized agent wallet. No browser redirect; the purchase completes programmatically within the agent's context.
+
+```typescript
+import { Vinr } from '@vinr/sdk'
+
+const vinr = new Vinr({ apiKey: process.env.VINR_SECRET_KEY })
+
+const paymentIntent = await vinr.paymentIntents.create({
+  amount: 2999,
+  currency: 'usd',
+  payment_method_types: ['agent_wallet'],
+  agent_wallet: {
+    token: agentWalletToken, // scoped authorization token from VINR Link
+  },
+  confirm: true,
+})
+```
+
+## Agent wallets
+
+A buyer pre-funds an agent with a stored payment method via VINR Link. The agent holds a scoped authorization — currency, max amount per transaction, merchant category codes — and spends within those bounds without requiring the buyer to re-authenticate each purchase.
+
+Authorization scopes a buyer can configure:
+
+| Scope | Example |
+|---|---|
+| Max per transaction | $50 per purchase |
+| Total spend limit | $200 per month |
+| Merchant category | Grocery, travel, software |
+| Expiry | 30 days from authorization |
+
+## Machine-initiated payment protocols
+
+VINR supports two protocol extensions for agentic payment requests:
+
+**MPP (Merchant Payment Protocol)** — a seller-side catalog and checkout protocol that exposes your products and pricing in a structured, machine-readable format AI systems can act on directly.
+
+**x402** — an HTTP-level payment protocol for agent-to-API micropayments. Enables pay-per-call API access, metered content, and other patterns where the agent pays for a resource at the network layer rather than through a checkout flow.
+
+## Use cases
+
+- AI shopping assistants that compare prices and complete purchases across multiple stores
+- Autonomous travel booking agents that search, select, and pay for flights and hotels
+- Reorder agents triggered by inventory signals or recurring consumption patterns
+- AI expense management tools that book and pay for business services on behalf of employees
+
+<Callout type="info">
+Agentic commerce features are in early access. Contact your VINR account manager to enable agent wallet issuance and machine-initiated payments for your platform.
+</Callout>

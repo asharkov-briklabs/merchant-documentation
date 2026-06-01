@@ -1,0 +1,47 @@
+---
+title: Analytics
+description: Track acceptance rates, authentication performance, and payment optimization signals.
+persona: ["operations", "finance-manager"]
+priority: P1
+lastUpdated: "2026-06-01"
+---
+
+VINR Analytics surfaces payments-specific metrics beyond transaction history — acceptance rates, authentication data, and actionable optimization signals that help you understand where revenue is lost and how to recover it.
+
+## Acceptance rate
+
+Your acceptance rate is `authorized payments / (authorized + declined)`, expressed as a percentage. Track it over time and segment by card network, issuer country, payment method, and amount band. A sudden drop is the first signal of an issuer rule change or an integration regression — investigate before it compounds.
+
+## Authentication analytics
+
+SCA compliance requires 3D Secure for many EU transactions, but not every payment needs a full challenge. Track your **challenge rate** versus **frictionless rate** in the Authentication section of the Dashboard. A rising challenge rate adds friction and reduces conversion.
+
+Monitor SCA exemption approval rates to see which exemption types your issuers are accepting. Compare conversion before and after enabling specific exemptions — low-value and low-risk exemptions typically produce the largest frictionless uplift.
+
+## Decline breakdown
+
+| Decline type | What it means | Dashboard view |
+|---|---|---|
+| Issuer declined | Bank or card network refused the authorization | Decline code distribution chart |
+| Radar blocked | VINR fraud rules stopped it before it reached the network | Radar → Review queue |
+| Invalid request | API or integration error on your side | Error logs |
+
+Use the 30-day and 90-day trend views to distinguish issuer-side spikes from fraud pattern changes. An issuer spike will typically be concentrated on one `decline_code`; a fraud shift will spread across multiple codes with a rising Radar block rate. See [Declines](/docs/payments/payment-operations/declines) for recovery strategies.
+
+## Dispute rate
+
+Your dispute rate is disputes as a percentage of transaction volume, tracked on a rolling 90-day basis. Card networks monitor this independently and impose fees or fines if you exceed their thresholds — typically **0.9%** for Visa and **1%** for Mastercard. The Dashboard shows your current rate alongside each network's threshold so you can act before approaching those limits. See [Disputes](/docs/payments/disputes) for prevention and response.
+
+## Payment method adoption
+
+When you offer multiple payment methods, Analytics shows which methods customers actually choose. Use this to decide whether to promote or enable additional options. If 40% of your EU customers skip the card form and choose a bank redirect, iDEAL or VINR Pay may lift conversion meaningfully for that segment.
+
+## Optimization recommendations
+
+VINR surfaces actionable suggestions automatically in **Dashboard → Payments → Optimization**:
+
+- Enable network tokenization to improve issuer trust scores and lift authorization rates
+- Upgrade 3DS exemption types to reduce your challenge rate
+- Add a payment method that is popular in your customers' region
+
+Recommendations are ranked by estimated revenue impact based on your recent transaction mix.

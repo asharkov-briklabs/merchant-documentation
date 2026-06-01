@@ -1,0 +1,55 @@
+---
+title: Multiprocessor orchestration
+description: Route payment attempts across acquirers to optimize acceptance, cost, and resilience.
+persona: [developer]
+priority: P1
+lastUpdated: "2026-06-01"
+---
+
+Enterprise merchants with direct acquirer relationships can use VINR's orchestration layer as a unified API and intelligent routing engine across those processors — submitting a single PaymentIntent and letting VINR decide which acquirer to use for each transaction.
+
+## Why use multiple processors
+
+| Goal | How orchestration helps |
+|------|------------------------|
+| Acceptance lift | Some issuers approve higher rates via specific acquirers; BIN-level routing increases authorization rates |
+| Cost reduction | Select the cheapest eligible acquirer per card type or currency |
+| Geographic coverage | Route to regional acquirers for local methods that require domestic acquiring |
+| Resilience | Automatic failover when a processor times out or returns a soft decline |
+
+## Routing strategies
+
+Three modes are available, and you can combine them:
+
+**Waterfall** — Define a primary processor and an ordered fallback list. VINR retries in sequence on soft decline or timeout. Simple to reason about; best when you have a clear primary acquirer and want a safety net.
+
+**Smart routing** — VINR's ML model selects the optimal processor per transaction based on BIN, amount, currency, and your historical acceptance data. No rules to maintain; the model updates continuously as new data comes in.
+
+**Rule-based** — Custom conditions you define, for example: "route Amex to processor B", "route transactions over $500 to processor C", or "route EUR transactions to the EU acquirer". Rules are evaluated in priority order and fall through to smart routing when no rule matches.
+
+## Configuration
+
+Routing rules are configured in **Dashboard → Settings → Acquiring**. Define your processor pool, assign processor credentials, and set your routing mode. VINR handles execution, retry logic, and network-level retry deduplication automatically — no changes are needed to your PaymentIntents API calls.
+
+```typescript
+// Your integration code stays the same — VINR routes transparently
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ apiKey: process.env.VINR_SECRET_KEY });
+
+await vinr.paymentIntents.create({
+  amount: 9900,
+  currency: 'usd',
+  confirm: true,
+  payment_method: 'pm_...',
+  // No processor param needed — routing is determined by your Dashboard config
+});
+```
+
+## Monitoring
+
+The Analytics dashboard provides a unified settlement view across all processors. Per-processor metrics include acceptance rate, average interchange cost, and p95 latency. You can configure threshold alerts — for example, notify when a processor's acceptance rate drops below 85% — and VINR will automatically increase traffic to healthier processors while the alert is active.
+
+<Callout type="info">
+Multiprocessor orchestration requires a custom agreement. Contact your VINR account manager to enable processor pool configuration in your Dashboard.
+</Callout>

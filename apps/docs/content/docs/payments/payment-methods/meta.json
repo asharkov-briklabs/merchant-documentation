@@ -4,7 +4,10 @@
     "index",
     "cards",
     "bank-transfers",
+    "local-methods",
     "stablecoins",
-    "local-methods"
+    "add-payment-methods",
+    "manage-payment-methods",
+    "link"
   ]
 }

@@ -1,0 +1,120 @@
+---
+title: Data
+description: Custom reports, data warehouse sync, and external data import on VINR.
+persona: ["developer", "finance-manager"]
+priority: "P1"
+lastUpdated: "2026-06-01"
+---
+
+VINR data tools give your analytics and finance teams access to the raw transaction data behind the prebuilt reports. Write custom SQL queries, sync to your data warehouse, or import external data to create a unified view of your business.
+
+## Custom reports
+
+Write SQL queries directly against your VINR data to build reports tailored to your business. Custom reports use standard ANSI SQL and run against the same schema that powers the VINR Dashboard.
+
+```sql
+-- Monthly recurring revenue by plan
+SELECT
+  p.name                         AS plan,
+  DATE_TRUNC('month', s.created) AS month,
+  SUM(i.amount_paid) / 100.0    AS mrr_eur
+FROM subscriptions s
+JOIN invoices  i  ON i.subscription_id = s.id
+JOIN prices    pr ON pr.id = s.price_id
+JOIN products  p  ON p.id  = pr.product_id
+WHERE i.status = 'paid'
+  AND i.created >= '2026-01-01'
+GROUP BY 1, 2
+ORDER BY 2 DESC, 3 DESC;
+```
+
+Queries return results in the Dashboard or can be exported as CSV. Save frequently-used queries and share them with your team.
+
+### Schema reference
+
+The VINR data schema mirrors the API object model. Key tables:
+
+| Table | Description |
+|---|---|
+| `payments` | All payment intents and outcomes. |
+| `subscriptions` | Active and cancelled subscriptions. |
+| `invoices` | Finalized invoices with line items. |
+| `customers` | Customer records and metadata. |
+| `payouts` | Payout batches and settlement details. |
+| `refunds` | Refund records linked to payments. |
+| `disputes` | Chargebacks and resolution outcomes. |
+| `revenue_recognition` | Recognized and deferred amounts per line item. |
+
+## Data warehouse sync
+
+Export your complete VINR dataset to your data warehouse on a continuous or scheduled basis. VINR supports direct connectors to:
+
+| Destination | Sync mode |
+|---|---|
+| **Snowflake** | Continuous (near real-time) or daily batch |
+| **Amazon Redshift** | Daily batch |
+| **Google BigQuery** | Continuous or daily batch |
+| **Databricks** | Daily batch |
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+await vinr.dataPipeline.sync.configure({
+  destination: {
+    type: 'snowflake',
+    connectionString: process.env.SNOWFLAKE_CONNECTION_STRING,
+    schema: 'vinr_prod',
+  },
+  tables: ['payments', 'subscriptions', 'invoices', 'customers'],
+  frequency: 'continuous',
+});
+```
+
+<Callout type="info">
+Data warehouse sync includes a full historical backfill for all data in your VINR account, not just activity from the sync start date.
+</Callout>
+
+### Cloud storage export
+
+For teams without a data warehouse, export to cloud storage and load from there.
+
+| Storage | Formats |
+|---|---|
+| Amazon S3 | CSV, JSON, Parquet |
+| Google Cloud Storage | CSV, JSON, Parquet |
+| Azure Blob Storage | CSV, JSON |
+
+## Import external data
+
+Bring data from outside VINR into your reports for a unified view. External imports let you cross-reference VINR transactions with data from other platforms.
+
+### Supported connectors
+
+| Connector | What it imports |
+|---|---|
+| **Amazon S3** | Any CSV or JSON data you upload to a bucket |
+| **Apple App Store** | In-app purchase and subscription events |
+| **Google Play Store** | In-app purchase and subscription events |
+
+```typescript
+await vinr.dataImport.connectors.create({
+  type: 'apple_app_store',
+  credentials: {
+    vendorId: process.env.APPLE_VENDOR_ID,
+    privateKeyId: process.env.APPLE_KEY_ID,
+    privateKey: process.env.APPLE_PRIVATE_KEY,
+  },
+  syncFrequency: 'daily',
+});
+```
+
+Once connected, App Store and Play Store subscription events appear alongside VINR billing data in custom reports, so you can analyze total subscription revenue across all channels in a single query.
+
+## Next steps
+
+<Cards>
+  <Card title="Reporting" href="/docs/billing/reporting" description="Prebuilt reports, revenue recognition, and reconciliation." />
+  <Card title="Revenue recognition" href="/docs/billing/revenue-recognition" description="Accrual accounting per invoice line." />
+  <Card title="Operations reporting" href="/docs/operations/reporting" description="Settlement and payout reports." />
+</Cards>

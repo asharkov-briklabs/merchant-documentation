@@ -1,0 +1,56 @@
+---
+title: Compliance and security
+description: PCI DSS, SCA, sanctions, and data security — what VINR handles and what you own.
+persona: ["developer", "operations"]
+priority: P1
+lastUpdated: "2026-06-01"
+---
+
+Accepting payments comes with compliance obligations. VINR is designed to minimize your scope while meeting the requirements of major standards — but some obligations remain yours regardless of your payment provider.
+
+## PCI DSS
+
+VINR is a **PCI DSS Level 1 certified Service Provider**, the highest level of certification. When you use VINR Elements, VINR Checkout, or the Mobile SDKs, card data flows from the customer's browser or device directly to VINR's servers — your servers never see raw card numbers.
+
+This means you qualify for **SAQ A**, the simplest PCI self-assessment questionnaire. Your obligations under SAQ A:
+
+- Maintain a secure web application (HTTPS, no mixed content)
+- Keep server software and dependencies up to date
+- Restrict system and network access to authorized personnel
+- Complete an annual self-assessment and attest to compliance
+
+If you use any integration path where card data passes through your servers (e.g. direct API calls with raw card numbers), your scope expands significantly. Use VINR's hosted fields to stay at SAQ A.
+
+## Strong Customer Authentication (SCA)
+
+PSD2 requires SCA for card payments initiated in the European Economic Area: at least two factors from something the customer **knows**, **has**, or **is**. VINR handles SCA by triggering 3D Secure when required and automatically requesting exemptions when the transaction qualifies.
+
+Exemptions that reduce friction (no customer challenge required):
+
+- **Low-value transactions** — under €30 and within cumulative velocity limits
+- **Merchant-initiated transactions** — off-session charges made after explicit customer consent (e.g. subscriptions)
+- **Trusted beneficiary** — customer has whitelisted you with their issuing bank
+- **Low-risk transaction** — issuer's own Transaction Risk Analysis (TRA) clears the payment
+
+<Callout type="warn">
+You are responsible for collecting and storing the customer's SCA consent for merchant-initiated transactions. VINR enforces this at the API level but cannot verify the consent was obtained correctly — that is your obligation.
+</Callout>
+
+## Sanctions screening
+
+VINR screens transactions in real time against OFAC, EU, and UK consolidated sanctions lists. On a potential match, VINR blocks the payment and fires a `payment_intent.payment_failed` webhook with a `blocked` outcome reason. You are responsible for not onboarding sanctioned customers in the first place; VINR's real-time screening is a second layer, not a substitute for your own KYC process.
+
+## What you can and cannot store
+
+| Allowed | Never store |
+|---|---|
+| PaymentMethod IDs (`pm_...`) | Full card numbers (PAN) |
+| Customer IDs (`cus_...`) | CVV / CVC codes |
+| PaymentIntent IDs (`pi_...`) | Magnetic stripe data |
+| Last-4 digits and card brand | PIN blocks |
+
+Storing prohibited data — even in logs or error reports — expands your PCI scope and may void your certification. Audit your logging pipelines to ensure card data is never written.
+
+<Callout type="info">
+For PCI documentation, KYC/KYB, GDPR data processing agreements, AML obligations, and data residency options, see the [Compliance](/docs/compliance) section.
+</Callout>

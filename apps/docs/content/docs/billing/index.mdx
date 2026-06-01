@@ -1,64 +1,54 @@
 ---
-title: Billing
-description: Subscriptions, invoicing, and usage-based billing on VINR.
+title: Revenue
+description: Manage the full revenue lifecycle — billing, tax, reporting, and data.
 persona: ["developer", "finance-manager", "business-owner"]
 priority: "P0"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-06-01"
 ---
 
-VINR Billing turns the one-time payment primitives in [Payments](/docs/payments) into recurring revenue. Model your pricing once, then run subscriptions, send invoices, meter usage, apply tax, and recover failed payments — all reconciled with your [settlements](/docs/operations/settlement) and exposed through the same API and webhooks.
+Manage the revenue lifecycle of your business. Acquire customers, collect recurring revenue, automate tax compliance, close your books, and analyze your data — all from VINR.
 
-## What Billing includes
+## Billing
+
+Set up recurring payments, manage subscriptions, and send invoices.
 
 <Cards>
-  <Card title="Products & prices" href="/docs/billing/products-and-prices" description="Model what you sell and how much it costs." />
+  <Card title="How billing works" href="/docs/billing/how-billing-works" description="Objects, lifecycle, and money flow." />
   <Card title="Subscriptions" href="/docs/billing/subscriptions" description="Recurring billing with trials, proration, and schedules." />
-  <Card title="Invoicing" href="/docs/billing/invoices" description="Itemized statements, finalization, and hosted payment pages." />
+  <Card title="Invoices" href="/docs/billing/invoices" description="Itemized statements, finalization, and hosted payment pages." />
   <Card title="Usage-based billing" href="/docs/billing/usage-based-billing" description="Meter consumption and bill for it automatically." />
+  <Card title="Pricing models" href="/docs/billing/pricing-models" description="Flat, per-seat, tiered, and volume pricing." />
   <Card title="Dunning & recovery" href="/docs/billing/dunning-and-recovery" description="Retry failed payments and win back revenue." />
-  <Card title="Tax" href="/docs/billing/tax" description="Calculate and collect tax on every invoice." />
 </Cards>
 
-## How it relates to Payments
+## Tax
 
-Billing never moves money on its own — it _decides what to charge and when_, then hands the charge to Payments to collect on whatever rail the customer's stored method uses. A subscription renewal becomes an invoice; a finalized invoice becomes a [payment](/docs/payments/how-payments-work) against the customer's [stored method](/docs/payments/customers); the resulting funds land in your [balance](/docs/operations/balances) and pay out via [settlement](/docs/operations/settlement).
-
-<Callout type="info">
-Because Billing reuses the Payments customer and stored-method objects, a card saved during checkout is immediately usable for subscriptions — there's no second integration to build.
-</Callout>
-
-## Key objects
-
-| Object | Prefix | Purpose |
-|---|---|---|
-| Product | `prod_` | A thing you sell (e.g. "Pro plan"). |
-| Price | `price_` | An amount + billing behavior attached to a product. |
-| Subscription | `sub_` | A recurring relationship between a customer and one or more prices. |
-| Invoice | `inv_` | An itemized statement VINR collects payment against. |
-| Usage record | `mbu_` | Reported consumption against a metered price. |
-
-## Choose your billing model
-
-<Steps>
-
-### Fixed recurring (SaaS plans)
-
-A flat amount on a fixed cycle. Create a recurring `price`, attach it to a `subscription`, and VINR invoices automatically each period. Start with [Create a subscription](/docs/guides/create-a-subscription).
-
-### Usage-based / metered
-
-Bill for what customers consume. Define a metered price, report [usage records](/docs/billing/usage-based-billing), and VINR aggregates and invoices at period end. See [Bill for usage](/docs/guides/bill-for-usage).
-
-### One-off invoices
-
-Bill a customer directly without a subscription — useful for services or custom deals. See [Send an invoice](/docs/guides/send-an-invoice).
-
-</Steps>
-
-## Next steps
+Automate sales tax, VAT, and GST compliance on all transactions.
 
 <Cards>
-  <Card title="How billing works" href="/docs/billing/how-billing-works" description="The objects and money flow in detail." />
-  <Card title="Create a subscription" href="/docs/guides/create-a-subscription" description="A runnable end-to-end walkthrough." />
-  <Card title="Billing API reference" href="/docs/api-reference/subscriptions" description="Endpoints, parameters, and responses." />
+  <Card title="Tax overview" href="/docs/billing/tax" description="How VINR calculates and collects tax." />
+  <Card title="Tax registrations" href="/docs/billing/tax#tax-registrations" description="Add registrations for each jurisdiction you collect in." />
+  <Card title="Reporting & filing" href="/docs/billing/tax#reporting--filing" description="Per-jurisdiction records for your filing process." />
+</Cards>
+
+## Reporting
+
+Understand your business with prebuilt reports and revenue recognition.
+
+<Cards>
+  <Card title="Reporting overview" href="/docs/billing/reporting" description="Prebuilt reports, scheduled exports, and reconciliation." />
+  <Card title="Revenue recognition" href="/docs/billing/revenue-recognition" description="Accrual accounting under ASC 606 / IFRS 15." />
+  <Card title="Bank reconciliation" href="/docs/billing/reporting#bank-reconciliation" description="Automate comparing financial records to close your books." />
+  <Card title="Scheduled reports" href="/docs/billing/reporting#scheduled-reports" description="Automate report delivery on a recurring cadence." />
+</Cards>
+
+## Data
+
+Sync, query, and import your data for custom analysis.
+
+<Cards>
+  <Card title="Data overview" href="/docs/billing/data" description="Custom queries, data warehouse sync, and external imports." />
+  <Card title="Custom reports" href="/docs/billing/data#custom-reports" description="Write SQL queries against your VINR data." />
+  <Card title="Data warehouse sync" href="/docs/billing/data#data-warehouse-sync" description="Export to Snowflake, Redshift, or BigQuery." />
+  <Card title="Import external data" href="/docs/billing/data#import-external-data" description="Bring third-party data into VINR for unified reporting." />
 </Cards>

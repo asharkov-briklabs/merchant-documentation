@@ -1,0 +1,70 @@
+---
+title: Add payment methods
+description: Enable and configure payment methods for your VINR integration.
+persona: [developer]
+priority: P1
+lastUpdated: "2026-06-01"
+---
+
+VINR supports a wide range of payment methods out of the box. Which methods you offer — and how you configure them — directly affects conversion across different markets and customer segments.
+
+## Payment method categories
+
+| Category | Examples | Regions | Settlement |
+|---|---|---|---|
+| Cards | Visa, Mastercard, Amex | Global | Instant auth |
+| Bank debits | ACH, SEPA Direct Debit | US, EU | 1–5 days |
+| Bank redirects | iDEAL, Bancontact, Sofort | EU | Near-instant |
+| Bank transfers | Wire, BACS | Global | 1–5 days |
+| BNPL | Klarna, Afterpay, Affirm | US, EU, AU | Instant auth |
+| Real-time payments | Pix, UPI, Faster Payments | BR, IN, UK | Instant |
+| Vouchers | Boleto, OXXO | BR, MX | Async (1–3 days) |
+| Wallets | Apple Pay, Google Pay, Link | Global | Instant |
+
+## Dynamic payment methods
+
+The recommended approach. Set `automatic_payment_methods: { enabled: true }` on a PaymentIntent and VINR automatically selects the right methods for each customer's locale, currency, and device. Any new methods you enable in the Dashboard appear without code changes.
+
+```ts
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ apiKey: process.env.VINR_SECRET_KEY });
+
+const paymentIntent = await vinr.paymentIntents.create({
+  amount: 4900,
+  currency: 'usd',
+  automatic_payment_methods: { enabled: true },
+});
+```
+
+## Static method list
+
+Set `payment_method_types` explicitly when you need a fixed set — for example, cards only on a B2B invoice form where local redirect methods would be confusing.
+
+```ts
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ apiKey: process.env.VINR_SECRET_KEY });
+
+const paymentIntent = await vinr.paymentIntents.create({
+  amount: 4900,
+  currency: 'usd',
+  payment_method_types: ['card'],
+});
+```
+
+Use dynamic methods for consumer flows unless you have a specific reason to restrict the list — you get locale-appropriate methods without maintaining the array yourself.
+
+## Enabling methods in the Dashboard
+
+Go to **Settings → Payment methods** and toggle on any method you want to offer. Some methods require extra setup before they go live:
+
+- **ACH Direct Debit** — link a bank account for payouts and accept the ACH agreement.
+- **SEPA Direct Debit** — complete EU creditor registration.
+- **BNPL providers** — each provider runs its own onboarding; VINR surfaces the approval flow inline.
+
+Toggles take effect immediately. Newly enabled methods appear in dynamic-method flows without a code deploy.
+
+<Callout type="info">
+  Dynamic methods only surface methods that are both enabled in your Dashboard settings and available in the customer's country. Enabling a method globally does not mean every customer sees it — eligibility is evaluated per transaction.
+</Callout>

@@ -1,0 +1,103 @@
+---
+title: Custom payment flows
+description: Build fully custom checkout experiences using the PaymentIntents API and VINR Elements.
+persona: [developer]
+priority: P1
+lastUpdated: "2026-06-01"
+---
+
+The PaymentIntents API is the foundation for every payment on VINR. It tracks a payment's lifecycle from creation through authentication, authorization, and capture, giving you hooks at every step to build exactly the checkout experience your product requires.
+
+## The PaymentIntent state machine
+
+A PaymentIntent moves linearly through these statuses. Understanding them lets you build resilient confirmation loops and handle edge cases cleanly.
+
+| Status | Meaning | Your next step |
+|--------|---------|----------------|
+| `requires_payment_method` | Waiting for a card or method | Confirm with Elements or a `payment_method` ID |
+| `requires_confirmation` | Ready to authorize | Call `confirm()` or set `confirm: true` at creation |
+| `requires_action` | 3DS or bank redirect needed | Let Elements handle it, or follow `next_action` |
+| `processing` | Submitted to network | Wait for the `payment_intent.succeeded` webhook |
+| `requires_capture` | Authorized, awaiting capture | Call `capture()` within 7 days (manual capture only) |
+| `succeeded` | Funds captured | Fulfil the order |
+| `canceled` | Terminal; cannot be reactivated | Create a new PaymentIntent |
+
+## Building the UI with Elements
+
+Payment Element is the recommended approach: one component handles all payment methods, 3DS challenges, and inline error display. Mount it using the `clientSecret` returned when you create the PaymentIntent.
+
+```typescript
+// Server — create the PaymentIntent
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ apiKey: process.env.VINR_SECRET_KEY });
+
+const paymentIntent = await vinr.paymentIntents.create({
+  amount: 4900,        // minor units (e.g. cents)
+  currency: 'usd',
+  automatic_payment_methods: { enabled: true },
+});
+
+// Return paymentIntent.client_secret to the browser
+```
+
+```typescript
+// Client — mount Payment Element and confirm
+import { loadVinr } from '@vinr/sdk/browser';
+
+const vinr = await loadVinr(process.env.NEXT_PUBLIC_VINR_PUBLISHABLE_KEY!);
+const elements = vinr.elements({ clientSecret });
+
+const paymentElement = elements.create('payment');
+paymentElement.mount('#payment-element');
+
+// On form submit:
+const { error } = await vinr.confirmPayment({
+  elements,
+  confirmParams: { return_url: 'https://example.com/order/complete' },
+});
+```
+
+## Styling with the Appearance API
+
+Pass an `appearance` option to the `elements()` constructor to match your brand without writing custom CSS.
+
+```typescript
+const elements = vinr.elements({
+  clientSecret,
+  appearance: {
+    theme: 'flat',
+    variables: {
+      fontFamily: 'Inter, sans-serif',
+      colorPrimary: '#0f62fe',
+      borderRadius: '6px',
+    },
+  },
+});
+```
+
+Available themes are `'stripe'`, `'night'`, and `'flat'`. Use `variables` for fine-grained control over colors, fonts, and border radii.
+
+## Handling requires_action
+
+`confirmPayment()` from Elements handles 3DS challenges and bank redirects automatically — no extra code needed. For server-side confirmation flows, check the returned status:
+
+```typescript
+if (paymentIntent.status === 'requires_action' && paymentIntent.next_action) {
+  // Redirect the customer to complete authentication
+  redirect(paymentIntent.next_action.redirect_to_url.url);
+}
+```
+
+## Manual capture
+
+Set `capture_method: 'manual'` at PaymentIntent creation to place an authorization hold without immediately capturing funds. After confirmation the PaymentIntent reaches `requires_capture`.
+
+```typescript
+await vinr.paymentIntents.capture(paymentIntent.id);
+// Capture within 7 days or the hold is released automatically
+```
+
+<Callout type="info">
+Using Payment Element or VINR Checkout means card data goes directly from the customer's browser to VINR — your servers never touch raw card numbers and your PCI scope is SAQ A.
+</Callout>

@@ -1,0 +1,11 @@
+{
+  "title": "Payment operations",
+  "pages": [
+    "index",
+    "analytics",
+    "balances-and-settlement",
+    "compliance-and-security",
+    "declines",
+    "receipts"
+  ]
+}

@@ -5,32 +5,56 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
+  ArrowLeftRight,
   ArrowUpRight,
+  BadgeCheck,
   BookCheck,
+  Code2,
+  CreditCard,
   FileBarChart2,
+  GitBranch,
+  Globe,
+  Layers,
   LayoutGrid,
   MessageSquareWarning,
   ShieldAlert,
+  SlidersHorizontal,
+  Sparkles,
   Store,
   TrendingUp,
   Trophy,
+  UserPlus,
   Users,
+  Wallet,
+  Wrench,
 } from "lucide-react";
 import { NAV_GROUPS } from "@/lib/nav-taxonomy";
 import type { getTranslations } from "@/lib/translations";
 
 const NAV_ICONS: Record<string, React.FC<{ className?: string }>> = {
   Activity,
+  ArrowLeftRight,
   ArrowUpRight,
+  BadgeCheck,
   BookCheck,
+  Code2,
+  CreditCard,
   FileBarChart2,
+  GitBranch,
+  Globe,
+  Layers,
   LayoutGrid,
   MessageSquareWarning,
   ShieldAlert,
+  SlidersHorizontal,
+  Sparkles,
   Store,
   TrendingUp,
   Trophy,
+  UserPlus,
   Users,
+  Wallet,
+  Wrench,
 };
 
 type T = ReturnType<typeof getTranslations>;

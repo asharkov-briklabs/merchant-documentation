@@ -1,0 +1,76 @@
+---
+title: Off-session payments
+description: Charge saved payment methods server-side without the customer present.
+persona: [developer]
+priority: P1
+lastUpdated: "2026-06-01"
+---
+
+An off-session payment is a charge created by your server while the customer is not in the browser — also called a merchant-initiated transaction (MIT). It underpins subscriptions, metered billing, reorder automations, and any background charge triggered by your system rather than a live checkout session.
+
+## Save a method for off-session use
+
+During the initial on-session payment, set `setup_future_usage: 'off_session'` on the PaymentIntent. This signals to the issuer that you intend to charge the card again without the customer present, prompting a stronger SCA challenge upfront that covers future MIT charges.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ apiKey: process.env.VINR_SECRET_KEY });
+
+const paymentIntent = await vinr.paymentIntents.create({
+  amount: 1000,
+  currency: 'usd',
+  customer: 'cus_...',
+  setup_future_usage: 'off_session',
+  automatic_payment_methods: { enabled: true },
+});
+```
+
+Alternatively, use a SetupIntent with `usage: 'off_session'` to save a method without an immediate charge — for example, during account signup. Either way, store the returned `payment_method` ID against the Customer ID in your database.
+
+## Create the off-session charge
+
+Off-session charges must happen server-side — never in browser code. Create a PaymentIntent with `confirm: true` and `off_session: true`:
+
+```typescript
+const paymentIntent = await vinr.paymentIntents.create({
+  amount: 4900,
+  currency: 'usd',
+  customer: 'cus_abc123',
+  payment_method: 'pm_xyz789',
+  confirm: true,
+  off_session: true,
+});
+```
+
+VINR submits the charge immediately. Listen for `payment_intent.succeeded` on your webhook endpoint to confirm it processed.
+
+## SCA and exemptions
+
+VINR automatically requests MIT exemptions under PSD2/SCA when applicable. For the first off-session charge on a saved method, VINR may request a low-risk or recurring-transaction exemption from the issuer. When the exemption is granted, the charge completes without any customer interaction.
+
+## Handling requires_action
+
+When an exemption is denied, the PaymentIntent returns `status: 'requires_action'`. Your server must detect this, generate a hosted payment link, and notify the customer to complete 3DS authentication:
+
+```typescript
+if (paymentIntent.status === 'requires_action') {
+  const hostedUrl = paymentIntent.next_action?.use_stripe_sdk?.stripe_js
+    ?? paymentIntent.next_action?.redirect_to_url?.url;
+
+  await sendEmail(customer.email, {
+    subject: 'Action required to complete your payment',
+    body: `Please complete your payment here: ${hostedUrl}`,
+  });
+}
+```
+
+After the customer authenticates, the PaymentIntent transitions to `succeeded` and your webhook fires as normal.
+
+## Relationship to subscriptions
+
+This page covers the raw MIT pattern via the Payments API. For recurring billing with invoices, dunning logic, trial periods, and full subscription lifecycle management, see Billing → Subscriptions.
+
+<Callout type="info">
+`setup_future_usage: 'off_session'` triggers a stronger SCA challenge at save time, which then covers future off-session charges — this is why saving a card may prompt 3DS even on a $0 setup flow.
+</Callout>

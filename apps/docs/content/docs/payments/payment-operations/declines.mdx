@@ -1,0 +1,73 @@
+---
+title: Declines
+description: Types of payment declines, reading the outcome object, and recovery strategies.
+persona: ["developer", "operations"]
+priority: P1
+lastUpdated: "2026-06-01"
+---
+
+Every decline surfaces on the `outcome` object of the Charge. Three distinct types exist — each with a different root cause, a different cost profile, and a different recovery approach.
+
+## Decline types
+
+### Issuer declines
+
+The card network or issuing bank refused the authorization. `outcome.type = 'issuer_declined'`. A network fee is typically incurred even on a decline.
+
+| `decline_code` | Cause | Recommended customer action |
+|---|---|---|
+| `insufficient_funds` | Balance too low | Use another card or payment method |
+| `do_not_honor` | Generic issuer refusal | Contact their bank for details |
+| `card_velocity_exceeded` | Too many attempts in a short window | Wait and retry later |
+| `stolen_card` / `lost_card` | Card flagged as stolen or lost | Card is permanently blocked; contact issuer |
+| `expired_card` | Card past its expiry date | Update card details in their profile |
+
+### Radar blocks
+
+VINR's fraud rules stopped the payment before it reached the network. `outcome.type = 'blocked'`. No network fee is incurred. If you believe a block is a false positive, review it in **Dashboard → Radar → Review queue** and adjust the rule or allowlist the customer. See [Fraud prevention](/docs/payments/fraud-prevention) for rule management.
+
+### Invalid requests
+
+API errors — malformed PaymentIntent, unsupported currency, invalid amount, missing required field. `outcome.type = 'invalid'`. These are integration bugs. Check `error.message` in the API response and review your server logs. They do not represent real customer declines and should not be surfaced to end users as payment failures.
+
+## Reading the outcome object
+
+The `outcome` object is returned on every Charge:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ apiKey: process.env.VINR_SECRET_KEY });
+
+const charge = await vinr.charges.retrieve('ch_...');
+
+// outcome shape:
+// {
+//   type: 'issuer_declined' | 'blocked' | 'authorized' | 'invalid',
+//   risk_level: 'normal' | 'elevated' | 'highest',
+//   decline_code: 'insufficient_funds' | 'do_not_honor' | ...,
+//   network_decline_code: '51' | '05' | ...,  // raw network code
+//   seller_message: 'The bank did not return any further details...'
+// }
+
+console.log(charge.outcome.type);
+console.log(charge.outcome.decline_code);
+```
+
+`network_decline_code` is the raw two-digit code from the card network — useful for escalating with your acquiring bank. `seller_message` is a plain-English description intended for your dashboard, not for customers.
+
+## Adaptive acceptance
+
+VINR can automatically retry certain issuer declines using **network tokens** or **Account Updater** data (refreshed card numbers from Visa and Mastercard when a card is reissued). Enable in **Dashboard → Radar → Adaptive Acceptance**. Average authorization rate lift is 1–3% on eligible retries.
+
+## Recovery strategies
+
+**Subscription declines** — Use VINR Smart Retries, which selects optimal retry timing based on issuer patterns. Pair with automated dunning emails that give customers a direct link to update their payment method.
+
+**On-session `do_not_honor`** — Display a "please contact your bank" message and do not retry automatically. Excessive retries on a `do_not_honor` will trigger issuer fraud flags and can get your merchant ID flagged.
+
+**`insufficient_funds` on subscriptions** — Retry after likely payday dates (1st and 15th of the month are common). Offer a one-click payment update link in the dunning email so customers can add a second card without logging in.
+
+<Callout type="info">
+For the full list of decline codes, network result codes, and per-code recovery guidance, see [Declines and failures](/docs/troubleshooting/declines-and-failures).
+</Callout>
