@@ -125,15 +125,13 @@
   }
 }
 
-/* The marketing SiteNav is a two-row (Stripe-style) bar 100px tall. fumadocs
-   hardcodes its sidebar/TOC sticky offset to top-14 (56px), so without this
-   override the docs sidebar and table-of-contents slide under our second nav
-   row. */
-#nd-sidebar,
-#nd-toc {
-  top: 100px;
-  height: calc(100dvh - 100px);
-  max-height: calc(100dvh - 100px);
+/* The marketing SiteNav is a two-row (Stripe-style) bar 100px tall.
+   In fumadocs v16, the sidebar placeholder and TOC both use
+   `top: var(--fd-docs-row-1)` where `--fd-docs-row-1: var(--fd-banner-height, 0px)`.
+   Setting --fd-banner-height here makes the sidebar and TOC stick below
+   our custom nav without fighting against the layout's own CSS variables. */
+#nd-docs-layout {
+  --fd-banner-height: 100px;
 }
 /* Suppress the fumadocs v16 root-folder streaming tab strip. In v16 it renders
    as a React streaming boundary that becomes a direct <body> child above

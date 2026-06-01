@@ -65,7 +65,7 @@ export function CategoryMenu({ t }: CategoryMenuProps) {
                 aria-haspopup="true"
                 onClick={() => setOpen(isOpen ? null : i)}
                 className={[
-                  "flex h-8 items-center gap-1 rounded-md px-2.5 text-[13px] font-medium transition-colors duration-[120ms]",
+                  "flex h-8 items-center gap-1 rounded-md px-2.5 text-[13px] font-medium whitespace-nowrap transition-colors duration-[120ms]",
                   isOpen
                     ? "bg-white/[0.08] text-vinr-50"
                     : "text-vinr-50/[0.72] hover:bg-white/[0.08] hover:text-vinr-50",
