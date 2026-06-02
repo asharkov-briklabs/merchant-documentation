@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { TrackedLink } from "./components/tracked-link";
 import { SiteNav } from "./components/site-nav";
 import { SiteFooter } from "./components/site-footer";
 import { HeroMeshBg } from "./components/hero-mesh-bg";
@@ -58,18 +59,22 @@ export default function HomePage() {
             </div>
 
             <div className="flex items-center gap-5">
-              <Link
+              <TrackedLink
                 href="/docs/getting-started/quick-start"
+                eventLabel="get_started"
+                eventLocation="hero"
                 className="flex h-10 items-center gap-1.5 rounded-lg bg-vinr-500 px-5 text-sm font-medium text-white transition-colors hover:bg-vinr-600"
               >
                 {t.getStartedCta}
-              </Link>
-              <Link
+              </TrackedLink>
+              <TrackedLink
                 href="/api-reference"
+                eventLabel="api_reference"
+                eventLocation="hero"
                 className="text-sm font-medium text-white/50 transition-colors hover:text-vinr-50"
               >
                 {t.apiReference}
-              </Link>
+              </TrackedLink>
               <span className="text-xs text-white/20">·</span>
               <Link
                 href="/docs/payments"
@@ -95,12 +100,14 @@ export default function HomePage() {
             Explore our guides and examples to integrate VINR.
           </p>
           <div className="mt-6 flex items-center gap-5">
-            <Link
+            <TrackedLink
               href="/docs/getting-started/quick-start"
+              eventLabel="get_started"
+              eventLocation="docs_intro"
               className="flex h-10 items-center gap-1.5 rounded-lg bg-vinr-700 px-5 text-sm font-medium text-white transition-colors hover:bg-vinr-800"
             >
               {t.getStartedCta}
-            </Link>
+            </TrackedLink>
             <a href="#browse-by-product" className="text-sm font-medium text-vinr-600 transition-colors hover:text-vinr-800">
               Explore all products →
             </a>

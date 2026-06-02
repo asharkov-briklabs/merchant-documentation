@@ -143,6 +143,12 @@
 #nd-sidebar {
   background-color: var(--color-fd-background);
 }
+/* Sidebar section separators: bold, tight tracking to match all-caps labels */
+#nd-sidebar p {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-size: 0.7rem;
+}
 #nd-page {
   margin-left: 0;
 }

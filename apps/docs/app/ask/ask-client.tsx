@@ -10,6 +10,7 @@ import ReactMarkdown from "react-markdown";
 import brandmarkDark from "../assets/Brandmark_Vinr_dark.svg";
 import brandmarkLight from "../assets/Brandmark_Vinr_light.svg";
 import { SiteNav } from "../components/site-nav";
+import { trackEvent } from "@/lib/analytics";
 import type { getTranslations } from "@/lib/translations";
 
 export function AskClient({ t }: { t: ReturnType<typeof getTranslations> }) {
@@ -61,6 +62,7 @@ export function AskClient({ t }: { t: ReturnType<typeof getTranslations> }) {
     (e: React.FormEvent) => {
       e.preventDefault();
       if (!input.trim() || isLoading) return;
+      trackEvent("ask_ai_query", { query_length: input.trim().length });
       sendMessage({ parts: [{ type: "text", text: input }] });
       setInput("");
     },

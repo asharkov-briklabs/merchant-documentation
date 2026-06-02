@@ -1,0 +1,166 @@
+---
+title: "What we support"
+description: "Solutions, locations, languages, payment methods, and certified terminals for VINR in-person acceptance."
+persona: ["developer", "business-owner", "operations"]
+priority: "P0"
+lastUpdated: "2026-06-02"
+---
+
+A single overview of everything VINR in-person payments covers — hardware, software, geographies, card schemes, and acceptance methods — so you can confirm fit before you build.
+
+## Solutions
+
+VINR offers five ways to accept in-person payments. All share the same payment object model and webhook events as online payments.
+
+| Solution | Best for | Requires code | Hardware required |
+|---|---|---|---|
+| **Countertop terminal** (Nexgo CT20 / CT20P) | Fixed checkout lanes, reception desks, pharmacies | Optional (Terminal API or standalone) | CT20 or CT20P |
+| **Handheld terminal** (Nexgo N92 / N86Pro) | Table-side service, queue-busting, field sales | Optional (Terminal API or standalone) | N92 or N86Pro |
+| **Compact mPOS** (Ciontek CM30) | Pop-ups, markets, delivery, field agents | Yes — VINR mobile SDK | CM30 + merchant phone/tablet |
+| **Tap to Pay** | Lowest-cost mobile acceptance, zero hardware | Yes — VINR iOS / Android SDK | None (uses merchant's iPhone or Android) |
+| **Standalone** | No-code countertop sales, fallback acceptance | No | Any VINR terminal |
+
+See [Terminals](/docs/payments/in-person/terminals) for hardware specifications and ordering. See [Tap to Pay](/docs/payments/in-person/tap-to-pay) and [Mobile solutions](/docs/payments/in-person/mobile-solutions) for the software-only paths.
+
+## Locations and languages
+
+### Available markets
+
+VINR in-person acceptance is available in the following regions. All listed countries support the full terminal lineup and the complete feature set unless noted.
+
+<TypeTable
+  type={{
+    "Europe": {
+      type: "Austria · Belgium · Bulgaria · Croatia · Cyprus · Czech Republic · Denmark · Estonia · Finland · France · Germany · Greece · Hungary · Ireland · Italy · Latvia · Lithuania · Luxembourg · Malta · Netherlands · Norway · Poland · Portugal · Romania · Slovakia · Slovenia · Spain · Sweden",
+      description: "Full EEA regulatory coverage. EMV chip+PIN and contactless mandated. DCC available in all markets.",
+    },
+    "United Kingdom": {
+      type: "England · Scotland · Wales · Northern Ireland",
+      description: "Separate acquiring relationship post-Brexit. Contactless limit £100. Strong Customer Authentication (SCA) applies to MOTO.",
+    },
+    "United States": {
+      type: "All 50 states + DC",
+      description: "Swipe fallback still active. Contactless limit varies by network. Surcharging rules differ by state — review requirements before enabling.",
+    },
+    "Canada": {
+      type: "All provinces and territories",
+      description: "Interac Debit support available on request. Contactless limit CAD 250 (network-controlled).",
+    },
+    "Australia & New Zealand": {
+      type: "AU · NZ",
+      description: "eftpos network support available on request for Australian merchants. Contactless limit AUD 200 / NZD 200.",
+    },
+  }}
+/>
+
+<Callout type="info">
+If your target market is not listed, contact your VINR account manager. Markets are added on a rolling basis — onboarding timelines vary by local acquiring relationships.
+</Callout>
+
+### Supported currencies
+
+VINR terminals process payments in the local settlement currency of the merchant's acquiring account. DCC-enabled terminals can additionally present foreign cardholders with their home currency at the point of sale.
+
+Common settlement currencies: **AUD · BGN · CAD · CHF · CZK · DKK · EUR · GBP · HRK · HUF · NOK · NZD · PLN · RON · SEK · USD**.
+
+### Terminal display languages
+
+The terminal UI (prompts, receipt text, and error messages shown to the cardholder) can be set per-device or per-location in the Dashboard under **Hardware → Terminals → [device] → Display language**.
+
+Supported display languages: **Bulgarian · Czech · Danish · Dutch · English · Estonian · Finnish · French · German · Greek · Hungarian · Italian · Latvian · Lithuanian · Norwegian · Polish · Portuguese · Romanian · Slovak · Slovenian · Spanish · Swedish**.
+
+---
+
+## Payment methods
+
+### Card schemes
+
+All VINR terminals accept the major global card networks. Scheme enablement depends on your acquiring agreement.
+
+<TypeTable
+  type={{
+    "Visa": { type: "Debit · Credit · Prepaid", description: "Contactless, chip+PIN, and magnetic stripe. Visa Paywave for contactless." },
+    "Mastercard": { type: "Debit · Credit · Prepaid", description: "Contactless, chip+PIN, and magnetic stripe. Mastercard Contactless." },
+    "American Express": { type: "Credit · Charge", description: "Chip+PIN and contactless. Magnetic stripe where permitted. Requires separate Amex acquiring agreement or OptBlue participation." },
+    "UnionPay": { type: "Debit · Credit", description: "Chip+PIN and contactless. Particularly relevant for markets with Chinese tourist volumes." },
+    "Discover / Diners Club": { type: "Credit", description: "Accepted via the global Discover network. Contactless and chip+PIN." },
+    "Interac Debit": { type: "Debit", description: "Canadian market only. Available on request." },
+    "eftpos": { type: "Debit", description: "Australian market only. Available on request." },
+  }}
+/>
+
+### Digital wallets and mobile payments
+
+<TypeTable
+  type={{
+    "Apple Pay": { type: "NFC contactless", description: "iPhone and Apple Watch. Treated as a contactless EMV token — same contactless limits apply." },
+    "Google Pay": { type: "NFC contactless", description: "Android devices. EMV tokenized payment, contactless limit applies." },
+    "Samsung Pay": { type: "NFC contactless", description: "Samsung devices. NFC path on all VINR terminals." },
+    "Garmin Pay": { type: "NFC contactless", description: "Garmin wearables. Supported on all contactless-enabled terminals." },
+    "Fitbit Pay": { type: "NFC contactless", description: "Fitbit devices. Supported on all contactless-enabled terminals." },
+  }}
+/>
+
+### Card entry methods
+
+<TypeTable
+  type={{
+    "Contactless / NFC": { type: "All terminals", description: "Tap card or mobile wallet. Transactions above the issuer's contactless limit require PIN verification." },
+    "Chip + PIN": { type: "All terminals", description: "EMV contact chip with cardholder PIN entry. Primary method for most in-store transactions." },
+    "Chip + Signature": { type: "All terminals", description: "Available where PIN is not mandated (some US card types). Signature captured on screen or paper." },
+    "Magnetic stripe": { type: "All terminals", description: "Fallback swipe. Required for US and CA markets. Restricted or prohibited in most EEA markets." },
+    "Manual key entry (MOTO)": { type: "All terminals", description: "Card number entered manually on the terminal keypad. Card-not-present transaction — higher interchange. See In-person features for configuration." },
+  }}
+/>
+
+### Alternative payment methods
+
+The following APMs are available on VINR in-person terminals. Each requires a separate commercial agreement and Dashboard enablement.
+
+| Payment method | Type | Markets |
+|---|---|---|
+| **WeChat Pay** | QR code / NFC | EU, UK, AU, CA — for Chinese traveller markets |
+| **Alipay** | QR code | EU, UK, AU, CA — for Chinese traveller markets |
+| **iDEAL** | QR code | Netherlands |
+| **Bancontact** | Chip + NFC | Belgium |
+| **Carte Bancaire (CB)** | Chip + contactless | France |
+
+Contact your VINR account manager to enable APMs on your account.
+
+---
+
+## Terminals
+
+VINR certifies five terminal models. All are PCI PTS 5.x certified, shipped with TDES/DUKPT key injection already performed — you never handle encryption keys directly.
+
+| Model | Form factor | Screen | Connectivity | Printer | Best for |
+|---|---|---|---|---|---|
+| **Nexgo N92** | Handheld — Android | 5″ touch | 4G / WiFi / Bluetooth | Built-in thermal | Tableside, queue-busting |
+| **Nexgo N86Pro** | Handheld — Android | 6″ large touch | 4G / WiFi / Bluetooth | None | Customer-facing forms, delivery, field sales |
+| **Nexgo CT20** | Countertop | 5″ touch | Ethernet / WiFi | Built-in thermal | Retail checkout lanes, pharmacies, cafés |
+| **Nexgo CT20P** | Countertop + PIN pad | 5″ touch + separate PIN pad | Ethernet / WiFi | Built-in thermal | Environments requiring a separate cardholder keypad |
+| **Ciontek CM30** | Compact mPOS — Android | 3.5″ touch | Bluetooth 5.0 / WiFi | None | Pop-ups, markets, field agents with a phone |
+
+For full hardware specifications, accessories, ordering, and fleet provisioning, see [Terminals](/docs/payments/in-person/terminals).
+
+---
+
+## Next steps
+
+<Cards>
+  <Card
+    href="/docs/payments/in-person/terminals"
+    title="Terminal hardware"
+    description="Full specs, accessories, ordering, and fleet provisioning for all five VINR terminal models."
+  />
+  <Card
+    href="/docs/payments/in-person/architecture"
+    title="Terminal API architecture"
+    description="Cloud mode vs. local mode — choose the right connectivity model for your POS."
+  />
+  <Card
+    href="/docs/payments/in-person/standalone-terminal"
+    title="Standalone terminals"
+    description="Start accepting payments with no backend integration — configure from the Dashboard."
+  />
+</Cards>

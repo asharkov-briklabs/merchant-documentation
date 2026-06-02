@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { trackEvent } from "@/lib/analytics";
 
 /**
  * "Was this page helpful?" widget (the docs.stripe.com pattern). A Yes/No vote
@@ -41,6 +42,7 @@ export function PageFeedback({ url }: { url: string }) {
             label="Yes"
             onClick={() => {
               send({ vote: "up" });
+              trackEvent("doc_feedback", { vote: "up", page_url: url });
               setState("done");
             }}
           >
@@ -51,6 +53,7 @@ export function PageFeedback({ url }: { url: string }) {
             active={state === "down"}
             onClick={() => {
               send({ vote: "down" });
+              trackEvent("doc_feedback", { vote: "down", page_url: url });
               setState("down");
             }}
           >

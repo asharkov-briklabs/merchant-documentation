@@ -13,6 +13,8 @@ import { Inter, Roboto_Mono } from "next/font/google";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { AskAIPanel } from "./components/ask-ai-panel";
+import { AnalyticsScripts } from "./components/analytics-scripts";
+import { PageViewTracker } from "./components/page-view-tracker";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -48,6 +50,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           {children}
         </RootProvider>
         <AskAIPanel />
+        <AnalyticsScripts />
+        <PageViewTracker />
       </body>
     </html>
   );

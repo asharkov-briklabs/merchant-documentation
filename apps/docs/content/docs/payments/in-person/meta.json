@@ -1,7 +1,8 @@
 {
-  "title": "In-person payments",
+  "title": "In-Person Payments",
   "pages": [
     "index",
+    "what-we-support",
     "terminals",
     "architecture",
     "accept-a-payment",

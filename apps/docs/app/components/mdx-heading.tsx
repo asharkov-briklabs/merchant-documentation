@@ -2,6 +2,7 @@
 
 import { isValidElement, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { trackEvent } from "@/lib/analytics";
 
 /**
  * Drop-in replacement for the MDX `h2`, adding Stripe-style per-section actions
@@ -37,7 +38,9 @@ export function MdxHeading({
     try {
       const res = await fetch(markdownPath);
       const md = await res.text();
-      await navigator.clipboard.writeText(sliceSection(md, id!) ?? md);
+      const content = sliceSection(md, id!) ?? md;
+      await navigator.clipboard.writeText(content);
+      trackEvent("code_copy", { slug: window.location.pathname, section: id });
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch {

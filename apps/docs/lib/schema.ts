@@ -55,6 +55,10 @@ export const frontmatterExtension = {
   persona: z.array(PersonaEnum).min(1).optional(),
   priority: z.enum(["P0", "P1", "P2"]).default("P1"),
   lastUpdated: z.string().date().optional(),
+  // Marks a page as part of the onboarding quickstart funnel. Pages with this
+  // flag render a QuickstartTracker that fires GA4 funnel events and persists
+  // progress in localStorage. Order is defined in lib/onboarding.ts.
+  quickstartStep: z.boolean().optional(),
   // Wholly-enterprise pages (the second mechanism of the Standard/Advanced
   // content model — see notes/standard-vs-advanced-modes.md). The page stays in
   // the sidebar for everyone; it just gets an "Enterprise" badge so SMEs know
