@@ -7,7 +7,6 @@
     "local-methods",
     "stablecoins",
     "add-payment-methods",
-    "manage-payment-methods",
-    "link"
+    "manage-payment-methods"
   ]
 }
