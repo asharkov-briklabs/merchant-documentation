@@ -11,7 +11,7 @@ import { SITE_ORIGIN } from "@/lib/site-url";
 export const runtime = "nodejs";
 
 // Docs Q&A is well within Haiku's range; it's fast and cheap for streaming.
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL = "claude-haiku-4-5";
 
 function getRateLimitKey(req: NextRequest): string {
   return (
@@ -168,7 +168,7 @@ export async function POST(req: NextRequest) {
   }
 
   const lastUser = [...coreMessages].reverse().find((m) => m.role === "user");
-  const docs = retrieveDocs(lastUser?.content ?? "");
+  const docs = await retrieveDocs(lastUser?.content ?? "");
 
   if (docs.length === 0 && lastUser?.content) {
     Sentry.captureMessage("Ask-AI retrieved 0 docs for query", {

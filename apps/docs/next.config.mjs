@@ -19,11 +19,11 @@ const isDev = process.env.NODE_ENV === "development";
 
 const csp = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} https://www.googletagmanager.com https://www.clarity.ms`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
+  "img-src 'self' data: https://www.google-analytics.com",
   "font-src 'self'",
-  "connect-src 'self' https://*.sentry.io https://*.ingest.sentry.io",
+  "connect-src 'self' https://*.sentry.io https://*.ingest.sentry.io https://*.google-analytics.com https://www.googletagmanager.com https://www.clarity.ms https://c.bing.com",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -66,7 +66,9 @@ const config = {
     // pnpm monorepo root so the relative include resolves correctly.
     outputFileTracingRoot: join(__dirname, "../.."),
     outputFileTracingIncludes: {
-      "/api/ask": ["./content/**/*"],
+      // content/**/* covers the raw .mdx files (still needed for /api/md).
+      // .embeddings/index.json is the pre-built vector index for Ask-AI.
+      "/api/ask": ["./content/**/*", "./.embeddings/index.json"],
       // The /api/md/* raw-Markdown endpoint reads .mdx from disk too.
       "/api/md/[[...slug]]": ["./content/**/*"],
     },

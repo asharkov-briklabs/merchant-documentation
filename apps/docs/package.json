@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "node scripts/clean-webpack-cache.mjs && fumadocs-mdx",
+    "predev": "node scripts/clean-webpack-cache.mjs && fumadocs-mdx && node scripts/generate-embeddings.mjs",
     "dev": "next dev",
-    "prebuild": "fumadocs-mdx",
+    "prebuild": "fumadocs-mdx && node scripts/generate-embeddings.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint app lib",
@@ -13,10 +13,12 @@
     "type-check": "tsc --noEmit",
     "check-links": "node scripts/check-internal-links.mjs",
     "generate": "fumadocs-mdx",
-    "generate:api": "node scripts/generate-api.mjs && fumadocs-mdx"
+    "generate:api": "node scripts/generate-api.mjs && fumadocs-mdx",
+    "generate:embeddings": "node scripts/generate-embeddings.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.81",
+    "@ai-sdk/openai": "^3.0.67",
     "@ai-sdk/react": "^3.0.195",
     "@sentry/nextjs": "^10.55.0",
     "@upstash/ratelimit": "^2.0.8",
