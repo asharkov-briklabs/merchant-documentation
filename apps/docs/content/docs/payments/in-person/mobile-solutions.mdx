@@ -8,6 +8,40 @@ lastUpdated: "2026-05-31"
 
 The Ciontek CM30 Bluetooth reader paired with the VINR iOS or Android SDK turns any smartphone into a full card-present terminal — supporting contactless (NFC), chip+PIN, and magnetic stripe. Combined with [Tap to Pay](/docs/payments/in-person/tap-to-pay) for zero-hardware scenarios, the mobile stack covers pop-up stalls, event ticketing, field sales, and queue-busting in any environment where a fixed countertop terminal is impractical.
 
+## Platform requirements
+
+<Tabs items={["iOS", "Android"]}>
+<Tab value="iOS">
+
+| Requirement | Minimum |
+|---|---|
+| iOS version | iOS 15.0 |
+| Device | iPhone 7 or later, iPad (6th gen) or later |
+| Xcode | 14.0 or later |
+| Swift | 5.7 or later |
+| Bluetooth | Required for CM30 pairing |
+| NFC | Required only for [Tap to Pay on iPhone](/docs/payments/in-person/tap-to-pay) (iPhone XS or later, iOS 16+) |
+| App Store entitlement | Standard distribution — no special entitlement needed for CM30. Tap to Pay requires the Apple Tap to Pay entitlement separately. |
+
+The `VinrSDK` package is distributed via Swift Package Manager. No CocoaPods or Carthage support is provided.
+
+</Tab>
+<Tab value="Android">
+
+| Requirement | Minimum |
+|---|---|
+| Android version | Android 7.0 (API level 24) |
+| Target SDK | API level 34 (required by Google Play as of August 2024) |
+| Bluetooth | Bluetooth 4.2+ required; Bluetooth 5.0 recommended for CM30 |
+| NFC | Required only for [Tap to Pay on Android](/docs/payments/in-person/tap-to-pay) |
+| Architecture | arm64-v8a, armeabi-v7a, x86_64 |
+| Kotlin | 1.8.0 or later (Java interop supported) |
+
+The `com.vinr:sdk` package is hosted on Maven Central. No custom repository configuration is needed.
+
+</Tab>
+</Tabs>
+
 ## CM30 Bluetooth reader
 
 The Ciontek CM30 is a compact Android mPOS device that connects to a merchant's phone over Bluetooth or WiFi. It is battery-powered, pocket-sized, and PCI PTS 5.x certified. Because it has no built-in printer, receipts are delivered digitally — see [Receipts on mobile](#receipts-on-mobile) below.

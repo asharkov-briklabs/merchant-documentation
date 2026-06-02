@@ -1,0 +1,162 @@
+---
+title: "Offline payments"
+description: "Queue authorisations when the terminal loses network connectivity and sync them when back online."
+persona: ["developer", "business-owner", "operations"]
+priority: "P1"
+lastUpdated: "2026-06-02"
+---
+
+When a VINR terminal loses its network connection, offline mode allows it to continue accepting payments by approving transactions locally against cached BIN data and a configurable floor limit. Queued transactions are submitted for authorisation when connectivity is restored. This ensures checkout can continue during brief outages without turning customers away.
+
+<Callout type="warn">
+**You bear the risk for offline transactions.** VINR approves them locally against floor limits and cached BIN data, but final authorisation happens on reconnect. If the issuer declines on sync — for example due to a card reported lost, or insufficient funds — the payment is reversed and you are not reimbursed. Enable offline payments only if your business can absorb occasional offline chargebacks.
+</Callout>
+
+## Availability
+
+| Terminal | Offline support |
+|---|---|
+| Nexgo N92 | ✓ |
+| Nexgo N86Pro | ✓ |
+| Nexgo CT20 | ✓ |
+| Nexgo CT20P | ✓ |
+| Ciontek CM30 | — (not supported) |
+
+The CM30 requires a live host device connection and does not support standalone offline queuing.
+
+## Configure offline mode
+
+### Per terminal (Dashboard)
+
+Go to **Dashboard → Hardware → Terminals → [device] → Advanced → Offline payments**:
+
+- **Offline payments**: Enabled / Disabled
+- **Floor limit**: Maximum transaction amount that can be approved offline (in your settlement currency). The default is `0` (no offline approvals) until you explicitly set a limit.
+- **Max queued transactions**: Maximum number of transactions to hold in the offline queue. Default: 50. Maximum: 200.
+- **Queue duration**: Maximum age of a queued transaction before it is voided on reconnect. Default: 4 hours. Maximum: 24 hours.
+
+### Per transaction (API)
+
+Override the terminal's offline setting for a single payment:
+
+```typescript
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 2000,
+  currency: 'USD',
+  reference: 'order_9901',
+  offlineMode: 'allow',    // or 'deny' to force online-only for this payment
+});
+```
+
+<TypeTable
+  type={{
+    "offlineMode": {
+      type: '"allow" | "deny" | "terminal_default"',
+      description: "allow: approve offline if within floor limit. deny: decline if terminal is offline. terminal_default: use the terminal's configured offline setting.",
+      default: '"terminal_default"',
+    },
+  }}
+/>
+
+## How offline authorization works
+
+<Steps>
+<Step>
+**Terminal detects offline state**
+
+The terminal's cloud connection drops. It displays a network indicator to the operator but continues to accept payment sessions.
+</Step>
+
+<Step>
+**Floor limit check**
+
+When a payment session arrives, the terminal checks the transaction amount against the configured floor limit. Transactions at or below the floor limit are approved locally; transactions above it are declined.
+</Step>
+
+<Step>
+**BIN check**
+
+The terminal checks the card's BIN against a locally cached BIN table (updated on each cloud sync). Cards flagged in the cache as blocked or high-risk are declined regardless of the floor limit.
+</Step>
+
+<Step>
+**Local approval**
+
+The terminal approves the transaction, prints a receipt, and stores the transaction data in its local queue. The customer experience is identical to an online transaction — same speed, same receipt format.
+</Step>
+
+<Step>
+**Queue flush on reconnect**
+
+When the terminal regains connectivity, it immediately submits all queued transactions for authorisation in the order they were collected. You receive `terminal_payment.completed` or `terminal_payment.failed` webhooks as each transaction clears.
+</Step>
+</Steps>
+
+## Webhook behaviour for offline transactions
+
+Offline transactions go through an additional `queued` status before completing:
+
+```
+created → queued → processing → completed
+                             ↘ failed (on sync failure)
+```
+
+Your webhook handler receives these events in order. The `queued_at` timestamp on the payment object reflects when the card was presented offline; `completed_at` reflects when the sync authorisation cleared.
+
+```typescript
+if (event.type === 'terminal_payment.completed') {
+  const tp = event.data.object;
+
+  if (tp.offlineQueued) {
+    // Transaction was queued offline
+    const queueDuration = new Date(tp.completedAt).getTime()
+      - new Date(tp.queuedAt).getTime();
+    console.log(`Queued for ${queueDuration / 1000}s before sync`);
+  }
+}
+```
+
+## When queued transactions fail on sync
+
+If an issuer declines a queued transaction on sync, you receive `terminal_payment.failed` with `declineCode: "offline_sync_failure"` and a nested `syncDeclineCode` explaining the underlying reason (`insufficient_funds`, `lost_or_stolen`, etc.).
+
+The terminal has already dispensed goods and printed a receipt. You must handle the reversal in your own systems — VINR will not collect the funds.
+
+```typescript
+if (event.type === 'terminal_payment.failed') {
+  const tp = event.data.object;
+
+  if (tp.declineCode === 'offline_sync_failure') {
+    await recordOfflineChargeback({
+      reference: tp.reference,
+      amount: tp.amount,
+      syncDeclineCode: tp.syncDeclineCode,
+    });
+  }
+}
+```
+
+## Setting an appropriate floor limit
+
+Your floor limit is the single most important control for managing offline risk. A higher floor limit means more transactions can be approved offline, but also more exposure if cards are declined on sync.
+
+General guidance:
+
+| Business type | Suggested floor limit |
+|---|---|
+| Coffee shop / quick service | $20 – $30 |
+| Casual dining | $50 – $80 |
+| Retail (fashion, electronics) | $30 – $60 |
+| Ticketing / events | $100 – $150 |
+| High-value retail | $0 (online-only) |
+
+Review your chargeback history before raising floor limits. Discuss limits with your VINR account manager — they can provide BIN-level risk data for your specific card mix.
+
+## Next steps
+
+<Cards>
+  <Card href="/docs/payments/in-person/handle-responses" title="Handle responses" description="Handle offline_sync_failure and other decline codes in your webhook handler." />
+  <Card href="/docs/payments/in-person/diagnostics" title="Diagnostics" description="Monitor terminal connectivity and check offline queue status." />
+  <Card href="/docs/payments/in-person/features" title="All features" description="Overview of all optional terminal features." />
+</Cards>

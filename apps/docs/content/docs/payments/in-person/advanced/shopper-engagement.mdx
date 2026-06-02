@@ -1,0 +1,138 @@
+---
+title: "Shopper engagement"
+description: "Capture email addresses, loyalty IDs, and survey responses on the terminal screen during the payment flow."
+persona: ["developer"]
+priority: "P2"
+enterprise: true
+lastUpdated: "2026-06-02"
+---
+
+The terminal screen doesn't have to be blank while waiting for card presentation or after payment completes. Shopper engagement lets you insert custom data-capture prompts into the payment flow — collecting email addresses for digital receipts, loyalty opt-ins, NPS surveys, or marketing consent — without interrupting the payment experience.
+
+## Prompt types
+
+| Type | What it captures | When it appears |
+|---|---|---|
+| `email` | Customer email address | After payment, before receipt |
+| `phone` | Mobile number for SMS receipt | After payment, before receipt |
+| `loyalty_opt_in` | Loyalty programme sign-up Y/N | After payment |
+| `text_input` | Free-text field (custom label) | Before or after payment |
+| `single_choice` | One-of-N selection (e.g. NPS 1–5) | Before or after payment |
+| `multi_choice` | Checkbox selection | After payment |
+| `signature` | On-screen signature capture | Before or after payment |
+
+## Configure prompts in the API
+
+Pass an `engagementConfig` array on the payment create call:
+
+```typescript
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 4500,
+  currency: 'USD',
+  reference: 'order_1042',
+  engagementConfig: [
+    {
+      type: 'email',
+      label: 'Get your digital receipt',
+      required: false,
+      position: 'after_payment',
+    },
+    {
+      type: 'single_choice',
+      label: 'How was your visit today?',
+      options: ['Excellent', 'Good', 'Average', 'Poor'],
+      required: false,
+      position: 'after_payment',
+    },
+    {
+      type: 'loyalty_opt_in',
+      label: 'Join our loyalty programme and earn 1 point per $1 spent',
+      required: false,
+      position: 'after_payment',
+    },
+  ],
+});
+```
+
+Prompts appear in the order listed. The customer can skip non-required prompts with a single tap.
+
+## Reading engagement responses
+
+Engagement responses are included on the `terminal_payment.completed` event:
+
+```typescript
+if (event.type === 'terminal_payment.completed') {
+  const tp = event.data.object;
+
+  for (const response of tp.engagementResponses ?? []) {
+    switch (response.type) {
+      case 'email':
+        await crm.upsertContact({ email: response.value, source: 'terminal' });
+        break;
+      case 'single_choice':
+        await analytics.recordNPS({ score: response.value, reference: tp.reference });
+        break;
+      case 'loyalty_opt_in':
+        if (response.value === 'yes') {
+          await loyalty.enroll({ reference: tp.reference });
+        }
+        break;
+    }
+  }
+}
+```
+
+## Idle screen
+
+Between transactions, the terminal displays an idle screen. You can customise it with branded content, promotional messages, or QR codes:
+
+```typescript
+await vinr.terminal.terminals.configure({
+  id: 'term_01HZ5QXYZ',
+  idleScreen: {
+    imageUrl: 'https://cdn.example.com/promo-banner.png',
+    qrCode: {
+      url: 'https://example.com/app-download',
+      label: 'Download our app',
+    },
+    inactivityTimeout: 30, // seconds before returning to idle after a session
+  },
+});
+```
+
+Idle screen images must be PNG or JPEG, maximum 1920×1080px, under 500KB.
+
+## Signature capture
+
+For transactions requiring a written signature (certain card-not-present flows, high-value transactions, or age-verification), enable signature capture:
+
+```typescript
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 150000,
+  currency: 'USD',
+  reference: 'order_highvalue',
+  engagementConfig: [
+    {
+      type: 'signature',
+      label: 'Please sign to confirm your purchase',
+      position: 'after_payment',
+      required: true,
+    },
+  ],
+});
+```
+
+The signature image is returned as a base64-encoded PNG in `engagementResponses[].signatureImage`. Store it in your records — it may be required for chargeback disputes.
+
+## Display limits
+
+| Constraint | Limit |
+|---|---|
+| Max prompts per payment | 5 |
+| Max `single_choice` options | 6 |
+| Max `multi_choice` options | 8 |
+| `text_input` max characters | 80 |
+| Idle screen image size | 1920×1080px max, 500KB max |
+| Idle screen formats | PNG, JPEG |

@@ -1,0 +1,30 @@
+---
+title: "Advanced flows"
+description: "Enterprise-grade terminal integrations — loyalty, authorization adjustment, pay-at-table, card acquisition, and more."
+persona: ["developer"]
+priority: "P2"
+enterprise: true
+lastUpdated: "2026-06-02"
+---
+
+Advanced flows extend the standard payment integration with complex checkout, data-capture, and loyalty scenarios. All flows in this section require enterprise enablement on your VINR account — contact your account manager before building.
+
+## When to use advanced flows
+
+| Flow | Use case |
+|---|---|
+| [Loyalty](/docs/payments/in-person/advanced/loyalty) | Identify returning customers at the terminal, award points, and redeem rewards at checkout |
+| [Authorization adjustment](/docs/payments/in-person/advanced/authorization-adjustment) | Modify a hold amount after authorization — hotel pre-auth, fuel pumps, tabs |
+| [Pay at table](/docs/payments/in-person/advanced/pay-at-table) | Split a bill, pay by item, or add service charge from a handheld terminal at the table |
+| [Card acquisition](/docs/payments/in-person/advanced/card-acquisition) | Securely capture card data at the terminal without immediately charging — store-on-file, instalment setup |
+| [Autonomous stores](/docs/payments/in-person/advanced/autonomous-stores) | Unattended checkout — card tap to open, implicit close, frictionless AI-driven payment |
+| [Shopper engagement](/docs/payments/in-person/advanced/shopper-engagement) | Capture email, loyalty ID, or survey responses on the terminal screen during the payment flow |
+
+## Common prerequisites
+
+All advanced flows share the same prerequisites:
+
+- Enterprise account with the relevant feature enabled by your account manager.
+- VINR SDK `v3.0` or later (advanced flow APIs are not available in `v2.x`).
+- Terminal firmware `4.0` or later on all devices in scope (check **Dashboard → Hardware → Health**).
+- Webhook endpoint registered and verified (see [Webhooks](/docs/payments/in-person/webhooks)).

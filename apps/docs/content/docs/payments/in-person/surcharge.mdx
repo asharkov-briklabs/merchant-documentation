@@ -1,0 +1,100 @@
+---
+title: "Surcharging"
+description: "Automatically apply a card-type surcharge and disclose it to the cardholder before payment."
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-06-02"
+---
+
+Surcharging adds a fee to the transaction when a customer pays by card, offsetting the merchant's interchange cost. The surcharge amount is calculated automatically based on the card type presented and is disclosed to the cardholder on a separate confirmation screen before the payment proceeds. The customer must explicitly accept before tapping or inserting their card.
+
+<Callout type="warn">
+Surcharging is **prohibited on consumer credit cards in the EU and UK** and is restricted in several US states (including Connecticut, Massachusetts, and Puerto Rico). Consult qualified legal counsel to verify applicable regulations in each market before enabling. VINR does not validate jurisdiction compliance automatically — you are responsible for legal eligibility.
+</Callout>
+
+## Enable surcharging
+
+1. Go to **Dashboard → Settings → Payment processing → Surcharging**.
+2. Toggle **Enable surcharging** on.
+3. Configure rates per card type and network (see below).
+
+No code change is required to display the surcharge at the terminal. Once enabled in the Dashboard, all terminals on the account show the surcharge disclosure automatically.
+
+## Configure surcharge rates
+
+Rates are set per card category and optionally per network. The terminal detects the card type from the BIN and applies the matching rate.
+
+| Card category | Typical rate | Configuration key |
+|---|---|---|
+| Domestic debit | 0.5 % – 1.0 % | `debit` |
+| Domestic credit | 1.5 % – 2.5 % | `credit` |
+| Prepaid | 1.5 % – 2.5 % | `prepaid` |
+| Commercial / business card | 2.0 % – 3.5 % | `commercial` |
+| International card | 2.5 % – 3.5 % | `international` |
+
+Rates are set in the Dashboard. You cannot pass surcharge rates per API call — they are account-level configuration only. Contact your VINR account manager if you need location-level or terminal-level rate overrides.
+
+## API: reading surcharge on the response
+
+When surcharging is enabled, the terminal payment object includes `surchargeAmount` after the customer accepts:
+
+```typescript
+const completed = event.data.object;
+
+console.log(completed.amount);          // pre-surcharge base: 8000
+console.log(completed.surchargeAmount); // surcharge applied: 200 (2.5%)
+console.log(completed.total);           // base + surcharge: 8200
+console.log(completed.amountCaptured);  // 8200 for automatic capture
+```
+
+## API: override surcharge for a single payment
+
+To suppress surcharging for a specific transaction (for example, for a loyalty member exempt from surcharges), pass `surchargeConfig.mode: "none"` on the payment create call:
+
+```typescript
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 8000,
+  currency: 'USD',
+  reference: 'order_2201',
+  surchargeConfig: {
+    mode: 'none', // suppress surcharge for this transaction
+  },
+});
+```
+
+To force automatic surcharge calculation (the default when enabled):
+
+```typescript
+surchargeConfig: {
+  mode: 'auto',
+}
+```
+
+## Disclosure screen
+
+When surcharging is active, the terminal inserts a mandatory disclosure screen between the amount confirmation and the card presentation:
+
+> **Surcharge applied**
+> A 2.5% surcharge of $2.00 has been added to your transaction.
+> Total: $82.00
+> [Accept] [Cancel]
+
+The wording and layout are scheme-mandated and cannot be customised. If the customer taps **Cancel**, the session is cancelled and a `terminal_payment.cancelled` event fires with `cancellationReason: "customer_declined_surcharge"`.
+
+## Combining with tipping
+
+When both tipping and surcharging are active:
+1. The surcharge is applied to the base amount first.
+2. The customer sees and accepts the surcharge.
+3. The tip prompt is shown on the surcharged total.
+
+The tip is applied to the surcharged total, not the original base. This matches scheme requirements for surcharge disclosure order.
+
+## Next steps
+
+<Cards>
+  <Card href="/docs/payments/in-person/tipping" title="Tipping" description="Add a gratuity prompt after the surcharge disclosure." />
+  <Card href="/docs/payments/in-person/dcc" title="Dynamic Currency Conversion" description="Offer foreign cardholders the option to pay in their home currency." />
+  <Card href="/docs/payments/in-person/features" title="All features" description="Overview of all optional terminal features." />
+</Cards>

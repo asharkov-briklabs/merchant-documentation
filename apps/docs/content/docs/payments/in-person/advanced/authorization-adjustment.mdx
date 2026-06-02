@@ -1,0 +1,90 @@
+---
+title: "Authorization adjustment"
+description: "Modify a held authorization amount after initial approval — hotel pre-auth, fuel pumps, running tabs."
+persona: ["developer"]
+priority: "P2"
+enterprise: true
+lastUpdated: "2026-06-02"
+---
+
+Authorization adjustment lets you modify the amount of a held (uncaptured) authorization before settling. Common use cases:
+
+- **Hotel check-in pre-auth**: hold $200 at check-in, adjust to the actual stay cost at checkout
+- **Fuel pumps**: pre-auth a fixed amount, adjust down to the actual fuel dispensed
+- **Restaurant tabs**: hold an amount when the tab is opened, adjust up when the customer adds more items
+
+## Prerequisites
+
+- `captureMethod: "manual"` on the initial payment create call (adjustment requires a manual-capture authorization)
+- Enterprise adjustment feature enabled on your account
+- Adjustment window: Visa and Mastercard allow up to **7 days** from the original authorization; American Express allows **30 days** (subject to your acquirer agreement)
+
+## Create an adjustable authorization
+
+```typescript
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 20000,     // $200.00 pre-auth hold
+  currency: 'USD',
+  reference: 'room_412_checkin',
+  captureMethod: 'manual',
+  authorizationAdjustment: {
+    enabled: true,
+  },
+});
+
+// terminalPayment.status → 'authorized'
+// terminalPayment.captureMethod → 'manual'
+```
+
+## Adjust the authorization
+
+At any point before capture, call `adjustAuthorization` to change the held amount:
+
+```typescript
+// Day 3 — customer adds room service and minibar charges
+await vinr.terminal.payments.adjustAuthorization(terminalPayment.id, {
+  amount: 34700,  // $347.00 adjusted hold
+  reason: 'Additional charges added to room folio',
+});
+```
+
+You can adjust **up or down**. Adjusting up sends a new authorization request to the issuer. Adjusting down reduces the hold without a new authorization (the issuer releases the excess hold automatically).
+
+**Adjustment limits:**
+
+| Scheme | Max increase over original | Authorization window |
+|---|---|---|
+| Visa | 15% of original amount | 7 days |
+| Mastercard | 20% of original amount | 7 days |
+| American Express | No percentage cap | 30 days |
+
+Adjustments beyond scheme limits require a new authorization rather than an adjustment.
+
+## Capture at the adjusted amount
+
+When ready to settle, call capture. The capture amount must be ≤ the adjusted authorized amount:
+
+```typescript
+await vinr.terminal.payments.capture(terminalPayment.id, {
+  amount: 34700,  // capture the full adjusted amount
+});
+```
+
+## Webhook events
+
+| Event | When it fires |
+|---|---|
+| `terminal_payment.authorized` | Initial authorization approved |
+| `terminal_payment.authorization_adjusted` | Adjustment approved by issuer |
+| `terminal_payment.completed` | Capture settled |
+| `terminal_payment.expired` | 7-day adjustment window elapsed without capture |
+
+```typescript
+if (event.type === 'terminal_payment.authorization_adjusted') {
+  const tp = event.data.object;
+  console.log(tp.amount);           // new adjusted amount
+  console.log(tp.originalAmount);   // original hold
+  console.log(tp.adjustedAt);       // timestamp
+}
+```

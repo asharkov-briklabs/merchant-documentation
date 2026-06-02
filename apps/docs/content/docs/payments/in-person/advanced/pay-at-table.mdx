@@ -1,0 +1,134 @@
+---
+title: "Pay at table"
+description: "Split a bill, pay by item, or settle a tab from a handheld terminal at the table."
+persona: ["developer"]
+priority: "P2"
+enterprise: true
+lastUpdated: "2026-06-02"
+---
+
+Pay at table brings a handheld terminal to the customer instead of the customer going to a fixed payment counter. It supports full bill payment, split-by-amount, split-by-item, and running-tab settlement — all driven from your POS system via the Terminal API.
+
+## Typical flow
+
+<Steps>
+<Step>
+**POS sends the order to VINR**
+
+When the customer requests the bill, your POS pushes the order details (items, subtotal, tax, any discounts) to VINR via `vinr.terminal.orders.create`. VINR stores the order and returns an `orderId`.
+</Step>
+
+<Step>
+**Staff selects a terminal**
+
+The server selects a free handheld from the terminal pool. Your POS calls `vinr.terminal.payments.create` targeting that terminal with the `orderId`.
+</Step>
+
+<Step>
+**Terminal displays the bill**
+
+The terminal shows a itemised bill screen. The customer reviews it. If split payment is enabled, the customer selects how to split (equal halves, by item, custom amount).
+</Step>
+
+<Step>
+**Card presented**
+
+Each party pays their share via contactless, chip+PIN, or mobile wallet. VINR creates a separate `terminal_payment` for each split.
+</Step>
+
+<Step>
+**Order marked as settled**
+
+Once all splits sum to the order total, VINR fires `terminal_order.completed` and your POS marks the table as cleared.
+</Step>
+</Steps>
+
+## Create an order
+
+```typescript
+const order = await vinr.terminal.orders.create({
+  reference: 'table_12_20260602',
+  locationId: 'loc_01HZ9RSTORE',
+  currency: 'USD',
+  lineItems: [
+    { description: 'Grilled salmon', quantity: 2, unitAmount: 2800 },
+    { description: 'House wine (glass)', quantity: 3, unitAmount: 1200 },
+    { description: 'Sparkling water', quantity: 2, unitAmount: 600 },
+  ],
+  tax: 1020,
+  serviceCharge: { rate: 0.125, label: '12.5% service charge' },
+});
+
+// order.total → 10220 (subtotal 9000 + tax 1020 + service charge 1125 = 10145 — check rounding)
+```
+
+## Create a full-bill payment
+
+```typescript
+const tp = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: order.total,
+  currency: 'USD',
+  reference: order.reference,
+  orderId: order.id,
+  tipConfig: { mode: 'percentage', percentages: [10, 12, 15] },
+});
+```
+
+## Create a split payment
+
+To split equally between N parties:
+
+```typescript
+const splitPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  orderId: order.id,
+  currency: 'USD',
+  reference: order.reference,
+  split: {
+    mode: 'equal',
+    parts: 3,
+    partyIndex: 1, // this payment covers party 1 of 3
+  },
+});
+
+// splitPayment.amount → Math.ceil(order.total / 3)
+```
+
+To split by custom amount:
+
+```typescript
+const splitPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  orderId: order.id,
+  currency: 'USD',
+  reference: order.reference,
+  split: {
+    mode: 'custom',
+    amount: 4000, // this party pays $40.00
+  },
+});
+```
+
+## Order and payment events
+
+| Event | When it fires |
+|---|---|
+| `terminal_order.created` | Order registered |
+| `terminal_order.partially_paid` | At least one split payment completed; balance remains |
+| `terminal_order.completed` | All splits sum to the order total |
+| `terminal_order.expired` | Order not fully settled within the configured window (default 2 hours) |
+| `terminal_payment.completed` | Individual split payment completed |
+
+```typescript
+if (event.type === 'terminal_order.completed') {
+  const order = event.data.object;
+  await pos.markTableCleared(order.reference);
+}
+
+if (event.type === 'terminal_order.partially_paid') {
+  const order = event.data.object;
+  const remaining = order.total - order.amountPaid;
+  console.log(`$${remaining / 100} remaining on table`);
+}
+```

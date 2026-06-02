@@ -94,6 +94,67 @@ Card-scheme rules require that a referenced refund be processed on the same card
 
 For full refund lifecycle details — including partial refunds, refund windows, and webhook events — see [In-person refunds](/docs/payments/in-person/refunds).
 
+## Menus and passcodes
+
+Standalone terminals use a two-level passcode system to separate day-to-day staff operations from management functions.
+
+### Staff PIN
+
+When **Staff PIN** is enabled (Dashboard → Hardware → Terminals → [device] → Security), staff must enter a four-digit PIN before each transaction. Each staff member has their own PIN so the Dashboard can break down transaction volume by employee. PINs are set and managed in Dashboard → Team → Staff PINs.
+
+### Manager passcode
+
+The manager passcode unlocks advanced functions not available to regular staff: voiding a transaction, accessing the full transaction history, changing terminal settings, and running reports from the device. The default passcode is `0000` — change it immediately after setup.
+
+To change the manager passcode: from the terminal home screen, hold the menu button for three seconds → **Settings** → **Security** → **Manager passcode**. Enter the current passcode, then the new one twice.
+
+<Callout type="warn">
+Do not share the manager passcode with all staff. A staff member with manager access can void any transaction and access the daily report from the device.
+</Callout>
+
+### Accessing terminal menus
+
+From the terminal home screen, swipe down from the top (Nexgo models) or press the menu button (Ciontek CM30) to open the operator menu. The menu items visible depend on the passcode used to unlock it:
+
+| Menu item | Staff access | Manager access |
+|---|---|---|
+| Transactions (last 20) | ✓ | ✓ |
+| Full transaction history | — | ✓ |
+| Refund | ✓ (referenced only) | ✓ |
+| Void (same-day) | — | ✓ |
+| Print last receipt | ✓ | ✓ |
+| Print Z-report | — | ✓ |
+| Settings | — | ✓ |
+| Network status | ✓ | ✓ |
+
+---
+
+## End of day
+
+### Z-report
+
+A Z-report summarises all transactions since the last report was run (or since the terminal was activated). Print it at the end of each business day for your records and to verify settlement.
+
+From the terminal: open the manager menu → **Reports** → **Z-report** → **Print**. The report prints immediately on the Nexgo N92, CT20, and CT20P. On the N86Pro and Ciontek CM30 (no built-in printer), the report is sent to the manager's email address on file.
+
+The Z-report includes:
+
+- Total sale count and gross amount
+- Refund count and total refunded amount
+- Net settlement amount
+- Breakdown by card brand (Visa, Mastercard, Amex, etc.)
+- Tip total (if tipping is enabled)
+- Void count
+- Terminal ID and location
+
+### Batch settlement
+
+VINR settles transactions automatically once per day at the time configured under Dashboard → Settings → Settlement → Batch close time (default: 23:00 local time for the terminal's assigned location). You do not need to manually close a batch — settlement runs regardless of whether a Z-report has been printed.
+
+If you need to trigger an early settlement (for example, before a shift change), go to Dashboard → Reports → Settlement → **Request early settlement**. Note that settlement timing is subject to your acquiring agreement; early settlement requests may not affect the actual funds-transfer time.
+
+---
+
 ## Reporting
 
 All standalone transactions feed into the same reporting pipeline as integrated payments.

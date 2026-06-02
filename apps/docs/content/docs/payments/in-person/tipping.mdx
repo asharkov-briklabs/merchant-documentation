@@ -1,0 +1,141 @@
+---
+title: "Tipping"
+description: "Let customers add a gratuity at the terminal before the payment is captured."
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-06-02"
+---
+
+Tipping presents a gratuity prompt to the customer after the sale amount is confirmed and before the card is presented. The customer selects a percentage, enters a custom amount, or skips. VINR captures the tip as part of the same authorisation — no separate capture step is required.
+
+## Enable tipping
+
+Tipping must be enabled at account level before it appears on terminals:
+
+1. Go to **Dashboard → Settings → Payment processing → Tipping**.
+2. Toggle **Enable tipping** on.
+3. Set default percentage presets (optional — can be overridden per terminal or per API call).
+
+To enable for a specific terminal only, go to **Dashboard → Hardware → Terminals → [device] → Tipping**.
+
+## Pass tip config in the API
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 4500,
+  currency: 'USD',
+  reference: 'order_1042',
+  tipConfig: {
+    mode: 'percentage',
+    percentages: [15, 18, 20],
+    allowCustom: true,
+    minimumAmount: 500,
+  },
+});
+```
+
+## Tip modes
+
+<TypeTable
+  type={{
+    "percentage": {
+      type: "mode",
+      description: "Displays 2–3 quick-select percentage buttons and an optional custom entry field. Most common for restaurants and service businesses.",
+    },
+    "amount": {
+      type: "mode",
+      description: "Displays a number pad — the customer types a currency amount. Preferred when percentage tipping is unusual in the local market.",
+    },
+    "on_receipt": {
+      type: "mode",
+      description: "The terminal completes the payment first; the customer adds a tip on the printed or digital receipt. The tip is captured via a subsequent API call. See Manual capture below.",
+    },
+  }}
+/>
+
+## tipConfig parameters
+
+<TypeTable
+  type={{
+    "tipConfig.mode": {
+      type: '"percentage" | "amount" | "on_receipt"',
+      description: "Tip display mode.",
+      default: "—",
+    },
+    "tipConfig.percentages": {
+      type: "number[]",
+      description: "Up to 3 preset percentages for quick-select buttons. Only applies when mode is percentage.",
+      default: "[15, 18, 20]",
+    },
+    "tipConfig.allowCustom": {
+      type: "boolean",
+      description: "Shows a custom entry option alongside presets.",
+      default: "true",
+    },
+    "tipConfig.minimumAmount": {
+      type: "integer",
+      description: "Minimum base amount (in minor units) required to show the tip prompt. Transactions below this skip the tip screen.",
+      default: "0",
+    },
+  }}
+/>
+
+## Reading the tip on the response
+
+After the customer completes the card interaction, the terminal payment object includes:
+
+```typescript
+const completed = event.data.object;
+
+console.log(completed.amount);        // base amount: 4500
+console.log(completed.tipAmount);     // tip selected: 810 (18%)
+console.log(completed.total);         // base + tip: 5310
+console.log(completed.amountCaptured); // same as total for automatic capture
+```
+
+`tipAmount` is `0` if the customer skips the tip prompt.
+
+## Manual capture (tip-on-receipt / post-authorisation adjustment)
+
+For table-service restaurants where the tip is written on a paper receipt after the meal, use `captureMethod: "manual"` and `tipConfig.mode: "on_receipt"`. This authorises the base amount, and you adjust it upward when capturing.
+
+```typescript
+// 1. Create with manual capture
+const tp = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 4500,
+  currency: 'USD',
+  reference: 'table_12',
+  captureMethod: 'manual',
+  tipConfig: { mode: 'on_receipt' },
+});
+
+// 2. Customer signs the receipt and writes in a tip
+// 3. Staff enters the tip amount and calls capture
+await vinr.terminal.payments.capture(tp.id, {
+  amount: 5310, // base 4500 + tip 810
+});
+```
+
+The capture amount may exceed the authorised amount by up to **20%** (or the card scheme maximum for your market, whichever is lower) without requiring a new authorisation.
+
+<Callout type="warn">
+Uncaptured authorisations expire after **7 days**. If you do not capture within 7 days, the authorisation is released and the payment object transitions to `expired`. Always capture within the same business day for best interchange rates.
+</Callout>
+
+## Standalone terminals
+
+Tipping on standalone terminals is configured in **Dashboard → Hardware → Terminals → [device] → Tipping**. The same `mode`, `percentages`, and `minimumAmount` settings apply. No API call is needed — the configuration is pushed to the device automatically.
+
+## Next steps
+
+<Cards>
+  <Card href="/docs/payments/in-person/accept-a-payment#capture-modes" title="Capture modes" description="Automatic vs manual capture — how to adjust the amount at capture time." />
+  <Card href="/docs/payments/in-person/surcharge" title="Surcharging" description="Apply a card-type surcharge before the tip prompt." />
+  <Card href="/docs/payments/in-person/features" title="All features" description="Overview of all optional terminal features." />
+</Cards>

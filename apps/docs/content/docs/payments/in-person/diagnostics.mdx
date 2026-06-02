@@ -1,0 +1,195 @@
+---
+title: "Diagnostics"
+description: "Retrieve terminal logs, run self-tests, resolve connectivity errors, and diagnose failed transactions."
+persona: ["developer", "operations"]
+priority: "P1"
+lastUpdated: "2026-06-02"
+---
+
+Use the VINR diagnostics tools to identify and resolve issues with terminals, connectivity, and payment failures — without requiring physical access to the device.
+
+## Terminal health dashboard
+
+Go to **Dashboard → Hardware → Health** for a real-time overview of your fleet:
+
+- **Online / Offline count** — how many terminals are reachable right now
+- **Needs attention** — devices with low battery, pending required updates, or degraded connectivity
+- **Recent errors** — the last 50 terminal errors across your account, with device, timestamp, and error type
+- **Software versions** — which devices are running outdated firmware
+
+Filter by location, device model, or status. Click any terminal row to open its detail page.
+
+## Terminal detail page
+
+Each terminal has a dedicated detail page at **Dashboard → Hardware → Terminals → [device]**. It shows:
+
+| Tab | Content |
+|---|---|
+| **Overview** | Current status, last seen, battery level, software version, location |
+| **Transactions** | Last 100 transactions processed on this device |
+| **Logs** | Raw device logs for the last 24 hours |
+| **Audit log** | Administrative actions (activation, lock/unlock, key rotation, config changes) |
+| **Diagnostics** | Self-test runner, connectivity test, log download |
+
+---
+
+## Run a terminal self-test
+
+The self-test verifies hardware components and connectivity without processing a real payment:
+
+### From the Dashboard
+
+1. Open **Dashboard → Hardware → Terminals → [device] → Diagnostics**.
+2. Click **Run self-test**.
+3. The terminal displays "Testing…" and runs the checks. Results appear in the Dashboard within 30 seconds.
+
+### Via the API
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const test = await vinr.terminal.terminals.runDiagnostic({
+  id: 'term_01HZ5QXYZ',
+  type: 'self_test',
+});
+
+// Poll until complete
+let result;
+do {
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  result = await vinr.terminal.terminals.getDiagnosticResult(test.id);
+} while (result.status === 'running');
+
+console.log(result.status);    // 'passed' | 'failed' | 'partial'
+console.log(result.checks);    // array of individual check results
+```
+
+**Self-test checks:**
+
+| Check | What it tests |
+|---|---|
+| `card_reader` | NFC antenna, chip reader, and magnetic stripe reader |
+| `display` | Screen rendering |
+| `printer` | Thermal printer (Nexgo N92, CT20, CT20P only) |
+| `network` | Connectivity to VINR's cloud endpoints |
+| `tls_certificates` | Certificate validity and expiry (warns if < 30 days remaining) |
+| `encryption_keys` | TDES/DUKPT key presence and integrity |
+| `battery` | Battery health percentage and charging state |
+| `storage` | Available local storage for offline queue and logs |
+
+---
+
+## Retrieve device logs
+
+Device logs are useful for diagnosing intermittent connection failures, unexpected transaction declines, and software crashes.
+
+### Via the Dashboard
+
+Open **Dashboard → Hardware → Terminals → [device] → Logs**. Logs are available for the last 24 hours. Use the level filter (Error / Warning / Info / Debug) to reduce noise.
+
+### Via the API
+
+```typescript
+const logs = await vinr.terminal.terminals.getLogs({
+  id: 'term_01HZ5QXYZ',
+  level: 'error',
+  since: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(), // last 4 hours
+  limit: 100,
+});
+
+for (const entry of logs.data) {
+  console.log(entry.timestamp, entry.level, entry.message, entry.context);
+}
+```
+
+---
+
+## Common issues and resolutions
+
+### Terminal shows "Offline" in Dashboard
+
+| Cause | Resolution |
+|---|---|
+| WiFi password changed | Go to the terminal → Settings → Network → WiFi and re-enter credentials |
+| SIM card not registered (4G models) | Check SIM status under Settings → Network → Cellular. Contact your carrier if the SIM is not active |
+| DHCP lease expired | Reboot the terminal — it re-requests a DHCP address on startup |
+| Firewall blocking VINR endpoints | Ensure outbound TCP 443 is open to `*.vinr.com`. See [Network and connectivity](/docs/payments/in-person/architecture#network-requirements) |
+| Terminal firmware crash | Force-reboot by holding the power button for 10 seconds |
+
+### Payment sessions time out or hang
+
+| Cause | Resolution |
+|---|---|
+| Cloud connectivity lost mid-session | Wait for the terminal to recover — it will resume or cancel the session automatically |
+| Session created for a terminal in a different location | Verify `terminalId` matches the activated terminal's ID |
+| Terminal locked administratively | Unlock via Dashboard or `vinr.terminal.terminals.action({ action: "unlock" })` |
+| Session already active on terminal | Cancel the existing session before creating a new one |
+
+### NFC contactless not working
+
+1. Run the self-test (`card_reader` check) to verify NFC antenna health.
+2. Check the contactless limit on the location — a limit of `0` disables contactless.
+3. Ensure the customer is not using a card in a metal wallet or phone case — these block NFC.
+4. For the Ciontek CM30: verify Bluetooth connection to the host device is stable (NFC on the CM30 routes through the host app).
+
+### Chip reader errors
+
+Chip read errors are usually physical (dirty or worn chip contacts) rather than software issues.
+
+1. Ask the customer to clean the card chip with a dry cloth and retry.
+2. If errors persist, check the chip reader slot for debris. Use compressed air if available.
+3. Run the self-test `card_reader` check.
+4. If the self-test fails, the terminal may need servicing. File a hardware support request in **Dashboard → Support → Hardware**.
+
+### Receipt printer jams or doesn't print
+
+1. Open the printer compartment and check for paper jams or a depleted roll.
+2. Replace the paper roll with VINR-certified 58mm thermal paper (BPA-free).
+3. Reload the paper with the coated (shiny) side facing the print head.
+4. Close the compartment firmly until it clicks.
+5. Run the self-test `printer` check.
+
+---
+
+## Download a support bundle
+
+If VINR support requests diagnostic information, generate a support bundle directly from the terminal:
+
+**From the terminal:** Manager menu → **Support** → **Send diagnostic bundle**. The bundle is uploaded to VINR automatically and linked to the terminal's support ticket.
+
+**Via the API:**
+
+```typescript
+const bundle = await vinr.terminal.terminals.generateSupportBundle({
+  id: 'term_01HZ5QXYZ',
+  includeTransactionLogs: true,
+  since: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+});
+
+console.log(bundle.downloadUrl); // Signed URL, valid for 1 hour
+console.log(bundle.bundleId);    // Reference for VINR support
+```
+
+---
+
+## Next steps
+
+<Cards>
+  <Card
+    href="/docs/payments/in-person/terminal-management"
+    title="Terminal management"
+    description="Activate, assign, configure, and automate your terminal fleet."
+  />
+  <Card
+    href="/docs/payments/in-person/handle-responses"
+    title="Handle responses"
+    description="Classify and handle payment failure codes in your webhook handler."
+  />
+  <Card
+    href="/docs/payments/in-person/go-live"
+    title="Go live checklist"
+    description="Pre-launch checks for connectivity, compliance, and live mode enablement."
+  />
+</Cards>

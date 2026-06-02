@@ -1,0 +1,114 @@
+---
+title: "Dynamic Currency Conversion"
+description: "Offer foreign cardholders the option to pay in their home currency at the terminal."
+persona: ["developer", "business-owner"]
+priority: "P1"
+lastUpdated: "2026-06-02"
+---
+
+Dynamic Currency Conversion (DCC) detects when a customer presents a foreign-issued card and offers to complete the transaction in the cardholder's home currency rather than your local settlement currency. The customer sees the exact amount they will be charged in their own currency — including the exchange rate and any DCC margin — and chooses which currency to pay in.
+
+Regardless of the customer's choice, **you always settle in your local currency**. The exchange-rate risk and DCC margin are passed to the cardholder and the DCC provider — not to you.
+
+## Requirements
+
+- DCC must be enabled at account level (Dashboard → Settings → Payment processing → Dynamic Currency Conversion).
+- A DCC agreement with VINR is required. Contact your account manager to activate DCC for your account.
+- DCC is subject to Visa and Mastercard programme rules and is not available in all markets.
+
+No code change is required once DCC is enabled — the terminal handles detection and the offer flow automatically.
+
+## How it works at the terminal
+
+<Steps>
+<Step>
+**Card presented**
+
+The customer taps or inserts a foreign-issued card. The terminal reads the BIN and checks whether DCC is applicable (foreign card, supported currency pair, eligible scheme).
+</Step>
+
+<Step>
+**DCC offer screen**
+
+If DCC is applicable, the terminal shows a mandatory disclosure screen:
+
+> **Currency choice**
+> Pay in your home currency: **€41.23 EUR** (rate: 1.096, includes a 3% DCC margin)
+> Pay in merchant currency: **$45.00 USD**
+> [Pay in EUR] [Pay in USD]
+
+The wording, rate display, and margin disclosure are scheme-regulated. VINR's terminal software satisfies these requirements — do not suppress or customise the DCC screens.
+</Step>
+
+<Step>
+**Customer chooses**
+
+If the customer selects their home currency, the DCC rate is locked and the authorisation is sent for the home-currency amount. If they decline, the standard local-currency authorisation proceeds.
+</Step>
+
+<Step>
+**You settle in local currency regardless**
+
+Your settlement, reports, and webhook events always reflect your local currency. The `dcc` object on the payment response carries the cardholder's currency details if DCC was accepted.
+</Step>
+</Steps>
+
+## Reading DCC on the response
+
+```typescript
+const completed = event.data.object;
+
+if (completed.dcc) {
+  console.log(completed.dcc.cardholderCurrency);   // "EUR"
+  console.log(completed.dcc.cardholderAmount);      // 4123 (cents in EUR)
+  console.log(completed.dcc.exchangeRate);          // 1.0961
+  console.log(completed.dcc.margin);                // 0.03 (3% DCC margin)
+  console.log(completed.dcc.accepted);              // true — customer chose DCC
+}
+
+// Your settlement amount is always in your local currency
+console.log(completed.amountCaptured); // 4500 (cents in USD)
+console.log(completed.currency);       // "USD"
+```
+
+If the customer declined DCC or the card was not eligible, `completed.dcc` is `null`.
+
+## DCC eligibility
+
+DCC is offered when **all** of the following conditions are met:
+
+- The card BIN is identified as a foreign-issued card (i.e. issued in a different country than your terminal's assigned location).
+- The cardholder's home currency differs from your settlement currency.
+- The card scheme (Visa or Mastercard) supports DCC for this currency pair.
+- The transaction amount exceeds the minimum DCC threshold (typically equivalent to ~$10 USD — set by your DCC agreement).
+- DCC is enabled on the terminal's assigned location.
+
+American Express, Discover, and UnionPay cards are not eligible for DCC on VINR terminals.
+
+## Suppress DCC for a specific transaction
+
+To prevent DCC from being offered on a single payment (for example, if your POS system manages currency conversion itself):
+
+```typescript
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 4500,
+  currency: 'USD',
+  reference: 'order_5509',
+  dccConfig: {
+    enabled: false,
+  },
+});
+```
+
+## Reporting
+
+DCC transactions appear in Dashboard → Payments with a **DCC** badge. The report export includes columns for cardholder currency, cardholder amount, exchange rate, and DCC margin for reconciliation against your DCC provider statement.
+
+## Next steps
+
+<Cards>
+  <Card href="/docs/payments/in-person/surcharge" title="Surcharging" description="Apply a card-type surcharge alongside or instead of DCC." />
+  <Card href="/docs/payments/in-person/installments" title="Installments" description="Offer monthly payment plans — compatible with DCC when the customer selects their home currency." />
+  <Card href="/docs/payments/in-person/features" title="All features" description="Overview of all optional terminal features." />
+</Cards>

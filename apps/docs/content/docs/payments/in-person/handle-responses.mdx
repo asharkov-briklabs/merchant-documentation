@@ -1,0 +1,205 @@
+---
+title: "Handle responses"
+description: "Classify success and failure outcomes, manage timeouts, and handle partial authorizations."
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-06-02"
+---
+
+Every terminal payment ends in one of three ways: **completed** (funds collected), **failed** (card declined or error), or **cancelled** (session abandoned). Your backend receives each outcome as a webhook event. This page explains how to handle each case correctly.
+
+## Payment status lifecycle
+
+```
+created → pending → processing → completed
+                              ↘ failed
+                              ↘ cancelled
+```
+
+| Status | Meaning |
+|---|---|
+| `created` | Session created on your backend; terminal has not yet received it |
+| `pending` | Terminal received the session and is waiting for card presentation |
+| `processing` | Card presented; authorization request in flight to the issuer |
+| `completed` | Authorization approved; funds captured (or authorized for manual capture) |
+| `failed` | Card declined or transaction error |
+| `cancelled` | Session cancelled before card interaction, or timed out |
+
+<Callout type="warn">
+Never fulfil an order on `pending` or `processing`. Always wait for `terminal_payment.completed` via webhook before releasing goods or services.
+</Callout>
+
+---
+
+## Handling `terminal_payment.completed`
+
+A completed event means the issuer approved the transaction and — for automatic capture — funds are on the way to your settlement account.
+
+```typescript
+if (event.type === 'terminal_payment.completed') {
+  const tp = event.data.object;
+
+  await db.orders.update(tp.reference, {
+    status: 'paid',
+    paymentId: tp.id,
+    amountCaptured: tp.amountCaptured,
+    last4: tp.last4,
+    brand: tp.brand,
+  });
+
+  await printReceipt(tp.terminalId, tp.reference);
+}
+```
+
+**Key fields on the completed object:**
+
+<TypeTable
+  type={{
+    id: { type: "string", description: "Terminal payment ID. Use for refunds and captures." },
+    amountCaptured: { type: "integer", description: "Amount in smallest currency unit actually captured. For automatic capture equals amount; for manual capture is 0 until capture call." },
+    entryMethod: { type: "'contactless' | 'chip' | 'swipe' | 'manual'", description: "How the card was read." },
+    last4: { type: "string", description: "Last four digits of the PAN." },
+    brand: { type: "string", description: "Card network: 'visa', 'mastercard', 'amex', 'discover', 'unionpay'." },
+    authCode: { type: "string", description: "Issuer authorisation code. Required for chargeback disputes." },
+    tipAmount: { type: "integer", description: "Tip collected at the terminal (if tipping is enabled). Included in amountCaptured." },
+  }}
+/>
+
+---
+
+## Handling `terminal_payment.failed`
+
+A failed event carries a `declineCode`. Use it to decide what to show staff and whether to retry.
+
+```typescript
+if (event.type === 'terminal_payment.failed') {
+  const tp = event.data.object;
+
+  switch (tp.declineCode) {
+    case 'card_declined':
+    case 'insufficient_funds':
+    case 'expired_card':
+      // Soft decline — ask customer to try another card
+      await promptAnotherCard(tp.terminalId, tp.reference);
+      break;
+
+    case 'lost_or_stolen':
+      // Hard decline — do not retry
+      await notifySecurityTeam(tp);
+      break;
+
+    case 'communication_error':
+      // Retry once with a new session
+      await retryPayment(tp.terminalId, tp.amount, tp.currency, tp.reference);
+      break;
+
+    default:
+      await logForReview(tp);
+  }
+}
+```
+
+### Decline code reference
+
+| `declineCode` | Type | Meaning | Recommended action |
+|---|---|---|---|
+| `card_declined` | Soft | Generic issuer decline — no specific reason given | Ask customer to try a different card |
+| `insufficient_funds` | Soft | Insufficient balance or credit limit reached | Ask customer to use a different card |
+| `expired_card` | Soft | Card past expiry date | Ask customer for a current card |
+| `incorrect_pin` | Soft | Wrong PIN entered (after all PIN attempts exhausted) | Ask customer to try a different card |
+| `do_not_honour` | Soft | Issuer decline without specific reason — often a temporary hold | Ask customer to contact their bank or try a different card |
+| `lost_or_stolen` | Hard | Card flagged as lost or stolen by the issuer | Do not retry; follow your security policy |
+| `restricted_card` | Hard | Card restricted by issuer for this merchant category | Do not retry |
+| `fraud_decline` | Hard | Transaction flagged by VINR risk engine or issuer | Do not retry; contact VINR support if unexpected |
+| `invalid_card` | Hard | Card number, expiry, or CVV failed basic validation | Ask customer to try a different card |
+| `communication_error` | Operational | Terminal lost connectivity mid-transaction | Retry once with a new session; check terminal network |
+| `terminal_busy` | Operational | Another session is already active on this terminal | Wait and retry; or route to a different terminal |
+| `terminal_offline` | Operational | Terminal not reachable from VINR cloud | Check terminal power and network; use local mode as fallback |
+| `session_expired` | Operational | Customer did not present card within the timeout window (60 s) | Create a new session when ready |
+| `processing_error` | Operational | Internal VINR error | Retry once; if persistent, contact support |
+
+---
+
+## Handling timeouts and connectivity loss
+
+### Customer timeout
+
+If the customer does not present a card within 60 seconds (default), the terminal cancels the session and VINR fires `terminal_payment.cancelled` with `cancellationReason: "timeout"`. Create a new session when the customer is ready.
+
+The timeout is configurable per terminal under **Dashboard → Hardware → Terminals → [device] → Session settings**.
+
+### Connectivity loss mid-transaction
+
+If the terminal loses its cloud connection while a card interaction is in progress:
+
+- **Cloud mode**: The terminal continues offline authorization if a floor limit is set (see [In-person features — Offline payments](/docs/payments/in-person/features#offline-payments)). The webhook fires once the terminal reconnects.
+- **Local mode**: The transaction completes normally because your server communicates directly with the terminal. The VINR cloud receives the result on next sync.
+
+If connectivity is lost before the card interaction starts, the terminal queues your session and presents it as soon as it reconnects. You receive `terminal_payment.completed` or `terminal_payment.failed` at that point.
+
+---
+
+## Partial authorization
+
+Some debit card issuers approve only part of the requested amount (for example, a $50 transaction approved for $35 because the card has only $35 available). VINR surfaces this as `status: "partially_authorized"` on the terminal payment object.
+
+```typescript
+if (event.type === 'terminal_payment.completed') {
+  const tp = event.data.object;
+
+  if (tp.status === 'partially_authorized') {
+    // tp.amountCaptured < tp.amount
+    const shortfall = tp.amount - tp.amountCaptured;
+    await promptSplitTender(tp.terminalId, tp.reference, shortfall);
+  }
+}
+```
+
+Partial authorization is disabled by default. Enable it under **Dashboard → Settings → Payment processing → Partial authorization**.
+
+---
+
+## Idempotency and deduplication
+
+VINR may deliver the same webhook event more than once (for example, if your endpoint times out and the retry fires). Deduplicate using `event.id`:
+
+```typescript
+const alreadyProcessed = await db.webhookEvents.exists(event.id);
+if (alreadyProcessed) {
+  return new Response(null, { status: 200 });
+}
+
+await db.webhookEvents.insert({ id: event.id, processedAt: new Date() });
+// ... process normally
+```
+
+For the API, every `terminal/payments/create` call accepts an `idempotencyKey` parameter. Retrying with the same key returns the original response without creating a duplicate session.
+
+```typescript
+const tp = await vinr.terminal.payments.create(
+  { terminalId, amount, currency, reference },
+  { idempotencyKey: `order_${reference}_attempt_1` },
+);
+```
+
+---
+
+## Next steps
+
+<Cards>
+  <Card
+    href="/docs/payments/in-person/webhooks"
+    title="Webhooks & notifications"
+    description="Register endpoints, verify signatures, and replay failed events."
+  />
+  <Card
+    href="/docs/payments/in-person/test-your-integration"
+    title="Test your integration"
+    description="Drive specific success and failure scenarios with sandbox terminals and test cards."
+  />
+  <Card
+    href="/docs/payments/in-person/refunds"
+    title="In-person refunds"
+    description="Issue full or partial refunds against a completed terminal payment."
+  />
+</Cards>

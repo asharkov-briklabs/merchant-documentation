@@ -307,6 +307,102 @@ curl -X POST https://api.vinr.com/v1/terminal/locations/loc_01HZ9RSTORE/bulk-con
 Bulk configuration pushes are applied as location-level defaults. Any existing per-terminal overrides remain in place unless you also call `vinr.terminal.terminals.configure` with `clearOverrides: true` on the individual devices.
 </Callout>
 
+## Automate terminal management
+
+For large fleets, use the Management API to automate provisioning, configuration, and monitoring. The patterns below are common starting points.
+
+### Provision terminals from a CI/CD pipeline
+
+If terminals arrive in batches — for example, before a seasonal store opening — automate activation from your deployment pipeline rather than the Dashboard:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+async function provisionBatch(
+  activationCodes: string[],
+  locationId: string,
+) {
+  const results = await Promise.allSettled(
+    activationCodes.map((code, i) =>
+      vinr.terminal.terminals.activate({
+        activationCode: code,
+        locationId,
+        label: `Counter ${i + 1}`,
+      })
+    )
+  );
+
+  const failed = results.filter(r => r.status === 'rejected');
+  if (failed.length > 0) {
+    console.error(`${failed.length} terminals failed to activate`);
+  }
+}
+```
+
+### Monitor fleet health
+
+Subscribe to `terminal.offline` webhooks or poll the list API to keep an operations dashboard up to date. Use `lastSeen` as the primary staleness signal:
+
+```typescript
+const OFFLINE_THRESHOLD_MINUTES = 10;
+
+const { data: terminals } = await vinr.terminal.terminals.list({ limit: 200 });
+
+const offline = terminals.filter(t => {
+  const minutesSinceHeartbeat =
+    (Date.now() - new Date(t.lastSeen).getTime()) / 60_000;
+  return minutesSinceHeartbeat > OFFLINE_THRESHOLD_MINUTES;
+});
+
+if (offline.length > 0) {
+  await alertOpsChannel(
+    `${offline.length} terminals offline: ${offline.map(t => t.id).join(', ')}`
+  );
+}
+```
+
+### Push config changes across all locations
+
+```typescript
+const { data: locations } = await vinr.terminal.locations.list();
+
+await Promise.all(
+  locations.map(loc =>
+    vinr.terminal.locations.bulkConfigure({
+      locationId: loc.id,
+      tipping: { enabled: true, presets: [15, 18, 20] },
+      receipt: { footerText: 'Thank you!' },
+    })
+  )
+);
+```
+
+### Deactivate and reassign returned devices
+
+When a field agent returns a device, deactivate it from the old location and prepare it for reuse:
+
+```typescript
+await vinr.terminal.terminals.action({
+  id: 'term_01HZ5QXYZ',
+  action: 'lock',
+  reason: 'Returned from field agent — pending reassignment',
+});
+
+await vinr.terminal.terminals.action({
+  id: 'term_01HZ5QXYZ',
+  action: 'rotate_keys',
+  reason: 'Pre-reassignment security rotation',
+});
+
+await vinr.terminal.terminals.update({
+  id: 'term_01HZ5QXYZ',
+  locationId: 'loc_warehouse',
+  label: 'Spare — unassigned',
+});
+```
+
 ## Terminal object fields
 
 <TypeTable

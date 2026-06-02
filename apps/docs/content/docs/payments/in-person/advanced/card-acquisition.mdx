@@ -1,0 +1,99 @@
+---
+title: "Card acquisition"
+description: "Capture card data at the terminal without charging — for store-on-file, instalment setup, and account registration."
+persona: ["developer"]
+priority: "P2"
+enterprise: true
+lastUpdated: "2026-06-02"
+---
+
+Card acquisition lets you read and tokenise a customer's card at the terminal without immediately processing a payment. Use this for:
+
+- **Store-on-file**: register a card for future recurring or one-click payments
+- **Instalment plan setup**: capture the card at sign-up, charge on a schedule
+- **Account registration**: link a card to a customer profile without an initial purchase
+
+VINR never returns raw PAN data — the terminal reads the card and returns a reusable token (`paymentMethodId`) that you store and charge later via the standard payments API.
+
+## How it works
+
+1. Create an acquisition session on your backend.
+2. VINR pushes the session to the terminal — the device prompts the customer to tap or insert their card.
+3. The card is read and tokenised. VINR fires `card_acquisition.completed` with the `paymentMethodId`.
+4. You store the `paymentMethodId` and use it for future payments.
+
+No money moves in this flow.
+
+## Create an acquisition session
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const session = await vinr.terminal.cardAcquisitions.create({
+  terminalId: 'term_01HZ5QXYZ',
+  customerId: 'cust_7Kp2x',           // optional — links the card to an existing customer
+  reference: 'onboarding_cust_7Kp2x',
+  purposeMessage: 'Save card for future orders', // shown on the terminal screen
+  consentRequired: true,               // terminal shows a consent screen before reading
+});
+
+// session.id → "acq_01HZ8RSESSION"
+// session.status → "pending"
+```
+
+## Handle the completion event
+
+```typescript
+if (event.type === 'card_acquisition.completed') {
+  const acq = event.data.object;
+
+  await db.customers.update(acq.customerId, {
+    paymentMethodId: acq.paymentMethodId,  // "pm_01HZ8RTOKEN..."
+    cardBrand: acq.brand,                  // "visa"
+    last4: acq.last4,                      // "4242"
+    expMonth: acq.expMonth,                // 12
+    expYear: acq.expYear,                  // 2028
+  });
+}
+```
+
+## Charge the stored card later
+
+Use the `paymentMethodId` as the payment method on any future payment:
+
+```typescript
+// Standard online payment using the stored card
+const payment = await vinr.payments.create({
+  amount: 2500,
+  currency: 'USD',
+  customerId: 'cust_7Kp2x',
+  paymentMethodId: 'pm_01HZ8RTOKEN',
+  offSession: true,  // customer is not present
+  confirm: true,
+});
+```
+
+Or for a future terminal payment with the stored card pre-populated:
+
+```typescript
+const tp = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 2500,
+  currency: 'USD',
+  reference: 'order_9900',
+  paymentMethodId: 'pm_01HZ8RTOKEN', // pre-populate the card
+  captureMethod: 'automatic',
+});
+```
+
+## Consent and compliance
+
+Card acquisition for store-on-file purposes requires explicit cardholder consent:
+
+- Set `consentRequired: true` (the default when `customerId` is provided) — the terminal shows a VINR-managed consent screen before reading the card.
+- Your system must retain the consent record (timestamp, customer ID, `paymentMethodId`).
+- For recurring payments, you must send a `recurringAgreementId` when charging the stored card — this identifies the agreement under which the charge is made.
+
+Card scheme rules (Visa stored credential framework, Mastercard Transaction Identification) are applied automatically when you charge a `paymentMethodId` with `offSession: true`.

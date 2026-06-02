@@ -1,0 +1,115 @@
+---
+title: "Autonomous stores"
+description: "Unattended checkout — card tap to enter, AI-driven item detection, implicit payment at exit."
+persona: ["developer"]
+priority: "P2"
+enterprise: true
+lastUpdated: "2026-06-02"
+---
+
+Autonomous stores remove the checkout step entirely. Customers tap their card at an entry terminal to identify themselves, take items from shelves, and leave — VINR automatically charges the card when they exit based on a basket supplied by your store system.
+
+This integration connects the VINR Terminal API with your computer vision or weight-sensor item-detection system. VINR handles entry authorization, identity linking, and exit payment. You handle item detection and basket assembly.
+
+## Architecture
+
+```
+[Entry terminal] → card tap → VINR creates session
+        ↓
+[Your CV / sensor system] → detects items → sends basket to VINR
+        ↓
+[Exit terminal] → customer taps again OR implicit charge on exit trigger
+        ↓
+[VINR] → charges the card → fires payment.completed webhook
+```
+
+## Entry flow
+
+When a customer approaches the entry gate, present an entry session on the terminal:
+
+```typescript
+const entrySession = await vinr.terminal.autonomousStore.createEntrySession({
+  storeId: 'store_flagship',
+  terminalId: 'term_entry_gate_1',
+  purposeMessage: 'Tap to enter',
+});
+
+// entrySession.id → "entry_01HZ8R..."
+// entrySession.status → "awaiting_card"
+```
+
+When the customer taps their card, VINR fires `autonomous_store.customer_entered`:
+
+```typescript
+if (event.type === 'autonomous_store.customer_entered') {
+  const entry = event.data.object;
+  await yourStore.openSession({
+    sessionId: entry.id,
+    customerId: entry.customerId,  // null if card not recognised as a loyalty customer
+    cardTokenId: entry.cardTokenId,
+    enteredAt: entry.enteredAt,
+  });
+  // Signal your CV system to begin tracking this customer
+}
+```
+
+## Basket update
+
+As your system detects items being picked up or returned, push basket updates to VINR in real time:
+
+```typescript
+await vinr.terminal.autonomousStore.updateBasket({
+  sessionId: 'entry_01HZ8R...',
+  lineItems: [
+    { sku: 'SKU001', description: 'Orange juice 1L', quantity: 1, unitAmount: 350 },
+    { sku: 'SKU042', description: 'Croissant', quantity: 2, unitAmount: 180 },
+  ],
+  subtotal: 710,
+  tax: 71,
+  total: 781,
+});
+```
+
+You can call `updateBasket` as many times as needed during the session. VINR stores the latest basket and uses it at payment time.
+
+## Exit and payment
+
+### Implicit exit (no second tap)
+
+When your system detects the customer leaving (door sensor, barrier break), trigger the exit:
+
+```typescript
+await vinr.terminal.autonomousStore.triggerExit({
+  sessionId: 'entry_01HZ8R...',
+  exitTerminalId: 'term_exit_gate_1',
+});
+```
+
+VINR immediately charges the card from the entry tap for the current basket total and fires `autonomous_store.payment_completed`.
+
+### Explicit exit (second tap)
+
+If your store requires a confirmation tap at exit, set `exitMode: "tap"` when creating the entry session. The exit terminal prompts the customer to tap again, shows the basket total, and charges on confirmation.
+
+## Events reference
+
+| Event | When it fires |
+|---|---|
+| `autonomous_store.customer_entered` | Entry card tap successful |
+| `autonomous_store.basket_updated` | Basket updated via API |
+| `autonomous_store.customer_exited` | Exit triggered (tap or sensor) |
+| `autonomous_store.payment_completed` | Card charged successfully at exit |
+| `autonomous_store.payment_failed` | Card declined at exit |
+| `autonomous_store.session_voided` | Session abandoned (no exit detected within timeout) |
+
+## Empty basket and free exits
+
+If the customer's basket is empty at exit, VINR does not charge the card but still fires `autonomous_store.customer_exited` with `charged: false`. Your system can use this to flag for manual review if expected.
+
+## Handling payment failures at exit
+
+If the exit payment fails (e.g. the card was declined after the entry authorization), VINR fires `autonomous_store.payment_failed`. Handle this in your system — the customer has already left with the goods. Options:
+
+- Send a payment link to the customer's email on file
+- Initiate a retry with an alternative payment method if one is stored
+- Flag for manual follow-up in your accounts receivable system

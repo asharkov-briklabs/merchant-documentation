@@ -1,0 +1,199 @@
+---
+title: "Test your integration"
+description: "Use sandbox terminals and test cards to verify every payment scenario before going live."
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-06-02"
+---
+
+VINR provides a full sandbox environment — no physical hardware required. The sandbox mirrors the live API exactly: same endpoints, same event payloads, same webhook delivery. Switch between environments with your API key prefix (`sk_test_` vs `sk_live_`).
+
+## Sandbox vs live
+
+| | Sandbox | Live |
+|---|---|---|
+| API keys | `sk_test_...` / `pk_test_...` | `sk_live_...` / `pk_live_...` |
+| Terminals | Simulated — no hardware needed | Physical VINR-certified hardware |
+| Payments | Never move real money | Real card transactions |
+| Webhooks | Delivered to your test endpoint | Delivered to your live endpoint |
+| Dashboard | sandbox.dashboard.vinr.com | dashboard.vinr.com |
+
+<Callout type="info">
+Sandbox and live are completely isolated environments. Terminals, API keys, webhooks, and customers created in sandbox do not exist in live, and vice versa.
+</Callout>
+
+---
+
+## Sandbox terminals
+
+Every test account includes three pre-provisioned simulated terminals. You can also create additional simulated terminals via the API.
+
+| Terminal ID | Behaviour |
+|---|---|
+| `term_test_default` | Succeeds for all standard test cards |
+| `term_test_offline` | Simulates a terminal that is offline when the session is created, then comes online after 10 seconds |
+| `term_test_busy` | Returns `terminal_busy` for the first attempt, then succeeds on a retry |
+
+### Create additional sandbox terminals
+
+```typescript
+const terminal = await vinr.terminals.create({
+  label: 'Test counter 1',
+  locationId: 'loc_test_main',
+});
+// terminal.id → "term_test_abc123..."
+```
+
+---
+
+## Test cards
+
+Use these card numbers with any future expiry date (e.g. `12/30`), any 3-digit CVV, and any billing postcode.
+
+### Standard outcomes
+
+| Card number | Outcome | `declineCode` |
+|---|---|---|
+| `4242 4242 4242 4242` | Success — contactless | — |
+| `4000 0000 0000 0077` | Success — chip + PIN | — |
+| `4000 0000 0000 0002` | Declined | `card_declined` |
+| `4000 0000 0000 9995` | Insufficient funds | `insufficient_funds` |
+| `4000 0000 0000 0069` | Expired card | `expired_card` |
+| `4000 0000 0000 0119` | Processing error | `processing_error` |
+| `4000 0000 0000 0259` | Incorrect PIN | `incorrect_pin` |
+| `4000 0000 0000 0341` | Lost or stolen | `lost_or_stolen` |
+| `4000 0000 0000 9979` | Do not honour | `do_not_honour` |
+
+### Feature-specific cards
+
+| Card number | What it tests |
+|---|---|
+| `4000 0000 0000 3220` | Triggers 3D Secure (online payments only) |
+| `4000 0000 0000 0341` | Triggers fraud decline (tests your security policy flow) |
+| `4242 4242 4242 4242` (debit variant) | Partial authorization — approved for 50% of amount |
+| `4000 0000 0000 0101` | DCC eligible — foreign cardholder (EUR card, USD transaction) |
+
+### Network-specific cards
+
+| Card number | Network |
+|---|---|
+| `4242 4242 4242 4242` | Visa |
+| `5555 5555 5555 4444` | Mastercard |
+| `3714 4963 5398 431` | American Express |
+| `6011 1111 1111 1117` | Discover |
+
+---
+
+## Test specific scenarios
+
+### Successful contactless payment
+
+```typescript
+const vinr = new Vinr({ secretKey: 'sk_test_...' });
+
+const tp = await vinr.terminal.payments.create({
+  terminalId: 'term_test_default',
+  amount: 2500,
+  currency: 'USD',
+  reference: 'test_order_001',
+});
+
+// Sandbox auto-completes after ~2 seconds
+// Your webhook receives terminal_payment.completed
+```
+
+### Card declined flow
+
+```typescript
+const tp = await vinr.terminal.payments.create({
+  terminalId: 'term_test_default',
+  amount: 2500,
+  currency: 'USD',
+  reference: 'test_order_002',
+  testCard: '4000000000000002', // card_declined
+});
+
+// Your webhook receives terminal_payment.failed
+// event.data.object.declineCode === 'card_declined'
+```
+
+Use the `testCard` field on sandbox sessions to force a specific card scenario without physical card presentation.
+
+### Terminal offline then recovery
+
+```typescript
+const tp = await vinr.terminal.payments.create({
+  terminalId: 'term_test_offline', // goes online after 10 s
+  amount: 1000,
+  currency: 'USD',
+  reference: 'test_order_003',
+});
+
+// Session stays in 'pending' for ~10 seconds, then auto-completes
+// Useful for testing your UI loading/waiting state
+```
+
+### Timeout (no card presented)
+
+```typescript
+const tp = await vinr.terminal.payments.create({
+  terminalId: 'term_test_default',
+  amount: 1000,
+  currency: 'USD',
+  reference: 'test_order_004',
+  testScenario: 'timeout', // session expires after 5 s in sandbox
+});
+
+// Your webhook receives terminal_payment.cancelled
+// event.data.object.cancellationReason === 'timeout'
+```
+
+---
+
+## Test webhooks locally
+
+Use the VINR CLI to receive sandbox events on your local machine without a public URL:
+
+```bash
+# Install the CLI
+npm install -g @vinr/cli
+
+# Login with your test key
+vinr login --key sk_test_...
+
+# Forward terminal events to your local server
+vinr listen --forward-to localhost:3000/api/webhooks \
+  --events terminal_payment.completed,terminal_payment.failed,terminal_payment.cancelled
+```
+
+The CLI prints each event in real time, shows your server's HTTP response, and highlights signature verification failures.
+
+---
+
+## Sandbox rate limits and quotas
+
+Sandbox has the same rate limits as the live API. There is no additional throttling on test accounts, but sandbox data (terminals, payments, events) is automatically purged after **90 days**.
+
+---
+
+## Checklist before switching to live
+
+Work through the [Go live](/docs/payments/in-person/go-live) checklist — it covers compliance, terminal certification, and the live-mode enablement steps required before processing real card-present transactions.
+
+<Cards>
+  <Card
+    href="/docs/payments/in-person/go-live"
+    title="Go live checklist"
+    description="Everything to verify before switching your integration to live card-present processing."
+  />
+  <Card
+    href="/docs/payments/in-person/handle-responses"
+    title="Handle responses"
+    description="Decline codes, timeouts, partial authorizations, and idempotency."
+  />
+  <Card
+    href="/docs/payments/in-person/webhooks"
+    title="Webhooks & notifications"
+    description="Register endpoints, verify signatures, and replay failed events."
+  />
+</Cards>

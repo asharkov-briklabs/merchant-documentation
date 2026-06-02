@@ -1,0 +1,221 @@
+---
+title: "Webhooks & notifications"
+description: "Subscribe to terminal payment events, verify signatures, and handle retries."
+persona: ["developer"]
+priority: "P0"
+lastUpdated: "2026-06-02"
+---
+
+VINR delivers the result of every terminal transaction as a webhook event — typically within milliseconds of the card interaction completing. Your backend subscribes to these events and uses them to fulfil orders, update inventory, and trigger receipts. Do not poll the terminal payment object for status; use webhooks.
+
+## Register an endpoint
+
+Go to **Dashboard → Developers → Webhooks** and click **Add endpoint**. Enter your HTTPS URL and select the events you want to receive. For in-person payments subscribe to at minimum:
+
+- `terminal_payment.completed`
+- `terminal_payment.failed`
+- `terminal_payment.cancelled`
+
+VINR also sends `terminal_payment.created` and `terminal_payment.updated` if you need visibility into earlier lifecycle stages.
+
+<Callout type="info">
+Your endpoint must respond with `HTTP 200` within **5 seconds**. Move any slow processing (database writes, third-party calls) off the request path — acknowledge immediately, then process asynchronously.
+</Callout>
+
+## Verify the signature
+
+Every request VINR sends to your endpoint includes a `Vinr-Signature` header. Always verify it before trusting the payload — this prevents replay attacks and spoofed events.
+
+<Tabs items={["TypeScript / Node", "Python", "Raw HMAC"]}>
+<Tab value="TypeScript / Node">
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+export async function POST(request: Request) {
+  const rawBody = await request.text();
+  const signature = request.headers.get('Vinr-Signature') ?? '';
+
+  let event;
+  try {
+    event = vinr.webhooks.constructEvent(
+      rawBody,
+      signature,
+      process.env.VINR_WEBHOOK_SECRET,
+    );
+  } catch (err) {
+    return new Response('Invalid signature', { status: 400 });
+  }
+
+  // safe to process event here
+  return new Response(null, { status: 200 });
+}
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+import vinr
+import os
+
+webhook_secret = os.environ['VINR_WEBHOOK_SECRET']
+
+def handle_webhook(request):
+    payload = request.body
+    sig_header = request.headers.get('Vinr-Signature')
+
+    try:
+        event = vinr.Webhook.construct_event(payload, sig_header, webhook_secret)
+    except vinr.error.SignatureVerificationError:
+        return HttpResponse(status=400)
+
+    # safe to process event here
+    return HttpResponse(status=200)
+```
+
+</Tab>
+<Tab value="Raw HMAC">
+
+The signature header has the form `t=<timestamp>,v1=<hmac>`. To verify manually:
+
+1. Extract `t` (Unix timestamp) and `v1` (hex HMAC-SHA256).
+2. Construct the signed payload string: `<t>.<raw_body>`.
+3. Compute `HMAC-SHA256(webhook_secret, signed_payload_string)`.
+4. Compare your digest with `v1` using a constant-time comparison.
+5. Reject if `|now - t| > 300` seconds (replay window).
+
+</Tab>
+</Tabs>
+
+## Terminal payment events
+
+### `terminal_payment.completed`
+
+Fired when the card interaction succeeds and funds are captured (or authorized, for manual capture). This is the event to act on for order fulfilment.
+
+```json
+{
+  "id": "evt_01HZ5QB2CC",
+  "type": "terminal_payment.completed",
+  "createdAt": "2026-06-02T10:14:07Z",
+  "data": {
+    "object": {
+      "id": "tpay_01HZ5QA7BK",
+      "terminalId": "term_01HZ5QXYZ",
+      "amount": 2500,
+      "amountCaptured": 2500,
+      "currency": "USD",
+      "reference": "order_8821",
+      "captureMethod": "automatic",
+      "status": "completed",
+      "entryMethod": "contactless",
+      "last4": "4242",
+      "brand": "visa",
+      "authCode": "123456",
+      "createdAt": "2026-06-02T10:14:00Z",
+      "completedAt": "2026-06-02T10:14:07Z"
+    }
+  }
+}
+```
+
+For manual-capture payments, `status` is `"authorized"` and `amountCaptured` is `0` until you call capture. See [Accept a payment — Capture modes](/docs/payments/in-person/accept-a-payment#capture-modes).
+
+### `terminal_payment.failed`
+
+Fired when the card interaction fails for any reason. Contains a `declineCode` for routing logic. See [Handle responses](/docs/payments/in-person/handle-responses) for the full decline code reference.
+
+```json
+{
+  "id": "evt_01HZ5QB3DD",
+  "type": "terminal_payment.failed",
+  "createdAt": "2026-06-02T10:14:09Z",
+  "data": {
+    "object": {
+      "id": "tpay_01HZ5QA8EE",
+      "terminalId": "term_01HZ5QXYZ",
+      "amount": 2500,
+      "currency": "USD",
+      "reference": "order_8822",
+      "status": "failed",
+      "declineCode": "card_declined",
+      "createdAt": "2026-06-02T10:14:05Z",
+      "failedAt": "2026-06-02T10:14:09Z"
+    }
+  }
+}
+```
+
+### `terminal_payment.cancelled`
+
+Fired when the merchant cancels the session before the customer presents a card, or when the terminal times out waiting for card presentation (default 60 seconds).
+
+### Additional events
+
+| Event | When it fires |
+|---|---|
+| `terminal_payment.created` | Session created on your backend |
+| `terminal_payment.updated` | Capture amount adjusted, metadata changed |
+| `terminal_payment.refunded` | Full or partial refund issued |
+| `terminal.activated` | Terminal registered to your account |
+| `terminal.deactivated` | Terminal removed or factory-reset |
+| `terminal.offline` | Terminal has not checked in for 15 minutes |
+| `terminal.online` | Terminal reconnected after an offline period |
+
+---
+
+## Retry behaviour
+
+If your endpoint does not respond with `HTTP 2xx` within 5 seconds, VINR retries the event on an exponential back-off schedule:
+
+| Attempt | Delay after previous |
+|---|---|
+| 1 (initial) | — |
+| 2 | 5 minutes |
+| 3 | 30 minutes |
+| 4 | 2 hours |
+| 5 | 8 hours |
+| 6 | 24 hours |
+
+After 6 failed attempts the event is marked **undelivered** and appears in the Dashboard under **Developers → Webhooks → [endpoint] → Failed events** where you can replay it manually.
+
+<Callout type="warn">
+Your handler must be **idempotent** — VINR may deliver the same event more than once. Use `event.id` as a deduplication key, not `event.data.object.id`.
+</Callout>
+
+---
+
+## Test webhooks locally
+
+Use the VINR CLI to forward events to your local dev server without a tunnel:
+
+```bash
+# Install the CLI
+npm install -g @vinr/cli
+
+# Forward terminal events to your local server
+vinr listen --forward-to localhost:3000/webhooks/vinr \
+  --events terminal_payment.completed,terminal_payment.failed
+```
+
+The CLI prints each event as it arrives and shows your server's response code, making it easy to debug your handler.
+
+---
+
+## Next steps
+
+<Cards>
+  <Card
+    href="/docs/payments/in-person/handle-responses"
+    title="Handle responses"
+    description="Classify decline codes, manage timeouts, and handle partial authorizations."
+  />
+  <Card
+    href="/docs/payments/in-person/test-your-integration"
+    title="Test your integration"
+    description="Sandbox terminals, test cards, and simulated scenarios."
+  />
+</Cards>

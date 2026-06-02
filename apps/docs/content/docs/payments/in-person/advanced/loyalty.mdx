@@ -1,0 +1,138 @@
+---
+title: "Loyalty"
+description: "Identify returning customers at the terminal, award points, and redeem rewards at checkout."
+persona: ["developer"]
+priority: "P2"
+enterprise: true
+lastUpdated: "2026-06-02"
+---
+
+The VINR Loyalty integration lets you identify returning customers at the terminal, look up their loyalty account, award points on purchase, and redeem rewards as partial payment — all within the card-present flow.
+
+## How it works
+
+<Steps>
+<Step>
+**Customer identification**
+
+The terminal prompts the customer to identify their loyalty account before or after card presentation. Identification methods:
+
+- **Loyalty card scan** — customer taps or swipes a loyalty card (any NFC card or barcode)
+- **Phone number entry** — customer keys in their mobile number on the terminal keypad
+- **QR code scan** — customer presents a QR code from your mobile app (requires a camera-equipped terminal)
+- **Linked card** — the payment card itself is registered as the loyalty identifier (card-linked loyalty)
+</Step>
+
+<Step>
+**Account lookup**
+
+VINR calls your loyalty webhook (`loyalty.lookup`) with the identifier. You return the customer's name, point balance, and any available rewards. This lookup must respond within **3 seconds**.
+</Step>
+
+<Step>
+**Reward offer (optional)**
+
+If the customer has redeemable rewards, the terminal shows them and asks whether to redeem. The customer confirms or skips.
+</Step>
+
+<Step>
+**Payment proceeds**
+
+If rewards are redeemed, they reduce the payment amount before card presentation. VINR processes the remaining balance via card. You receive a `terminal_payment.completed` event with a `loyalty` object attached.
+</Step>
+
+<Step>
+**Points award**
+
+After payment completes, VINR calls your loyalty webhook (`loyalty.award`) with the transaction details. You award points in your system and return the updated balance, which the terminal displays on the receipt.
+</Step>
+</Steps>
+
+## Configure the loyalty webhook
+
+Register your loyalty service URL in **Dashboard → Settings → Loyalty → Webhook endpoint**. VINR signs requests with the same HMAC-SHA256 mechanism as payment webhooks — verify the `Vinr-Signature` header.
+
+### `loyalty.lookup` request
+
+```json
+{
+  "event": "loyalty.lookup",
+  "identifier": { "type": "phone", "value": "+14155551234" },
+  "terminalId": "term_01HZ5QXYZ",
+  "locationId": "loc_01HZ9RSTORE"
+}
+```
+
+**Your response:**
+
+```json
+{
+  "customerId": "cust_7Kp2x",
+  "displayName": "Alex S.",
+  "pointBalance": 1420,
+  "rewards": [
+    {
+      "id": "reward_5off",
+      "label": "$5 off your order",
+      "discountAmount": 500,
+      "currency": "USD",
+      "minOrderAmount": 1000
+    }
+  ]
+}
+```
+
+Return `null` if the customer is not found — the terminal skips the loyalty flow and proceeds to payment.
+
+### `loyalty.award` request
+
+```json
+{
+  "event": "loyalty.award",
+  "customerId": "cust_7Kp2x",
+  "paymentId": "tpay_01HZ5QA7BK",
+  "amountPaid": 4000,
+  "currency": "USD",
+  "rewardsRedeemed": [{ "id": "reward_5off", "discountAmount": 500 }]
+}
+```
+
+**Your response:**
+
+```json
+{
+  "pointsAwarded": 40,
+  "newBalance": 1460
+}
+```
+
+## Create a payment with loyalty
+
+Pass `loyalty.identificationMethod` on the payment create call to specify how the customer will identify themselves:
+
+```typescript
+const terminalPayment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 4500,
+  currency: 'USD',
+  reference: 'order_8821',
+  loyalty: {
+    identificationMethod: 'phone_number', // or 'card_scan', 'qr_code', 'linked_card'
+    promptPosition: 'before_payment',     // or 'after_payment'
+  },
+});
+```
+
+## Reading loyalty data on the completed event
+
+```typescript
+const completed = event.data.object;
+
+if (completed.loyalty) {
+  console.log(completed.loyalty.customerId);        // "cust_7Kp2x"
+  console.log(completed.loyalty.rewardsRedeemed);   // array of redeemed reward IDs
+  console.log(completed.loyalty.discountAmount);    // 500 (cents)
+  console.log(completed.loyalty.pointsAwarded);     // 40
+  console.log(completed.loyalty.newBalance);        // 1460
+}
+```
