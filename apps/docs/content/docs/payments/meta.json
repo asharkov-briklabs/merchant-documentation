@@ -24,6 +24,7 @@
     "payment-operations",
     "---SECURITY & AUTHENTICATION---",
     "tokenization",
+    "network-tokenization",
     "3d-secure",
     "strong-customer-authentication",
     "auto-rescue",

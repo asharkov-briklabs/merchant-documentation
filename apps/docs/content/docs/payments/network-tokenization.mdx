@@ -1,0 +1,210 @@
+---
+title: "Network tokenization & card updaters"
+description: "How VINR uses Visa VTS and Mastercard MDES network tokens and account updater to keep stored cards live and boost authorization rates."
+persona: ["developer", "operations"]
+priority: "P1"
+lastUpdated: "2026-06-02"
+---
+
+When a customer saves a card for future use, two things can silently invalidate it: the card expires or is reissued. Network tokenization and card updaters are the two mechanisms that keep stored cards working without the customer doing anything.
+
+VINR handles both automatically — no configuration is required. This page explains what is happening under the hood, how to observe the lifecycle, and what to do when an update occurs.
+
+---
+
+## Network tokenization
+
+### What it is
+
+Network tokenization (also called scheme tokenization) is a service run by the card schemes themselves — **Visa Token Service (VTS)** and **Mastercard Digital Enablement Service (MDES)**. When you store a card with VINR, VINR acts as a *token requestor* and asks the card scheme to issue a **network token**: a 16-digit surrogate PAN scoped to VINR's merchant ID that travels the authorization rail instead of the real card number.
+
+The scheme maps the network token to the underlying PAN in its own vault. When the cardholder gets a new card number — because their card was lost, stolen, or simply reissued at expiry — the scheme silently updates the mapping. The network token stays the same; your stored `pm_` ID continues to work.
+
+### Why it improves authorization rates
+
+Issuers see network-tokenized credentials as lower risk for three reasons:
+
+1. **Merchant binding** — the network token is cryptographically scoped to VINR's merchant ID. It cannot be used by another merchant even if it is compromised.
+2. **Transaction cryptogram** — each authorization includes a one-time cryptogram generated from the token, similar to EMV chip. Replay attacks are impossible.
+3. **Issuer awareness** — the issuer knows this credential came through a scheme-managed tokenization programme and applies less friction, resulting in fewer soft declines on off-session recurring charges.
+
+Typical authorization rate improvements range from **1–4 percentage points** on off-session charges, concentrated on the card brands and issuers that have rolled out full VTS/MDES support.
+
+### How VINR implements it
+
+When a card is saved to a VINR customer via `setupMethod` or `savePaymentMethod: true`, VINR:
+
+1. Vaults the raw card data in its PCI DSS Level 1 vault and creates a `pm_` identifier.
+2. Immediately requests a network token from the card scheme (Visa or Mastercard).
+3. Once the scheme responds, stores the network token internally and uses it on all future charges against that `pm_` ID.
+
+This is automatic and transparent. Your code doesn't change — you still pass `paymentMethod: 'pm_...'` on charges.
+
+American Express and Discover do not participate in third-party scheme tokenization. Cards from these networks are charged against the raw PAN (still vaulted securely by VINR) and are kept current via the card updater service instead.
+
+### Checking network token status
+
+```typescript
+const pm = await vinr.paymentMethods.retrieve('pm_7Xk4...');
+
+console.log(pm.networkToken.status);       // 'active' | 'inactive' | 'suspended' | 'not_supported'
+console.log(pm.networkToken.scheme);       // 'visa_vts' | 'mastercard_mdes' | null
+console.log(pm.networkToken.lastUpdated);  // ISO 8601 timestamp of last scheme sync
+```
+
+| Status | Meaning |
+|---|---|
+| `active` | Network token is live and will be used on next charge |
+| `inactive` | Token requested but not yet confirmed by the scheme — VINR falls back to raw PAN temporarily |
+| `suspended` | Scheme has suspended the token (e.g. card reported lost) — charges will fail until the scheme reactivates it |
+| `not_supported` | The card's issuer or scheme does not participate in network tokenization — card updater is used instead |
+
+### Network token lifecycle events
+
+Subscribe to `payment_method.network_token.*` events to monitor token health:
+
+| Event | When it fires |
+|---|---|
+| `payment_method.network_token.activated` | Scheme confirms the network token is live |
+| `payment_method.network_token.updated` | Cardholder received a new card; token mapping refreshed by the scheme |
+| `payment_method.network_token.suspended` | Scheme suspended the token (card reported lost/stolen) |
+| `payment_method.network_token.reactivated` | Token restored after a suspension |
+| `payment_method.network_token.deleted` | Token permanently deactivated (account closed) |
+
+```typescript
+if (event.type === 'payment_method.network_token.updated') {
+  const pm = event.data.object;
+  // The stored card is now backed by updated credentials.
+  // No action required — VINR uses the refreshed token automatically.
+  // Log for reconciliation if needed:
+  console.log('Network token refreshed for', pm.customer, 'method', pm.id);
+}
+
+if (event.type === 'payment_method.network_token.suspended') {
+  const pm = event.data.object;
+  // The card has been reported lost or stolen.
+  // Consider pausing subscriptions that reference this method.
+  await suspendSubscriptionsForMethod(pm.id);
+}
+```
+
+---
+
+## Card updater (Account Updater)
+
+### What it is
+
+Card updater (also called Account Updater or Automatic Card Update) is a batch service run by the card networks. Issuers submit updates — new expiry dates, replacement card numbers, account closures — to a network file once per day. VINR ingests these files nightly and applies any matching updates to stored payment methods.
+
+Card updater is the fallback mechanism for cards that are not covered by network tokenization:
+
+- American Express and Discover cards
+- Cards from issuers that haven't enabled VTS/MDES
+- Cards where the network token request was declined by the issuer
+
+### What gets updated
+
+| Update type | What happens | Effect on pm_ ID |
+|---|---|---|
+| **Expiry date change** | Card reissued with a new expiry; old number still valid | Expiry on the `pm_` is updated silently |
+| **Card number replacement** | Issuer reissued with a new PAN (e.g. after fraud) | VINR swaps the underlying PAN; `pm_` ID unchanged |
+| **Account closed** | Cardholder closed their card account | `pm_` is marked `closed`; future charges will fail |
+| **Contact card issuer** | Issuer signals the account needs attention | `pm_` status updated; charge and let the decline code guide you |
+
+### Timeline
+
+Card updater runs as a nightly batch after market close. Updates appear on stored methods within **24–48 hours** of the issuer submitting them to the network file. This is slower than network tokenization (which is real-time) but covers card brands and issuers that don't participate in VTS/MDES.
+
+### Coverage
+
+| Network | Card updater | Network tokenization |
+|---|---|---|
+| Visa | ✓ (Visa Account Updater) | ✓ (VTS) |
+| Mastercard | ✓ (Mastercard Automatic Billing Updater) | ✓ (MDES) |
+| American Express | ✓ (AMEX card refresher) | — |
+| Discover | ✓ | — |
+| Interac | Limited | — |
+
+Coverage within each network depends on issuer participation. Major banks in the US, EU, UK, Canada, and Australia have strong participation rates. Smaller regional banks and credit unions may not submit updates.
+
+### Handling card updater events
+
+Card updater fires the same `payment_method.updated` webhook as network tokenization refreshes. Your handler can treat both sources identically:
+
+```typescript
+if (event.type === 'payment_method.updated') {
+  const pm = event.data.object;
+  const updateSource = pm.lastUpdateSource; // 'network_token' | 'card_updater'
+  const updateType = pm.lastUpdateType;     // 'expiry' | 'pan' | 'closed' | 'contact_issuer'
+
+  if (updateType === 'closed') {
+    // The card account is closed — remove it from the customer's wallet
+    await db.paymentMethods.markClosed(pm.id);
+    await notifyCustomerToUpdatePaymentMethod(pm.customer);
+  }
+
+  if (updateType === 'pan') {
+    // PAN replaced — log for your records; no action needed, VINR handles it
+    console.log('Card number replaced for method', pm.id, 'customer', pm.customer);
+  }
+}
+```
+
+---
+
+## Network tokenization vs card updater — comparison
+
+| | Network tokenization | Card updater |
+|---|---|---|
+| **Timing** | Real-time (token refreshed within seconds of the scheme update) | Nightly batch (24–48 hours) |
+| **Coverage** | Visa and Mastercard only (issuer participation required) | Visa, Mastercard, Amex, Discover |
+| **Auth rate impact** | High (+1–4 pp on off-session charges) | Minimal — prevents declines, doesn't improve approval rates |
+| **Card number replacement** | Handled automatically | Handled in nightly batch |
+| **Expiry update** | Handled automatically | Handled in nightly batch |
+| **Account closure** | `suspended` / `deleted` event | `closed` update type |
+| **Your code change required** | None | None |
+| **VINR preference** | Always used if available | Fallback for unsupported cards |
+
+---
+
+## Testing
+
+In the sandbox, use the following test card numbers to simulate updater scenarios:
+
+| Card number | Simulated update |
+|---|---|
+| `4000 0000 0000 0341` | Network token suspended (card reported lost) |
+| `4000 0000 0000 3220` | Network token updated (card reissued) — fires `payment_method.network_token.updated` |
+| `4000 0000 0000 9979` | Card updater: card number replaced — fires `payment_method.updated` with `updateType: 'pan'` |
+| `4000 0000 0000 0119` | Card updater: account closed — fires `payment_method.updated` with `updateType: 'closed'` |
+
+Trigger a simulated update via the API:
+
+```typescript
+// Sandbox only — simulate a card updater event on a stored method
+await vinr.testHelpers.paymentMethods.simulateUpdate('pm_7Xk4...', {
+  updateType: 'expiry',
+});
+```
+
+---
+
+## Next steps
+
+<Cards>
+  <Card
+    href="/docs/payments/tokenization"
+    title="Tokenization"
+    description="How VINR's vault tokens (pm_) work and how to save, charge, and manage stored methods."
+  />
+  <Card
+    href="/docs/payments/recurring-payments"
+    title="Recurring payments"
+    description="Charge stored tokens on a schedule with proper mandate handling and retry logic."
+  />
+  <Card
+    href="/docs/payments/strong-customer-authentication"
+    title="Strong Customer Authentication"
+    description="When SCA applies to off-session charges and how to handle step-up authentication."
+  />
+</Cards>
