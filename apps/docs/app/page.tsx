@@ -27,7 +27,7 @@ export default function HomePage() {
           }),
         }}
       />
-      <SiteNav t={t} activeKey="docs" fluid />
+      <SiteNav t={t} activeKey="docs" />
 
       {/* Hero */}
       <section className="relative overflow-hidden border-b border-white/[0.06] bg-vinr-900 px-10 pb-20 pt-[72px]">

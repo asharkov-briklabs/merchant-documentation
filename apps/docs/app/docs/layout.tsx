@@ -19,7 +19,7 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   return (
     <SidebarBridgeProvider>
-      <SiteNav t={t} fluid />
+      <SiteNav t={t} />
       <DocsLayout
         tree={tree}
         tabs={false}
