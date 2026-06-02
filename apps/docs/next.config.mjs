@@ -86,6 +86,13 @@ const config = {
       { source: "/docs/api-reference/:path*", destination: "/api-reference/:path*", permanent: false },
       // fumadocs-openapi generates no index page for /api, so redirect root to first operation.
       { source: "/api", destination: "/api/listPayments", permanent: false },
+      // Payments restructure: flat pages moved into subfolders or renamed.
+      { source: "/docs/payments/online-payments", destination: "/docs/payments/payment-page", permanent: false },
+      { source: "/docs/payments/advanced-integrations", destination: "/docs/payments/elements", permanent: false },
+      { source: "/docs/payments/advanced-integrations/:path*", destination: "/docs/payments/elements/:path*", permanent: false },
+      { source: "/docs/payments/refunds", destination: "/docs/payments/payment-operations/refunds-and-cancellations", permanent: false },
+      { source: "/docs/payments/disputes", destination: "/docs/payments/payment-operations/disputes", permanent: false },
+      { source: "/docs/payments/fraud-prevention", destination: "/docs/payments/payment-operations/radar", permanent: false },
     ];
   },
 };

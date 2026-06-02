@@ -1,0 +1,21 @@
+{
+  "title": "Build a payments page",
+  "pages": [
+    "index",
+    "quickstart",
+    "how-checkout-works",
+    "customize-look-and-feel",
+    "collect-additional-information",
+    "collect-taxes",
+    "dynamically-update-checkout",
+    "custom-components",
+    "product-catalog",
+    "subscriptions",
+    "manage-payment-methods",
+    "migrate-payment-methods",
+    "local-currency",
+    "discounts-upsells",
+    "set-up-future-payments",
+    "save-payment-details"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "title": "Custom integration with Elements",
+  "pages": [
+    "index",
+    "quickstart",
+    "vinr-elements",
+    "compare-sessions-intents",
+    "design-advanced-integration",
+    "customize-look-and-feel",
+    "manage-payment-methods",
+    "collect-additional-information",
+    "subscriptions",
+    "dynamic-updates",
+    "add-discounts",
+    "collect-taxes",
+    "collect-surcharges",
+    "redeem-credits"
+  ]
+}

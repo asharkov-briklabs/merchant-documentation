@@ -5,7 +5,12 @@
     "analytics",
     "balances-and-settlement",
     "compliance-and-security",
+    "currencies",
     "declines",
-    "receipts"
+    "disputes",
+    "radar",
+    "payouts",
+    "receipts",
+    "refunds-and-cancellations"
   ]
 }

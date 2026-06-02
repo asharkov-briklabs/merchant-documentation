@@ -49,7 +49,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: "CreditCard",
       },
       {
-        path: "/docs/payments/online-payments",
+        path: "/docs/payments/payment-page",
         label: "Online Payments",
         description: "Cards, wallets, links, and digital payment flows",
         icon: "Globe",
@@ -73,8 +73,8 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: "Wrench",
       },
       {
-        path: "/docs/payments/advanced-integrations",
-        label: "Advanced Integrations",
+        path: "/docs/payments/elements",
+        label: "Custom integration with Elements",
         description: "Custom flows, flexible acquiring, and multiprocessor orchestration",
         icon: "Code2",
       },

@@ -1,0 +1,62 @@
+---
+title: Payment links
+description: Create no-code shareable links to collect payments.
+persona: ["developer", "business-owner"]
+priority: "P0"
+lastUpdated: "2026-06-02"
+---
+
+Payment links let you collect a payment without writing code — create a link, share the URL or QR code, and VINR hosts the entire checkout. They are ideal for invoices over email, social bios, point-of-sale QR codes, and quick one-off requests where standing up a checkout page would be overkill.
+
+## How a link works
+
+A payment link wraps the same `payment` model described in [How payments work](/docs/payments/how-payments-work). When a customer opens the link, VINR creates a fresh `payment` behind the scenes, runs hosted checkout, and redirects to your `returnUrl` (or a default thank-you page) on completion. You never touch card data, and every method enabled on your account — cards, SEPA, iDEAL, stablecoins — appears automatically.
+
+```
+share link → customer opens → VINR creates pay_… → hosted checkout → returnUrl + webhook
+```
+
+## One-time vs. reusable
+
+The `reusable` flag is the single most important choice when creating a link.
+
+<Tabs items={["One-time", "Reusable"]}>
+<Tab value="One-time">
+
+A one-time link accepts exactly one successful payment, then closes. Use it for a specific invoice or a single sale where a second charge would be a mistake.
+
+```typescript
+const invoiceLink = await vinr.paymentLinks.create({
+  amount: 12000,
+  currency: 'EUR',
+  description: 'Invoice 2026-0418',
+  reusable: false,
+  expiresAt: '2026-06-30T23:59:59Z',
+});
+```
+
+</Tab>
+<Tab value="Reusable">
+
+A reusable link stays open and creates a new `payment` for every visitor — perfect for a donation page, a product in a bio, or a counter QR code. Bound it with `maxPayments` or `expiresAt` when you need a hard stop.
+
+```typescript
+const donateLink = await vinr.paymentLinks.create({
+  currency: 'EUR',
+  description: 'Support our work',
+  amountEditable: true,
+  reusable: true,
+  maxPayments: 1000,
+});
+```
+
+</Tab>
+</Tabs>
+
+## Next steps
+
+<Cards>
+  <Card title="Create a payment link" href="/docs/payments/payment-links/create" description="Step-by-step: create your first link from the Dashboard or API." />
+  <Card title="Share a payment link" href="/docs/payments/payment-links/share" description="URLs, QR codes, and buy buttons." />
+  <Card title="Track a payment link" href="/docs/payments/payment-links/track" description="Conversion metrics, webhooks, and metadata." />
+</Cards>

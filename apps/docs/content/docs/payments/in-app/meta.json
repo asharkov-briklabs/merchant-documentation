@@ -1,0 +1,13 @@
+{
+  "title": "Build an in-app integration",
+  "pages": [
+    "index",
+    "payment-sheet",
+    "payment-element",
+    "address-element",
+    "payment-method-messaging",
+    "link-out",
+    "manage-payment-methods",
+    "migrate-confirmation-tokens"
+  ]
+}

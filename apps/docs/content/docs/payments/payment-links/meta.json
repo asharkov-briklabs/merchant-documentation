@@ -1,0 +1,14 @@
+{
+  "title": "Payment links",
+  "pages": [
+    "index",
+    "create",
+    "share",
+    "track",
+    "buy-button",
+    "customize-checkout",
+    "shipping",
+    "promotions",
+    "after-payment"
+  ]
+}

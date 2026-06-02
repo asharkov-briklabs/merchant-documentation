@@ -1,9 +1,9 @@
 ---
-title: Refunds
-description: Return funds fully or partially and track refund status.
+title: Refunds and cancellations
+description: Return funds fully or partially, cancel authorizations, and track refund status.
 persona: ["developer", "finance-manager"]
 priority: "P1"
-lastUpdated: "2026-05-30"
+lastUpdated: "2026-06-02"
 ---
 
 A refund returns captured funds to the customer on the rail the original `payment` used. Refunds are their own object with a `re_` prefix, they settle asynchronously, and they emit dedicated lifecycle events so you never have to poll. This page covers creating refunds, partial and repeated refunds, status and timing, how fees behave, and what to do when a refund fails.
@@ -141,6 +141,6 @@ Test refund failures in sandbox by refunding a charge made with the declined car
 
 <Cards>
   <Card title="Payment lifecycle" href="/docs/payments/payment-lifecycle" description="Every payment status and the events that fire." />
-  <Card title="Disputes & chargebacks" href="/docs/payments/disputes" description="When a customer reverses a card payment instead." />
+  <Card title="Disputes" href="/docs/payments/payment-operations/disputes" description="When a customer reverses a card payment instead." />
   <Card title="Reconciliation" href="/docs/operations/reconciliation" description="How refunds net against your payouts and balance." />
 </Cards>
