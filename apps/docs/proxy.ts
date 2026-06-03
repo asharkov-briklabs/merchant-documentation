@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 /**
  * Per-request Content-Security-Policy with a cryptographic nonce.
  *
- * Why middleware and not next.config headers():
+ * Why proxy and not next.config headers():
  *   Static headers() emits the same CSP string for every request, so any
  *   nonce would be reused — defeating the purpose. Middleware runs on every
  *   request and can generate a fresh nonce each time.

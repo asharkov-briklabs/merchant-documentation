@@ -2,7 +2,15 @@ import * as Sentry from "@sentry/nextjs";
 import { loader } from "fumadocs-core/source";
 import { openapi } from "./openapi";
 
-type ApiSource = ReturnType<typeof loader>;
+// Type-only helper — never called at runtime. Captures the exact return type of
+// loader() when invoked with the openapi source + plugin, which augments PageData
+// with getAPIPageProps(). Using `ReturnType<typeof loader>` without this loses the
+// plugin-specific augmentation and causes a type error at the call site.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _buildApiSource(src: Awaited<ReturnType<typeof openapi.staticSource>>) {
+  return loader(src, { baseUrl: "/api", plugins: [openapi.loaderPlugin()] });
+}
+type ApiSource = ReturnType<typeof _buildApiSource>;
 
 // Returned when the OpenAPI spec fails to parse or the file is missing.
 // Consumers call apiSource.getPage() → null → notFound(), so /api/* pages

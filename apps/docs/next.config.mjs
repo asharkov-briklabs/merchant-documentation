@@ -7,7 +7,7 @@ const withMDX = createMDX();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// CSP is now generated per-request in middleware.ts with a cryptographic nonce,
+// CSP is now generated per-request in proxy.ts with a cryptographic nonce,
 // replacing the static 'unsafe-inline' baseline that was here. The remaining
 // headers below are response-level and don't need to be per-request.
 const securityHeaders = [
@@ -32,21 +32,20 @@ const config = {
   // with `next start` (see Dockerfile / DEPLOYMENT.md) — equally
   // platform-agnostic, no Vercel coupling, and behaves identically to production.
 
-  experimental: {
-    // The Ask-AI retrieval index reads the raw .mdx files from disk at request
-    // time (lib/docs-retrieval.ts). Those paths are computed dynamically, so
-    // Vercel's serverless file-tracing won't bundle `content/` into the
-    // function on its own — without this the assistant silently loses its
-    // grounding in production. `outputFileTracingRoot` points tracing at the
-    // pnpm monorepo root so the relative include resolves correctly.
-    outputFileTracingRoot: join(__dirname, "../.."),
-    outputFileTracingIncludes: {
-      // content/**/* covers the raw .mdx files (still needed for /api/md).
-      // .embeddings/index.json is the pre-built vector index for Ask-AI.
-      "/api/ask": ["./content/**/*", "./.embeddings/index.json"],
-      // The /api/md/* raw-Markdown endpoint reads .mdx from disk too.
-      "/api/md/[[...slug]]": ["./content/**/*"],
-    },
+  // The Ask-AI retrieval index reads the raw .mdx files from disk at request
+  // time (lib/docs-retrieval.ts). Those paths are computed dynamically, so
+  // Vercel's serverless file-tracing won't bundle `content/` into the
+  // function on its own — without this the assistant silently loses its
+  // grounding in production. `outputFileTracingRoot` points tracing at the
+  // pnpm monorepo root so the relative include resolves correctly.
+  // (Promoted from `experimental` in Next.js 16.)
+  outputFileTracingRoot: join(__dirname, "../.."),
+  outputFileTracingIncludes: {
+    // content/**/* covers the raw .mdx files (still needed for /api/md).
+    // .embeddings/index.json is the pre-built vector index for Ask-AI.
+    "/api/ask": ["./content/**/*", "./.embeddings/index.json"],
+    // The /api/md/* raw-Markdown endpoint reads .mdx from disk too.
+    "/api/md/[[...slug]]": ["./content/**/*"],
   },
 
   async headers() {

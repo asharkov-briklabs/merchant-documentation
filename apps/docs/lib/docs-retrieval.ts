@@ -40,7 +40,11 @@ interface EmbeddingsIndex {
 // EMBEDDINGS_INDEX_PATH lets the consuming server (Next.js, Express, etc.) point to
 // wherever the index was written. Must match the path used in generate-embeddings.mjs.
 const EMBEDDINGS_PATH =
-  process.env.EMBEDDINGS_INDEX_PATH ?? join(process.cwd(), ".embeddings", "index.json");
+  process.env.EMBEDDINGS_INDEX_PATH ??
+  // turbopackIgnore: true — path is intentionally dynamic (runtime cwd). The
+  // containing directory is explicitly listed in outputFileTracingIncludes so
+  // Vercel bundles the index file even though Turbopack can't statically trace it.
+  join(process.cwd(), ".embeddings", "index.json");
 
 let indexCache: EmbeddingsIndex | null = null;
 // A single in-flight load promise so concurrent first requests don't double-read.
