@@ -6,6 +6,7 @@
 // Tailwind build (duplicate preflight, duplicate `.hidden`/utilities, duplicate
 // `--fd-*` defaults) that fought our globals.css for cascade order.
 import "./globals.css";
+import { headers } from "next/headers";
 import { RootProvider } from "fumadocs-ui/provider/next";
 import { CATEGORY_TAGS } from "@/lib/taxonomy";
 import { SITE_URL } from "@/lib/site-url";
@@ -38,13 +39,22 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // Read the per-request nonce injected by middleware.ts. Next.js uses the
+  // <meta property="csp-nonce"> tag below to automatically nonce its own
+  // internal hydration and RSC inline scripts, removing the need for
+  // 'unsafe-inline' in script-src for modern browsers.
+  const nonce = (await headers()).get("x-nonce") ?? "";
+
   return (
     <html
       lang="en"
       className={`${inter.variable} ${robotoMono.variable}`}
       suppressHydrationWarning
     >
+      <head>
+        {nonce && <meta property="csp-nonce" content={nonce} />}
+      </head>
       <body className="flex min-h-screen flex-col antialiased">
         <RootProvider search={{ options: { tags: CATEGORY_TAGS } }}>
           {children}

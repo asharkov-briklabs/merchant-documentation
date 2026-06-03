@@ -11,7 +11,7 @@ export const QUICKSTART_STEPS = [
   "/docs/getting-started/test-mode",
 ] as const;
 
-const STORAGE_KEY = "vinr_onboarding";
+const STORAGE_KEY = "vinr-onboarding";
 
 interface OnboardingState {
   completedSteps: string[];

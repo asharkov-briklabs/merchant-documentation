@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { unified } from "unified";
 import remarkParse from "remark-parse";
@@ -349,12 +349,13 @@ const processor = unified()
   .use(remarkStripMdx)
   .use(remarkStringify, { bullet: "-", fences: true });
 
-const FRONTMATTER_RE = /^---\n[\s\S]*?\n---\n?/;
+// \r?\n handles both LF (Unix/CI) and CRLF (Windows) line endings.
+const FRONTMATTER_RE = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/;
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export function pageToMarkdown(page: MarkdownablePage): string {
-  const raw = readFileSync(join(CONTENT_DIR, page.path), "utf8");
+export async function pageToMarkdown(page: MarkdownablePage): Promise<string> {
+  const raw = await readFile(join(CONTENT_DIR, page.path), "utf8");
   // Strip frontmatter before parsing — remarkParse would misread it as <hr> + paragraph.
   const source = raw.replace(FRONTMATTER_RE, "");
   const body = String(processor.processSync(source)).trim();

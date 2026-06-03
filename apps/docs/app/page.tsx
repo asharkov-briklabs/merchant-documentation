@@ -18,6 +18,7 @@ export default function HomePage() {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
+          // Escape </ so a value containing "</script>" can't break out of the tag.
           __html: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "Organization",
@@ -25,7 +26,7 @@ export default function HomePage() {
             description:
               "Multi-rail payment infrastructure for modern businesses.",
             url: SITE_URL,
-          }),
+          }).replace(/<\//g, "<\\/"),
         }}
       />
       <SiteNav t={t} activeKey="docs" />

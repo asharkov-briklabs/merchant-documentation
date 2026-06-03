@@ -13,7 +13,7 @@
     "type-check": "tsc --noEmit",
     "check-links": "node scripts/check-internal-links.mjs",
     "generate": "fumadocs-mdx",
-    "generate:api": "node scripts/generate-api.mjs && fumadocs-mdx",
+    "generate:api": "echo 'generate:api is deprecated — API docs now use openapi.staticSource() directly. See lib/api-source.ts' && exit 1",
     "generate:embeddings": "node scripts/generate-embeddings.mjs"
   },
   "dependencies": {

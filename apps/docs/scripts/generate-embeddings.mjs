@@ -152,16 +152,29 @@ if (chunks.length === 0) {
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-console.log(`[generate-embeddings] Calling OpenAI embeddings API (${MODEL})…`);
+// OpenAI allows up to 2048 inputs per embedMany call. Batch to stay well under
+// that ceiling as the content tree grows.
+const BATCH_SIZE = 500;
+
+console.log(`[generate-embeddings] Embedding ${chunks.length} chunks in batches of ${BATCH_SIZE}…`);
 const t0 = Date.now();
 
-const { embeddings } = await embedMany({
-  model: openai.embedding(MODEL),
-  values: chunks.map((c) => c.inputText),
-  maxRetries: 3,
-});
+const embeddings = [];
+for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+  const batch = chunks.slice(i, i + BATCH_SIZE);
+  const { embeddings: batchEmbeddings } = await embedMany({
+    model: openai.embedding(MODEL),
+    values: batch.map((c) => c.inputText),
+    maxRetries: 3,
+  });
+  embeddings.push(...batchEmbeddings);
+  console.log(
+    `[generate-embeddings] Batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(chunks.length / BATCH_SIZE)} done` +
+    ` (${embeddings.length}/${chunks.length} chunks)`
+  );
+}
 
-console.log(`[generate-embeddings] Received ${embeddings.length} embeddings in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+console.log(`[generate-embeddings] Embedded ${embeddings.length} chunks in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 
 // ─── Build index ─────────────────────────────────────────────────────────────
 

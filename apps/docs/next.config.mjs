@@ -7,32 +7,10 @@ const withMDX = createMDX();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Content Security Policy. Pragmatic baseline — not yet nonce-based:
-//  - `'unsafe-inline'` is required for scripts because Next.js emits inline
-//    hydration/bootstrap scripts and the homepage renders an inline JSON-LD
-//    <script>. Upgrading to nonce-based script-src is a tracked follow-up.
-//  - `'unsafe-inline'` for styles covers Fumadocs/Tailwind/next-font inline
-//    style injection.
-//  - Sentry ingest is allowed in connect-src; everything else is same-origin.
-// webpack dev mode uses eval() for source maps; allow it in development only.
-const isDev = process.env.NODE_ENV === "development";
-
-const csp = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} https://www.googletagmanager.com https://www.clarity.ms`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: https://www.google-analytics.com",
-  "font-src 'self'",
-  "connect-src 'self' https://*.sentry.io https://*.ingest.sentry.io https://*.google-analytics.com https://www.googletagmanager.com https://www.clarity.ms https://c.bing.com",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-  "upgrade-insecure-requests",
-].join("; ");
-
+// CSP is now generated per-request in middleware.ts with a cryptographic nonce,
+// replacing the static 'unsafe-inline' baseline that was here. The remaining
+// headers below are response-level and don't need to be per-request.
 const securityHeaders = [
-  { key: "Content-Security-Policy", value: csp },
   {
     key: "Strict-Transport-Security",
     value: "max-age=63072000; includeSubDomains; preload",
@@ -55,9 +33,6 @@ const config = {
   // platform-agnostic, no Vercel coupling, and behaves identically to production.
 
   experimental: {
-    // Enables instrumentation.ts (Sentry server/edge init) — stable in Next 15,
-    // still flagged in 14.x.
-    instrumentationHook: true,
     // The Ask-AI retrieval index reads the raw .mdx files from disk at request
     // time (lib/docs-retrieval.ts). Those paths are computed dynamically, so
     // Vercel's serverless file-tracing won't bundle `content/` into the
@@ -84,17 +59,20 @@ const config = {
     // /api path is reserved for route handlers like /api/ask). Keep the old
     // /docs/api-reference URLs (inbound links / SEO) working.
     return [
-      { source: "/docs/api-reference", destination: "/api-reference", permanent: false },
-      { source: "/docs/api-reference/:path*", destination: "/api-reference/:path*", permanent: false },
-      // fumadocs-openapi generates no index page for /api, so redirect root to first operation.
+      { source: "/docs/api-reference", destination: "/api-reference", permanent: true },
+      { source: "/docs/api-reference/:path*", destination: "/api-reference/:path*", permanent: true },
+      // fumadocs-openapi generates no index page for /api, so redirect root to the
+      // first operation. Keep permanent:false — if listPayments is ever renamed in
+      // the OpenAPI spec, update this destination to match (and update all inbound
+      // links at the same time, since the operation URL itself changes too).
       { source: "/api", destination: "/api/listPayments", permanent: false },
       // Payments restructure: flat pages moved into subfolders or renamed.
-      { source: "/docs/payments/online-payments", destination: "/docs/payments/payment-page", permanent: false },
-      { source: "/docs/payments/advanced-integrations", destination: "/docs/payments/elements", permanent: false },
-      { source: "/docs/payments/advanced-integrations/:path*", destination: "/docs/payments/elements/:path*", permanent: false },
-      { source: "/docs/payments/refunds", destination: "/docs/payments/payment-operations/refunds-and-cancellations", permanent: false },
-      { source: "/docs/payments/disputes", destination: "/docs/payments/payment-operations/disputes", permanent: false },
-      { source: "/docs/payments/fraud-prevention", destination: "/docs/payments/payment-operations/radar", permanent: false },
+      { source: "/docs/payments/online-payments", destination: "/docs/payments/payment-page", permanent: true },
+      { source: "/docs/payments/advanced-integrations", destination: "/docs/payments/elements", permanent: true },
+      { source: "/docs/payments/advanced-integrations/:path*", destination: "/docs/payments/elements/:path*", permanent: true },
+      { source: "/docs/payments/refunds", destination: "/docs/payments/payment-operations/refunds-and-cancellations", permanent: true },
+      { source: "/docs/payments/disputes", destination: "/docs/payments/payment-operations/disputes", permanent: true },
+      { source: "/docs/payments/fraud-prevention", destination: "/docs/payments/payment-operations/radar", permanent: true },
     ];
   },
 };

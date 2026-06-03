@@ -14,9 +14,12 @@ export const runtime = "nodejs";
 const MODEL = "claude-haiku-4-5";
 
 function getRateLimitKey(req: NextRequest): string {
+  // x-real-ip is injected by Vercel's edge network and cannot be spoofed by the
+  // client. x-forwarded-for is client-controlled and used only as a fallback for
+  // non-Vercel deployments; take the first IP in the list (leftmost = client).
   return (
-    req.headers.get("x-forwarded-for") ??
     req.headers.get("x-real-ip") ??
+    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
     "anonymous"
   );
 }
@@ -115,10 +118,17 @@ function buildSystemPrompt(docs: RetrievedDoc[]): string {
 }
 
 export async function POST(req: NextRequest) {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.ANTHROPIC_API_KEY || !process.env.OPENAI_API_KEY) {
+    Sentry.captureMessage("Ask-AI misconfigured: missing API key(s)", {
+      level: "error",
+      tags: {
+        missing_anthropic: String(!process.env.ANTHROPIC_API_KEY),
+        missing_openai: String(!process.env.OPENAI_API_KEY),
+      },
+    });
     return Response.json(
-      { error: "The assistant is not configured (missing API key)." },
-      { status: 500 }
+      { error: "The assistant is temporarily unavailable. Please try again later." },
+      { status: 503 }
     );
   }
 
@@ -168,7 +178,13 @@ export async function POST(req: NextRequest) {
   }
 
   const lastUser = [...coreMessages].reverse().find((m) => m.role === "user");
-  const docs = await retrieveDocs(lastUser?.content ?? "");
+  let docs: RetrievedDoc[] = [];
+  try {
+    docs = await retrieveDocs(lastUser?.content ?? "");
+  } catch (err) {
+    Sentry.captureException(err, { tags: { feature: "ask-ai", phase: "retrieval" } });
+    console.error("[ask] retrieveDocs error:", err);
+  }
 
   if (docs.length === 0 && lastUser?.content) {
     Sentry.captureMessage("Ask-AI retrieved 0 docs for query", {

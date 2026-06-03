@@ -3,6 +3,7 @@
 import { API_LANGUAGES, useApiRef, type ApiSample, type LangId } from "./api-ref-context";
 import { CopyButton } from "./copy-button";
 
+// Keep in sync with `servers[0].url` in openapi.yaml — both must change together.
 export const API_BASE_URL = "https://api.vinr.com";
 
 /** Auth bootstrap shown in the default rail when a page has no <ApiExample>. */

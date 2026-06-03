@@ -3,6 +3,9 @@
 // rest of the server uses (picked up by log drains / Sentry's console
 // integration). v1 intentionally has no datastore — wiring votes to a real
 // analytics sink / table is a follow-up; the payload shape is stable for that.
+import { NextRequest } from "next/server";
+import { checkFeedbackRateLimit } from "@/lib/rate-limit";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -12,7 +15,20 @@ interface FeedbackBody {
   comment?: unknown;
 }
 
-export async function POST(req: Request) {
+function getRateLimitKey(req: NextRequest): string {
+  return (
+    req.headers.get("x-real-ip") ??
+    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+    "anonymous"
+  );
+}
+
+export async function POST(req: NextRequest) {
+  const limit = await checkFeedbackRateLimit(getRateLimitKey(req));
+  if (!limit.ok) {
+    return new Response("Rate limit exceeded.", { status: 429 });
+  }
+
   let body: FeedbackBody;
   try {
     body = await req.json();

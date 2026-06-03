@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { embed } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
@@ -43,30 +43,34 @@ const EMBEDDINGS_PATH =
   process.env.EMBEDDINGS_INDEX_PATH ?? join(process.cwd(), ".embeddings", "index.json");
 
 let indexCache: EmbeddingsIndex | null = null;
-// Prevents repeated disk reads after an initial failure (e.g. dev without key).
-let loadAttempted = false;
+// A single in-flight load promise so concurrent first requests don't double-read.
+let loadPromise: Promise<EmbeddingsIndex | null> | null = null;
 
-function getIndex(): EmbeddingsIndex | null {
-  if (loadAttempted) return indexCache;
-  loadAttempted = true;
-  try {
-    const parsed = JSON.parse(readFileSync(EMBEDDINGS_PATH, "utf8")) as EmbeddingsIndex;
-    if (parsed.version !== 1 || parsed.dims !== 1536) {
+async function getIndex(): Promise<EmbeddingsIndex | null> {
+  if (indexCache) return indexCache;
+  if (loadPromise) return loadPromise;
+  loadPromise = readFile(EMBEDDINGS_PATH, "utf8")
+    .then((raw) => {
+      const parsed = JSON.parse(raw) as EmbeddingsIndex;
+      if (parsed.version !== 1 || parsed.dims !== 1536) {
+        console.error(
+          "[docs-retrieval] Embeddings index has unexpected version/dims — " +
+          "run pnpm generate:embeddings to rebuild."
+        );
+        return null;
+      }
+      indexCache = parsed;
+      console.log(`[docs-retrieval] Loaded embeddings index: ${parsed.chunks.length} chunks (${parsed.model})`);
+      return indexCache;
+    })
+    .catch(() => {
       console.error(
-        "[docs-retrieval] Embeddings index has unexpected version/dims — " +
-        "run pnpm generate:embeddings to rebuild."
+        `[docs-retrieval] Could not load embeddings index from ${EMBEDDINGS_PATH}. ` +
+        "Run pnpm generate:embeddings to build it. Ask-AI will return empty results."
       );
       return null;
-    }
-    indexCache = parsed;
-    console.log(`[docs-retrieval] Loaded embeddings index: ${parsed.chunks.length} chunks (${parsed.model})`);
-  } catch {
-    console.error(
-      `[docs-retrieval] Could not load embeddings index from ${EMBEDDINGS_PATH}. ` +
-      "Run pnpm generate:embeddings to build it. Ask-AI will return empty results."
-    );
-  }
-  return indexCache;
+    });
+  return loadPromise;
 }
 
 function dotProduct(a: number[], b: number[]): number {
@@ -85,7 +89,7 @@ export async function retrieveDocs(query: string, limit = 5): Promise<RetrievedD
     return [];
   }
 
-  const index = getIndex();
+  const index = await getIndex();
   if (!index) return [];
 
   const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
