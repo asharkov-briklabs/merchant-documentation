@@ -51,7 +51,7 @@ function generateNonce(): string {
   return btoa(binary);
 }
 
-export function middleware(request: NextRequest): NextResponse {
+export function proxy(request: NextRequest): NextResponse {
   const nonce = generateNonce();
   const csp = buildCsp(nonce);
 
