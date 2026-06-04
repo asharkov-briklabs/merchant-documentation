@@ -1,0 +1,10 @@
+{
+  "title": "Wallets",
+  "pages": [
+    "index",
+    "google-pay",
+    "apple-pay",
+    "samsung-pay",
+    "other-wallets"
+  ]
+}

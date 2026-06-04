@@ -1,0 +1,69 @@
+---
+title: Cancel
+description: Void an authorization before capture, releasing the reserved hold immediately.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+A cancellation voids an authorization before any funds are captured. The pending hold on the customer's card is removed immediately — no settlement entry is created and no processing fee is incurred.
+
+Use a cancellation when:
+- An order is cancelled before it ships.
+- A customer switches to a different payment method.
+- A pre-authorization adjustment flow is abandoned.
+
+Use a [refund](/docs/payments/payment-operations/refund) if any amount has already been captured. Use a [reversal](/docs/payments/payment-operations/reverse) if the payment was captured but has not yet settled.
+
+## Cancel via API
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const cancellation = await vinr.payments.void('pay_3Nf8x2a');
+
+// cancellation.status → "cancelled"
+```
+
+```bash
+curl -X POST https://api.vinr.com/v1/payments/pay_3Nf8x2a/void \
+  -H "X-Api-Key: $VINR_SECRET_KEY"
+```
+
+A cancellation only succeeds while the payment is in `authorized` status. If any amount has been captured, the call returns `400` with code `already_captured`.
+
+## Cancel in VINR Dashboard
+
+1. Go to **Dashboard → Payments**.
+2. Open the payment.
+3. Select **Cancel authorization** and confirm.
+
+The payment status moves to `cancelled` immediately.
+
+## Partial cancellation
+
+Card schemes do not support partial voids on most rails. To release part of a hold, capture the amount you intend to keep — the uncaptured remainder is released automatically. See [Capture → Partial captures](/docs/payments/payment-operations/capture#partial-captures).
+
+## Webhooks
+
+| Event | When it fires |
+|---|---|
+| `payment.cancelled` | Authorization successfully voided. |
+
+```typescript
+const event = vinr.webhooks.verify(rawBody, req.headers['x-vinr-signature']);
+
+if (event.type === 'payment.cancelled') {
+  const { paymentId } = event.data;
+  await markOrderCancelled(paymentId);
+}
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Refund" href="/docs/payments/payment-operations/refund" description="Return funds after a payment has already been captured." />
+  <Card title="Reverse" href="/docs/payments/payment-operations/reverse" description="Undo a captured payment before it settles." />
+  <Card title="Capture" href="/docs/payments/payment-operations/capture" description="Move authorized funds to your account." />
+</Cards>

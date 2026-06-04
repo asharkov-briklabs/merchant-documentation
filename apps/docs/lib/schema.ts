@@ -9,17 +9,8 @@ import { z } from "zod";
  *
  * The custom fields are optional: a doc's `category` defaults to its top-level
  * content folder (see the search route), so frontmatter is only needed to
- * override that default or to add persona/priority targeting.
+ * override that default or to add priority targeting.
  */
-
-export const PersonaEnum = z.enum([
-  "developer",
-  "finance-manager",
-  "operations",
-  "compliance-officer",
-  "business-owner",
-  "partner",
-]);
 
 // Must stay in sync with the top-level folders under content/docs. The search
 // route (app/api/search/route.ts) derives a doc's category from its top-level
@@ -52,7 +43,6 @@ export const frontmatterExtension = {
   // (app/api/search/route.ts). Set this only to classify a doc outside its
   // physical folder.
   category: CategoryEnum.optional(),
-  persona: z.array(PersonaEnum).min(1).optional(),
   priority: z.enum(["P0", "P1", "P2"]).default("P1"),
   lastUpdated: z.string().date().optional(),
   // Marks a page as part of the onboarding quickstart funnel. Pages with this
@@ -68,7 +58,6 @@ export const frontmatterExtension = {
   enterprise: z.boolean().optional(),
 };
 
-export type Persona = z.infer<typeof PersonaEnum>;
 export type Category = z.infer<typeof CategoryEnum>;
 export type Priority = "P0" | "P1" | "P2";
 

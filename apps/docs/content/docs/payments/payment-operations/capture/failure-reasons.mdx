@@ -1,0 +1,80 @@
+---
+title: Capture failure reasons
+description: Why a capture can fail after submission, and what action to take in each case.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+A capture can fail in two distinct phases. Failures caught immediately return a `4xx` response with an `error` object — fix the request and resubmit. Failures that occur after submission are reported asynchronously via a `payment.capture.failed` webhook with a `reason` field.
+
+This page covers the asynchronous failures — cases where VINR accepted the capture request (`status: "pending"`) but the card scheme or issuing bank later rejected it.
+
+<Callout type="info">
+The same failure patterns apply to refunds. See [Refund failure reasons](/docs/payments/payment-operations/refund/failure-reasons).
+</Callout>
+
+## Failure scenarios
+
+### Technical issue
+
+**Reason:** `technical_issue`
+
+A transient problem occurred at the card scheme. VINR will automatically attempt to re-capture. If it succeeds you receive a `payment.capture.succeeded` event with `reason: "recaptured"` — no action needed.
+
+If the re-capture does not succeed within 10 days, contact [VINR support](https://vinr.com/support).
+
+### Customer cancelled a recurring payment
+
+**Reason:** `customer_cancelled_recurring`
+
+Applies to subscriptions and stored-credential transactions. The customer instructed their bank to block further charges from your merchant ID before you captured the payment. VINR cannot override this.
+
+Reach out to the customer to update their payment method or reinstate the mandate, then create a new payment.
+
+### Incorrect request
+
+**Reason:** `transaction_not_found` · `account_mismatch`
+
+Causes:
+- The `paymentId` does not exist, is already fully captured, or belongs to a different account.
+- The capture currency does not match the authorized currency.
+
+Verify the `paymentId` and currency, then resubmit.
+
+### Account configuration error
+
+**Reason:** `operation_not_available`
+
+The payment method or capture type requires a capability that has not been enabled on your account. Contact [VINR support](https://vinr.com/support) to enable it.
+
+### Capture expired
+
+**Reason:** `authorization_expired`
+
+The authorization window closed before the capture was submitted. Authorization validity depends on the card scheme and the issuing bank — typically up to 7 days for most cards, shorter for some issuers.
+
+You can re-authorize the card from **Dashboard → Payments → {payment} → Re-authorize**, or ask the customer to complete a new payment.
+
+### Cannot be re-captured
+
+**Reason:** `already_reversed` · `insufficient_balance`
+
+The payment was already fully refunded, reversed, or cancelled. There is no remaining balance. A new payment is required.
+
+## Quick reference
+
+| Reason | Your action |
+|---|---|
+| `technical_issue` | None — VINR retries automatically. Escalate after 10 days. |
+| `customer_cancelled_recurring` | Contact customer; collect a new payment method. |
+| `transaction_not_found` / `account_mismatch` | Verify `paymentId` and currency; resubmit. |
+| `operation_not_available` | Contact VINR support to enable the capability. |
+| `authorization_expired` | Re-authorize via Dashboard or collect a new payment. |
+| `already_reversed` / `insufficient_balance` | Collect a new payment. |
+
+## Next steps
+
+<Cards>
+  <Card title="Capture" href="/docs/payments/payment-operations/capture" description="Configure capture settings and send capture requests." />
+  <Card title="Refund failure reasons" href="/docs/payments/payment-operations/refund/failure-reasons" description="The same failure patterns applied to refunds." />
+</Cards>

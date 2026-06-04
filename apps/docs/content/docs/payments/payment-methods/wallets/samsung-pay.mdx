@@ -1,0 +1,40 @@
+---
+title: Samsung Pay
+description: Accept Samsung Pay for Android customers with VINR.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+Samsung Pay lets customers on compatible Samsung Galaxy devices pay using a card stored in Samsung Wallet, authenticated with a fingerprint or PIN. It works in-browser on Android Chrome and in native Android apps.
+
+## Compatibility
+
+Samsung Pay is available on Samsung Galaxy devices running Android 5.0 or later with Samsung Wallet installed. It appears at checkout automatically for eligible devices when enabled on your VINR account.
+
+## Enabling Samsung Pay
+
+Enable Samsung Pay in the VINR Dashboard under **Settings → Payment methods → Samsung Pay**. No domain verification or additional merchant registration is required — VINR handles the token exchange with Samsung's payment network.
+
+## Payment flow
+
+When a customer selects Samsung Pay at checkout:
+
+1. Samsung Wallet opens (or an in-app sheet appears) displaying the stored card.
+2. The customer authenticates with a fingerprint or PIN.
+3. Samsung generates a one-time payment token and passes it to VINR.
+4. VINR processes the token through the card network and authorizes the payment.
+5. The payment is captured and confirmed; you receive a `payment.completed` webhook.
+
+The `payment_method.card.wallet.type` field is set to `samsung_pay` on the resulting payment. Settlement and refund behavior are identical to a standard card payment.
+
+## Testing
+
+Samsung Pay in the VINR sandbox environment uses Samsung's test mode. Use a Samsung device with Samsung Wallet configured in test mode and a VINR sandbox card for the stored payment method.
+
+## See also
+
+<Cards>
+  <Card title="Wallets overview" href="/docs/payments/payment-methods/wallets" description="How digital wallets work with VINR." />
+  <Card title="Apple Pay" href="/docs/payments/payment-methods/wallets/apple-pay" description="Accept Apple Pay on Safari and iOS." />
+  <Card title="Google Pay" href="/docs/payments/payment-methods/wallets/google-pay" description="Full setup guide for Google Pay." />
+</Cards>

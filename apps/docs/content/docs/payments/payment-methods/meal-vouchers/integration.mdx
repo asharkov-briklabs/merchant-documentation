@@ -1,0 +1,111 @@
+---
+title: In-person & online integration
+description: Enable meal vouchers in the VINR Dashboard, handle split-tender, and test in sandbox.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+Meal vouchers work across the VINR hosted checkout (online) and VINR terminals (in-person). The integration steps differ slightly by surface.
+
+## Enable meal vouchers
+
+1. Go to **Settings → Payment methods** in the VINR Dashboard.
+2. Toggle on the meal voucher providers you want to accept (Sodexo, Up, Swile, Ticket Restaurant).
+3. Confirm that your account's merchant category code (MCC) is food-eligible. If you are unsure, contact VINR support before enabling.
+
+Once enabled, voucher options appear automatically in the hosted checkout for online payments and on VINR terminals for in-person payments.
+
+## Online integration
+
+For the hosted checkout, no additional code is required after enabling in the Dashboard. The voucher option appears alongside cards and other payment methods.
+
+For a custom checkout, pass the provider method value in the `methods` array:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 1800,            // €18.00
+  currency: 'EUR',
+  methods: ['meal_voucher_sodexo', 'meal_voucher_swile', 'card'],
+  description: 'Lunch order #442',
+  returnUrl: 'https://yoursite.com/checkout/complete',
+});
+```
+
+The customer is redirected to the voucher provider's authentication page (or prompted to enter their voucher card number), then returned to your `returnUrl` after approval.
+
+## In-person integration
+
+On a VINR terminal, the customer taps their physical voucher card (Sodexo, Up, Ticket Restaurant) or opens the Swile app for NFC/QR acceptance. The terminal detects the card type automatically and routes to the correct provider.
+
+No additional terminal configuration is required beyond enabling the providers in the Dashboard.
+
+## Split-tender payments
+
+When a customer's voucher balance is less than the order total, you must collect the remainder via a second payment method — typically a card. This is called **split-tender**.
+
+VINR handles split-tender as two sequential payment objects. Create the voucher payment first, then create a card payment for the remainder:
+
+```typescript
+const orderTotal = 2500;  // €25.00
+
+// Step 1: charge what the voucher can cover
+const voucherPayment = await vinr.payments.create({
+  amount: orderTotal,
+  currency: 'EUR',
+  methods: ['meal_voucher_sodexo'],
+  returnUrl: 'https://yoursite.com/split-tender',
+  metadata: { orderId: '442', step: 'voucher' },
+});
+
+// After the customer completes the voucher step, check how much was captured
+// payment.capturedAmount tells you what the voucher covered
+
+// Step 2: charge the remainder to a card
+const remainder = orderTotal - voucherPayment.capturedAmount;
+
+if (remainder > 0) {
+  const cardPayment = await vinr.payments.create({
+    amount: remainder,
+    currency: 'EUR',
+    methods: ['card'],
+    returnUrl: 'https://yoursite.com/checkout/complete',
+    metadata: { orderId: '442', step: 'card' },
+  });
+}
+```
+
+<Callout type="warn">
+Do not fulfil the order until both payments have `payment.completed` webhooks. If the card step fails after the voucher step succeeded, refund the voucher payment before asking the customer to retry.
+</Callout>
+
+## Error codes
+
+| Error code | Meaning |
+|---|---|
+| `voucher_balance_insufficient` | Voucher balance is less than the requested amount — trigger split-tender |
+| `mcc_not_eligible` | Your MCC is not approved for meal voucher acceptance — contact VINR support |
+| `voucher_expired` | The voucher card has expired — ask the customer for a different payment method |
+| `voucher_provider_unavailable` | The provider's network is temporarily unreachable — retry after a short delay |
+
+## Testing in sandbox
+
+In the VINR sandbox, use the following test voucher card numbers to simulate different outcomes:
+
+| Card number | Outcome |
+|---|---|
+| `9999 0000 0000 0001` | Success — full balance covers the payment |
+| `9999 0000 0000 0002` | Partial balance — triggers `voucher_balance_insufficient` |
+| `9999 0000 0000 0003` | Declined — simulates an expired or inactive voucher |
+
+These numbers work for all four providers in sandbox mode.
+
+## See also
+
+<Cards>
+  <Card title="Accepted providers" href="/docs/payments/payment-methods/meal-vouchers/accepted-providers" description="API identifiers, settlement timelines, and provider details." />
+  <Card title="Meal vouchers overview" href="/docs/payments/payment-methods/meal-vouchers" description="How meal vouchers work with VINR." />
+</Cards>

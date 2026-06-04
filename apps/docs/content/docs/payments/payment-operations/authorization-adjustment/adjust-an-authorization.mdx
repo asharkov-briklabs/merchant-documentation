@@ -1,0 +1,191 @@
+---
+title: Adjust an authorization
+description: Pre-authorize a payment, adjust the authorized amount one or more times, then capture the final total.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+This guide walks through the full authorization adjustment flow: placing a pre-authorization, updating the amount, and capturing the final total.
+
+## Requirements
+
+Before you begin:
+
+| Requirement | Detail |
+|---|---|
+| **Manual capture** | Must be enabled — either for your whole account or per payment. See [Capture → Enable manual capture](/docs/payments/payment-operations/capture#enable-manual-capture). |
+| **Webhooks** | Listen for `payment.authorization_adjusted`, `payment.capture.succeeded`, and `payment.capture.failed`. |
+| **Synchronous adjustments** | Available on request. Contact [VINR support](https://vinr.com/support) to enable synchronous mode, which returns the adjustment result immediately rather than via webhook. |
+| **Multiple partial captures** | Available on request. Contact [VINR support](https://vinr.com/support) to enable. |
+
+## Step 1 — Pre-authorize a payment
+
+Create a payment with `captureMethod: 'manual'` and `authorizationType: 'preauth'`. The pre-auth flag tells the issuer this is an estimated hold, not a final charge.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 15000,                   // estimated ceiling in minor units (€150.00)
+  currency: 'EUR',
+  captureMethod: 'manual',
+  authorizationType: 'preauth',
+  description: 'Hotel stay — Room 204',
+  returnUrl: 'https://yoursite.com/checkout/complete',
+  metadata: { reservationId: 'RES-8821' },
+});
+
+// payment.status            → "authorized"  (after the customer completes auth)
+// payment.id                → "pay_3Nf8x2a"
+// payment.amountCapturable  → 15000
+```
+
+```bash
+curl -X POST https://api.vinr.com/v1/payments \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 15000,
+    "currency": "EUR",
+    "captureMethod": "manual",
+    "authorizationType": "preauth",
+    "description": "Hotel stay — Room 204",
+    "returnUrl": "https://yoursite.com/checkout/complete"
+  }'
+```
+
+Save the `payment.id` — you will need it for all subsequent adjustment and capture requests.
+
+## Step 2 — Adjust the authorized amount
+
+Send an amount update whenever the total changes. The `amount` field is the **new total** — not the increment. If you authorized €150.00 and want to add €64.15, send `amount: 21415`.
+
+<Tabs items={["Asynchronous (default)", "Synchronous"]}>
+<Tab value="Asynchronous (default)">
+
+The adjustment is submitted to the issuer and the result arrives via webhook. This is the default mode.
+
+```typescript
+const update = await vinr.payments.updateAmount('pay_3Nf8x2a', {
+  amount: 21415,                     // new total: €214.15
+  currency: 'EUR',
+  industryUsage: 'delayedCharge',    // use for pre-auth flows
+  reference: 'ADJ-8821-1',          // optional — useful for reconciliation
+});
+
+// update.status → "pending"
+// update.id     → "upd_4Kc9r3d..."
+```
+
+```bash
+curl -X POST https://api.vinr.com/v1/payments/pay_3Nf8x2a/amount-updates \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 21415,
+    "currency": "EUR",
+    "industryUsage": "delayedCharge",
+    "reference": "ADJ-8821-1"
+  }'
+```
+
+Wait for the `payment.authorization_adjusted` webhook before making further adjustments or capturing.
+
+```typescript
+const event = vinr.webhooks.verify(rawBody, req.headers['x-vinr-signature']);
+
+if (event.type === 'payment.authorization_adjusted') {
+  const { paymentId, newAmount, success } = event.data;
+  if (success) {
+    // Safe to make further adjustments or capture
+  } else {
+    // Issuer declined the adjustment — handle accordingly
+  }
+}
+```
+
+</Tab>
+<Tab value="Synchronous">
+
+With synchronous mode enabled, the adjustment result is returned immediately in the API response. Contact [VINR support](https://vinr.com/support) to enable this on your account.
+
+```typescript
+const update = await vinr.payments.updateAmount('pay_3Nf8x2a', {
+  amount: 21415,
+  currency: 'EUR',
+  reference: 'ADJ-8821-1',
+});
+
+// update.status → "authorized"  (result is immediate)
+// update.amount → 21415
+```
+
+Store the update result — pass it in subsequent adjustment requests if your account requires it for chained adjustments.
+
+</Tab>
+</Tabs>
+
+You can adjust the amount up to **50 times** on a single payment. After that limit, further updates are declined but the last successfully authorized amount remains capturable.
+
+### Extend the authorization
+
+To extend the validity period without changing the amount, submit an amount update with the same `amount` as the current authorization. This is the standard way to prevent expiry on long-duration holds.
+
+<Callout type="info">
+To extend a Visa or Discover authorization, use the asynchronous flow — those schemes only support asynchronous adjustments for validity extensions.
+</Callout>
+
+### Limitations
+
+- Zero-value amount updates are not permitted.
+- Captures happen asynchronously even after a synchronous adjustment — always check the `payment.capture.succeeded` webhook before confirming fulfilment.
+
+## Step 3 — Capture the final amount
+
+Once all adjustments are complete, capture with the final total.
+
+<Callout type="warn">
+Verify all adjustments are settled before sending the capture. Captures process asynchronously, so it may briefly appear that the authorization is still open.
+</Callout>
+
+```typescript
+const capture = await vinr.payments.capture('pay_3Nf8x2a', {
+  amount: 21415,                 // must match the last authorized amount
+  reference: 'CHECKOUT-8821',
+});
+
+// capture.id     → "cap_9Lr5p8f..."
+// capture.status → "pending"
+```
+
+```bash
+curl -X POST https://api.vinr.com/v1/payments/pay_3Nf8x2a/captures \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "amount": 21415, "reference": "CHECKOUT-8821" }'
+```
+
+Wait for `payment.capture.succeeded`. If `payment.capture.failed` fires, review the `reason` field — see [Capture failure reasons](/docs/payments/payment-operations/capture/failure-reasons).
+
+If the customer wants to pay using a different method before you capture, [cancel](/docs/payments/payment-operations/cancel) the pre-authorization and create a new payment.
+
+## Partial captures in the adjustment flow
+
+You can combine adjustments and partial captures. For example, for a multi-shipment order:
+
+1. Pre-authorize the order ceiling.
+2. Partially capture on first shipment.
+3. Adjust the remaining authorized amount.
+4. Capture again on the second shipment.
+
+The number of partial captures allowed depends on the issuing bank. Contact [VINR support](https://vinr.com/support) to enable multiple partial captures on your account.
+
+## Next steps
+
+<Cards>
+  <Card title="Capture failure reasons" href="/docs/payments/payment-operations/capture/failure-reasons" description="Why a capture can fail after the adjustment flow." />
+  <Card title="Cancel" href="/docs/payments/payment-operations/cancel" description="Void the pre-authorization if the order is abandoned." />
+  <Card title="Authorization Adjustment overview" href="/docs/payments/payment-operations/authorization-adjustment" description="Use cases, limits, and scheme support." />
+</Cards>

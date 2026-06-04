@@ -100,7 +100,6 @@ const BASE_SYSTEM_PROMPT = `You are the VINR Documentation Assistant — an AI t
 Your role:
 - Answer questions about VINR's payment platform, APIs, integration guides, compliance requirements, and operations.
 - Ground every answer in the documentation excerpts provided below, and cite the source pages by their URL (as markdown links) when you use them.
-- Detect the user's persona (developer, finance manager, operations, compliance officer, business owner) and adapt your language accordingly.
 
 Guidelines:
 - Be concise, accurate, and helpful. Use code examples for developer-facing questions.

@@ -1,0 +1,43 @@
+---
+title: Other wallets
+description: Garmin Pay, Fitbit Pay, and additional digital wallet providers supported by VINR.
+priority: P2
+lastUpdated: "2026-06-04"
+---
+
+Beyond Apple Pay, Google Pay, and Samsung Pay, VINR supports additional wallet providers through the same card tokenization pipeline. These wallets follow the same payment flow — a device-generated cryptogram replaces the raw card number — and produce identical API objects and webhooks.
+
+## Supported additional wallets
+
+| Wallet | Compatible devices | Authentication |
+|---|---|---|
+| Garmin Pay | Garmin smartwatches with NFC | PIN on device |
+| Fitbit Pay | Fitbit smartwatches with NFC | PIN on device |
+
+These wallets are primarily used for contactless in-person payments via NFC. Online acceptance is not currently supported for Garmin Pay and Fitbit Pay.
+
+## How they appear in the API
+
+All wallet providers surface through the same `payment_method.card.wallet` field. The `type` property identifies the provider:
+
+```typescript
+// Example payment_method.card.wallet object
+{
+  type: 'garmin_pay',  // 'garmin_pay' | 'fitbit_pay' | 'apple_pay' | 'google_pay' | 'samsung_pay'
+  dynamicLast4: '1234'
+}
+```
+
+Settlement, refunds, and dispute handling are identical to standard card payments regardless of which wallet was used.
+
+## Enabling additional wallets
+
+Additional wallet providers are enabled automatically when VINR processes a contactless NFC payment from a supported device at an in-person terminal. No per-wallet Dashboard configuration is required.
+
+## See also
+
+<Cards>
+  <Card title="Wallets overview" href="/docs/payments/payment-methods/wallets" description="How digital wallets work with VINR." />
+  <Card title="Apple Pay" href="/docs/payments/payment-methods/wallets/apple-pay" description="Accept Apple Pay on Safari and iOS." />
+  <Card title="Samsung Pay" href="/docs/payments/payment-methods/wallets/samsung-pay" description="Accept Samsung Pay on Android." />
+</Cards>

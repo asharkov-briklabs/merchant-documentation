@@ -1,0 +1,174 @@
+---
+title: Capture
+description: Control when authorized funds settle — immediately, on a delay, or manually on fulfilment.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+By default VINR captures funds immediately after authorization. For card payments you can separate the two steps: reserve funds now and transfer them only when you are ready — for example, when an order ships or a hotel stay concludes.
+
+For the basics of placing an authorization, see [Authorize & capture](/docs/payments/authorize-and-capture).
+
+## Types of capture
+
+| Type | How it works |
+|---|---|
+| **Automatic** (default) | Funds captured immediately after authorization. No extra configuration needed. |
+| **Delayed automatic** | Capture happens automatically after a time window you configure. Gives you room to cancel before funds move. |
+| **Manual** | You send a capture request explicitly. Funds move only when you choose. |
+
+Separate capture is supported on card rails. Not all payment methods support it — check the payment method reference for details.
+
+## Set up a capture delay
+
+### VINR Dashboard
+
+Go to **Dashboard → Settings → Payment settings → Capture delay**. Choose **Immediate**, **1 day**, **2 days**, up to **7 days**, then save. The setting applies to every payment on your account that supports separate capture.
+
+To override for a single payment, set `captureDelayHours` in your API request — the per-payment value takes precedence.
+
+### Per payment via API
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 5000,
+  currency: 'EUR',
+  captureDelayHours: 24,    // auto-capture after 24 hours
+  description: 'Order #4821',
+  returnUrl: 'https://yoursite.com/orders/4821',
+});
+```
+
+```bash
+curl -X POST https://api.vinr.com/v1/payments \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 5000,
+    "currency": "EUR",
+    "captureDelayHours": 24,
+    "description": "Order #4821",
+    "returnUrl": "https://yoursite.com/orders/4821"
+  }'
+```
+
+## Enable manual capture
+
+### VINR Dashboard
+
+Go to **Dashboard → Settings → Payment settings → Capture delay** and select **Manual**. Every payment that supports separate capture will wait for an explicit capture call.
+
+To override for a single payment, include `captureMethod: 'manual'` in your create request.
+
+### Per payment via API
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 5000,
+  currency: 'EUR',
+  captureMethod: 'manual',
+  description: 'Order #4821',
+  returnUrl: 'https://yoursite.com/orders/4821',
+});
+
+// payment.status            → "authorized"
+// payment.amountCapturable  → 5000
+// payment.amountCaptured    → 0
+```
+
+## Capture a payment
+
+Once you are ready to fulfil, call capture with the payment ID. Omit `amount` to capture the full authorized total; pass a smaller value for a partial capture.
+
+```typescript
+const capture = await vinr.payments.capture('pay_3Nf8x2a', {
+  amount: 5000,              // omit to capture the full authorized amount
+  reference: 'SHIP-4821',   // optional — echoed in reconciliation reports
+});
+
+// capture.id     → "cap_7Qp2m1c..."
+// capture.status → "pending"
+```
+
+```bash
+curl -X POST https://api.vinr.com/v1/payments/pay_3Nf8x2a/captures \
+  -H "X-Api-Key: $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "amount": 5000, "reference": "SHIP-4821" }'
+```
+
+The response has `status: "pending"` — capture is processed asynchronously. Wait for the `payment.capture.succeeded` or `payment.capture.failed` webhook before acting on the outcome.
+
+## Partial captures
+
+Capture less than the authorized amount by passing an explicit `amount`. The uncaptured remainder is released back to the customer automatically.
+
+<Tabs items={["Single partial", "Multiple partial"]}>
+<Tab value="Single partial">
+
+```typescript
+// Customer authorized €50.00; one item is out of stock.
+const capture = await vinr.payments.capture('pay_3Nf8x2a', {
+  amount: 3500,   // capture €35.00; release €15.00 automatically
+  reference: 'SHIP-4821-PARTIAL',
+});
+```
+
+Any uncaptured remainder is automatically cancelled after the capture settles.
+
+</Tab>
+<Tab value="Multiple partial">
+
+```typescript
+// First shipment — capture €35.00
+await vinr.payments.capture('pay_3Nf8x2a', {
+  amount: 3500,
+  reference: 'SHIP-4821-1',
+});
+
+// Second shipment — capture remaining €15.00
+await vinr.payments.capture('pay_3Nf8x2a', {
+  amount: 1500,
+  reference: 'SHIP-4821-2',
+});
+```
+
+Multiple partial captures keep the uncaptured balance open after each request. Contact [VINR support](https://vinr.com/support) to enable this on your account.
+
+</Tab>
+</Tabs>
+
+## Webhooks
+
+| Event | When it fires |
+|---|---|
+| `payment.capture.succeeded` | Capture validated and submitted to the network. Funds will transfer to your account. |
+| `payment.capture.failed` | Capture rejected — see [Capture failure reasons](/docs/payments/payment-operations/capture/failure-reasons). |
+
+```typescript
+const event = vinr.webhooks.verify(rawBody, req.headers['x-vinr-signature']);
+
+if (event.type === 'payment.capture.succeeded') {
+  const { paymentId, captureId, amount } = event.data;
+  await markOrderFulfilled(paymentId);
+}
+
+if (event.type === 'payment.capture.failed') {
+  const { paymentId, reason } = event.data;
+  await alertOperations(paymentId, reason);
+}
+```
+
+See [Webhooks](/docs/integration/webhooks) for signature verification and setup.
+
+## Next steps
+
+<Cards>
+  <Card title="Capture failure reasons" href="/docs/payments/payment-operations/capture/failure-reasons" description="Why captures fail and what to do in each case." />
+  <Card title="Cancel" href="/docs/payments/payment-operations/cancel" description="Void an authorization before any funds are captured." />
+  <Card title="Authorization Adjustment" href="/docs/payments/payment-operations/authorization-adjustment" description="Increase or decrease the authorized amount before capturing." />
+</Cards>

@@ -1,0 +1,54 @@
+---
+title: Faster checkout
+description: One-tap checkout for returning customers with saved payment methods.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+VINR's faster checkout experience lets returning customers complete a purchase in a single tap by pre-filling their saved payment method at checkout. The customer verifies their identity with a one-time code, then confirms — no card number entry required.
+
+## How it works
+
+1. The customer enters their email address on your checkout form.
+2. If they have previously saved a payment method through a VINR-powered checkout, VINR sends a one-time verification code to their phone.
+3. After entering the code, their saved card or bank account is pre-populated in the payment form.
+4. The customer confirms — one tap completes the payment.
+
+First-time customers are enrolled automatically when they save a payment method during any VINR-powered checkout. Their saved credentials are then available across all VINR merchants that have faster checkout enabled.
+
+## Enabling faster checkout
+
+Faster checkout activates automatically inside the VINR payment components — no additional configuration is required. Mount the payment form as normal:
+
+```typescript
+// Client-side: mount the VINR payment components
+// Faster checkout is included automatically for returning customers
+import { loadVinr } from '@vinr/sdk';
+
+const vinr = await loadVinr('pk_live_...');
+const elements = vinr.elements({ clientSecret });
+
+const paymentElement = elements.create('payment');
+paymentElement.mount('#payment-element');
+```
+
+Faster checkout is also on by default in the VINR hosted checkout. No code changes are needed to benefit from it.
+
+## Customer data management
+
+Customers manage their saved credentials — including saved cards, linked bank accounts, and connected merchants — at `link.vinr.com`. You do not store or manage their faster checkout credentials.
+
+<Callout type="info">
+Removing a merchant from a customer's faster checkout account does not affect PaymentMethod objects already attached to a Customer in the VINR API. Those must be detached separately if the customer requests full removal.
+</Callout>
+
+## Instant bank payments
+
+Customers who have connected a bank account to their VINR profile can use an instant bank rail at checkout — a direct account-to-account transfer rather than a card charge. From your side, settlement works identically to a card payment; the funds arrive in your VINR balance on your normal schedule. No additional integration is required to support this.
+
+## See also
+
+<Cards>
+  <Card title="Save a payment method" href="/docs/payments/payment-methods/manage-payment-methods/save" description="Save during a payment or without charging." />
+  <Card title="Manage payment methods overview" href="/docs/payments/payment-methods/manage-payment-methods" description="The full vault and management guide." />
+</Cards>

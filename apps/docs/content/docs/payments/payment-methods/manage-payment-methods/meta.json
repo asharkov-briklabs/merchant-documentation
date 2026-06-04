@@ -1,0 +1,10 @@
+{
+  "title": "Manage payment methods",
+  "pages": [
+    "index",
+    "save",
+    "update",
+    "automatic-card-updates",
+    "faster-checkout"
+  ]
+}

@@ -1,0 +1,126 @@
+---
+title: Flexible instalments
+description: VINR-managed instalment plans — define the schedule and let VINR collect each payment automatically.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+Flexible instalments are VINR-managed payment plans where you define the schedule — number of instalments, amounts, and due dates — and VINR charges the customer's saved payment method on each due date automatically. Unlike Mastercard Installments, which are managed by the issuing bank, flexible instalments give you full control over the plan structure and surfacing.
+
+## How it works
+
+1. The customer selects a plan at checkout (for example, "Pay in 3 monthly instalments of €150").
+2. VINR collects and saves the customer's payment method.
+3. The first instalment is charged immediately.
+4. VINR charges subsequent instalments automatically on the dates you specify.
+5. You receive a webhook event for each instalment — `instalment.charged` on success or `instalment.failed` on failure.
+
+## Creating an instalment plan
+
+Create an instalment plan when the customer confirms checkout. Provide the total amount, currency, and a schedule of individual charges:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// TODO: confirm SDK resource name with engineering — may be vinr.installmentPlans (US spelling)
+const plan = await vinr.instalmentPlans.create({
+  customer: 'cus_ABC123',
+  paymentMethod: 'pm_XYZ789',
+  description: 'Order #3301 — 3-month plan',
+  currency: 'EUR',
+  instalments: [
+    { amount: 15000, dueDate: '2026-06-04' },   // first — charged immediately
+    { amount: 15000, dueDate: '2026-07-04' },
+    { amount: 15000, dueDate: '2026-08-04' },
+  ],
+  metadata: { orderId: '3301' },
+});
+
+// plan.id     → "ip_ABC..."
+// plan.status → "active"
+```
+
+<Callout type="info">
+Amounts are in minor units — `15000` is €150.00. All instalments in a plan must use the same currency.
+</Callout>
+
+## Webhook events
+
+VINR fires events for each instalment lifecycle change:
+
+| Event | When it fires |
+|---|---|
+| `instalment.charged` | An instalment was successfully charged |
+| `instalment.failed` | An instalment charge failed (insufficient funds, expired card, etc.) |
+| `instalment.plan.completed` | All instalments in the plan were successfully collected |
+| `instalment.plan.cancelled` | The plan was cancelled before completion |
+
+```typescript
+// POST /webhooks/vinr
+const event = vinr.webhooks.verify(rawBody, req.headers['x-vinr-signature']);
+
+if (event.type === 'instalment.charged') {
+  const instalment = event.data;
+  console.log(`Instalment ${instalment.sequence} of ${instalment.plan.total} charged — ${instalment.amount / 100} EUR`);
+}
+
+if (event.type === 'instalment.failed') {
+  // Notify the customer and allow them to update their payment method
+}
+```
+
+## Retry logic
+
+When an instalment charge fails, VINR retries on a configurable schedule (default: 3 attempts over 7 days). If all retries fail, the instalment enters a `failed` state and `instalment.failed` fires with `final: true`. At that point, you can prompt the customer to update their payment method and manually retry:
+
+```typescript
+// TODO: confirm exact method name with engineering — retrying an individual
+// instalment may be vinr.instalmentPlans.retryInstalment() or similar
+await vinr.instalmentPlans.retry('ip_ABC123', {
+  instalmentId: 'inst_ABC123',
+  paymentMethod: 'pm_NEW456',  // optional — use a different payment method
+});
+```
+
+## Cancellation
+
+Cancel an active instalment plan at any time. Cancellation stops future charges; any already-collected instalments are not refunded automatically. Issue refunds separately if required.
+
+```typescript
+await vinr.instalmentPlans.cancel('ip_ABC123', {
+  reason: 'requested_by_customer',
+});
+```
+
+## Early repayment
+
+To let a customer pay off the remaining balance early, charge the outstanding amount in a single payment and then cancel the plan:
+
+```typescript
+const plan = await vinr.instalmentPlans.retrieve('ip_ABC123');
+
+// Sum the remaining instalment amounts
+const remaining = plan.instalments
+  .filter(i => i.status === 'pending')
+  .reduce((sum, i) => sum + i.amount, 0);
+
+await vinr.payments.create({
+  amount: remaining,
+  currency: plan.currency,
+  customer: plan.customer,
+  paymentMethod: plan.paymentMethod,
+  description: `Early repayment — ${plan.description}`,
+});
+
+await vinr.instalmentPlans.cancel('ip_ABC123', { reason: 'early_repayment' });
+```
+
+## See also
+
+<Cards>
+  <Card title="Mastercard Installments" href="/docs/payments/payment-methods/instalments/mastercard-instalments" description="Issuer-managed instalment plans via Mastercard." />
+  <Card title="Manage payment methods" href="/docs/payments/payment-methods/manage-payment-methods" description="Save and update payment methods for instalment charges." />
+  <Card title="Instalments overview" href="/docs/payments/payment-methods/instalments" description="Compare both instalment models." />
+</Cards>

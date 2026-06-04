@@ -1,0 +1,83 @@
+---
+title: Refund failure reasons
+description: Why a refund can fail after submission, and what action to take in each case.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+A refund can fail in two phases. Failures caught immediately return a `4xx` response with an `error` object — fix the request and resubmit. Failures that occur after submission are reported asynchronously via a `refund.failed` event with a `failureReason` field.
+
+This page covers the asynchronous failures — cases where VINR accepted the refund request (`status: "pending"`) but the card scheme or bank later rejected it.
+
+<Callout type="info">
+The same failure patterns apply to captures. See [Capture failure reasons](/docs/payments/payment-operations/capture/failure-reasons).
+</Callout>
+
+## Failure scenarios
+
+### Technical issue
+
+**Reason:** `technical_issue`
+
+A transient problem occurred at the card scheme or bank. VINR will automatically attempt to re-submit the refund. If it succeeds you receive a `refund.succeeded` event — no action needed.
+
+When a refund fails and is subsequently re-submitted, the refunded principal is credited back to your VINR balance in the interim and re-debited if the retry succeeds.
+
+If the re-submission does not succeed within 10 days, contact [VINR support](https://vinr.com/support).
+
+### Customer's account is closed or unreachable
+
+**Reason:** `destination_account_closed` · `destination_unreachable`
+
+The customer's card account has been closed or the destination bank account is no longer reachable. VINR credits the principal back to your VINR balance.
+
+Reach out to the customer for an alternative destination — such as a bank transfer — and issue a new refund using that method.
+
+### Incorrect request
+
+**Reason:** `transaction_not_found` · `currency_mismatch`
+
+Causes:
+- The `paymentId` does not exist or has no remaining refundable balance.
+- The refund currency does not match the original payment currency.
+
+Verify the `paymentId` and currency, then resubmit.
+
+### Account configuration error
+
+**Reason:** `operation_not_available`
+
+The payment method requires a refund capability that has not been enabled on your account. Contact [VINR support](https://vinr.com/support) to enable it.
+
+### Refund window expired
+
+**Reason:** `refund_window_expired`
+
+The maximum period allowed for refunds on this payment method has passed. The window depends on the card scheme — typically 180 days from the original transaction date, but shorter for some methods.
+
+If the customer is entitled to a return, process it outside the payment rail (e.g. bank transfer or store credit) and record it in your reconciliation reports.
+
+### Already fully refunded
+
+**Reason:** `insufficient_balance`
+
+The payment has no remaining refundable balance — it has already been fully refunded or reversed. A new payment is required if additional funds need to be returned.
+
+## Quick reference
+
+| Reason | Your action |
+|---|---|
+| `technical_issue` | None — VINR retries automatically. Escalate after 10 days. |
+| `destination_account_closed` / `destination_unreachable` | Contact customer; collect alternative destination. |
+| `transaction_not_found` / `currency_mismatch` | Verify `paymentId` and currency; resubmit. |
+| `operation_not_available` | Contact VINR support to enable the capability. |
+| `refund_window_expired` | Use an off-rail method (bank transfer, store credit). |
+| `insufficient_balance` | No refundable balance remaining; collect new payment if needed. |
+
+## Next steps
+
+<Cards>
+  <Card title="Refund" href="/docs/payments/payment-operations/refund" description="Create and manage refund requests." />
+  <Card title="Capture failure reasons" href="/docs/payments/payment-operations/capture/failure-reasons" description="The same failure patterns applied to captures." />
+  <Card title="Disputes" href="/docs/payments/payment-operations/disputes" description="When a customer initiates a chargeback instead." />
+</Cards>

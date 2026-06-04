@@ -1,0 +1,41 @@
+---
+title: Instalments
+description: Offer customers the ability to pay in instalments through Mastercard Installments and VINR-managed flexible plans.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+Instalments let customers spread a payment across multiple billing periods rather than paying in full at once. VINR supports two instalment models:
+
+| Model | Who manages it | How it works |
+|---|---|---|
+| **Mastercard Installments** | The issuing bank | Customer's bank splits the charge automatically; you receive the full amount upfront |
+| **Flexible instalments** | VINR | VINR presents a plan at checkout and charges the saved payment method on each due date |
+
+The right model depends on your use case: Mastercard Installments is frictionless for the merchant (no plan management required), while flexible instalments give you full control over schedule and amount.
+
+<Callout type="info">
+In Bulgaria, Mastercard Installments is available through participating issuing banks. Flexible instalments via VINR are also available at launch.
+</Callout>
+
+## How instalment authorization works
+
+For both models, the **full payment amount is authorized upfront** against the customer's card or payment method. The split into instalments happens in the billing layer — not at the network authorization level. This means:
+
+- You are protected against the customer failing to pay later instalments (for bank-managed plans).
+- Authorization and capture behave identically to a standard payment in the VINR API.
+- The `payment` object reflects the total amount, not the per-instalment amount.
+
+## In this section
+
+<Cards>
+  <Card title="Mastercard Installments" href="/docs/payments/payment-methods/instalments/mastercard-instalments" description="Issuer-managed instalment plans via the Mastercard Installments program." />
+  <Card title="Flexible instalments" href="/docs/payments/payment-methods/instalments/flexible-instalments" description="VINR-managed instalment plans with full schedule control." />
+</Cards>
+
+## See also
+
+<Cards>
+  <Card title="Cards" href="/docs/payments/payment-methods/cards" description="The card rail that powers instalment payments." />
+  <Card title="Manage payment methods" href="/docs/payments/payment-methods/manage-payment-methods" description="Save payment methods for future instalment charges." />
+</Cards>

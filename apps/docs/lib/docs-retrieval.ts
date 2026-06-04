@@ -69,6 +69,10 @@ async function getIndex(): Promise<EmbeddingsIndex | null> {
         `[docs-retrieval] Could not load embeddings index from ${EMBEDDINGS_PATH}. ` +
         "Run pnpm generate:embeddings to build it. Ask-AI will return empty results."
       );
+      // loadPromise stays set to this resolved-null promise — getIndex() will
+      // return null for the lifetime of this process with no retry. This is
+      // intentional: the index is a build artifact and won't appear mid-flight.
+      // Recovery requires a redeploy (or restart in local dev).
       return null;
     });
   return loadPromise;

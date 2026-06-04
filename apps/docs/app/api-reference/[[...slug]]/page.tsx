@@ -39,6 +39,7 @@ export default async function ApiReferencePage(props: {
     <>
       <script
         type="application/ld+json"
+        suppressHydrationWarning
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <header className="mb-8 flex items-start justify-between gap-4 border-b border-white/[0.08] pb-6">

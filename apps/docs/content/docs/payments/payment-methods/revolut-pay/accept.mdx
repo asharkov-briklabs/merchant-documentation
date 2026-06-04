@@ -1,0 +1,83 @@
+---
+title: Accept Revolut Pay
+description: Enable Revolut Pay on your VINR account and add it to your checkout.
+priority: P0
+lastUpdated: "2026-06-04"
+---
+
+Revolut Pay works with the VINR hosted checkout — no custom UI is required. Once enabled, the Revolut Pay button appears automatically for eligible customers.
+
+## Enable Revolut Pay
+
+Go to **Settings → Payment methods** in the VINR Dashboard and toggle **Revolut Pay** to enabled. There is no additional merchant registration or API key required.
+
+## Hosted checkout (no code)
+
+Once enabled, Revolut Pay appears in the VINR hosted checkout alongside cards and other active payment methods. Customers with a Revolut account will see it automatically.
+
+## API integration
+
+To create a payment that includes Revolut Pay as an option, pass `revolut_pay` in the `methods` array, or use `auto` to let VINR surface it when appropriate:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 3200,
+  currency: 'EUR',
+  description: 'Order #2087',
+  methods: ['revolut_pay', 'card'],   // or omit methods for auto
+  returnUrl: 'https://yoursite.com/checkout/complete',
+  metadata: { orderId: '2087' },
+});
+
+// Redirect the customer to payment.checkoutUrl
+```
+
+To restrict a checkout to Revolut Pay only — for example, on a dedicated campaign page:
+
+```typescript
+const payment = await vinr.payments.create({
+  amount: 3200,
+  currency: 'EUR',
+  description: 'Order #2087',
+  methods: ['revolut_pay'],
+  returnUrl: 'https://yoursite.com/checkout/complete',
+});
+```
+
+## Handling the return
+
+After the customer approves or cancels in Revolut, they are redirected to your `returnUrl` with a `payment_id` query parameter. Always confirm the final state from the webhook rather than the URL parameter:
+
+```typescript
+// POST /webhooks/vinr
+const event = vinr.webhooks.verify(rawBody, req.headers['x-vinr-signature']);
+
+if (event.type === 'payment.completed') {
+  const payment = event.data;
+  // payment.method → "revolut_pay"
+  await fulfillOrder(payment.metadata.orderId);
+}
+
+if (event.type === 'payment.failed') {
+  // Customer cancelled or Revolut declined — surface an error and allow retry
+}
+```
+
+## Testing in sandbox
+
+In the VINR sandbox, the Revolut Pay redirect opens a VINR test page where you choose **Approve** or **Decline** instead of the real Revolut app. No Revolut account is needed for sandbox testing.
+
+<Callout type="info">
+Revolut Pay sandbox approvals resolve immediately — there is no delay simulating Revolut's confirmation. In production, confirmation typically takes under 2 seconds.
+</Callout>
+
+## See also
+
+<Cards>
+  <Card title="Refunds & disputes" href="/docs/payments/payment-methods/revolut-pay/refunds" description="Refund Revolut Pay payments and handle disputes." />
+  <Card title="Revolut Pay overview" href="/docs/payments/payment-methods/revolut-pay" description="How Revolut Pay works." />
+</Cards>

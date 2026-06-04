@@ -1,0 +1,49 @@
+---
+title: Authorization Adjustment
+description: Increase or decrease a pre-authorized amount before you capture — used for hospitality, fuel, and variable-total orders.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+Authorization adjustment lets you change the authorized amount after the initial hold is placed, before you capture. The issuer updates the reserved amount on the customer's card — no new authorization is needed.
+
+## When to use it
+
+| Use case | What happens |
+|---|---|
+| Hotel pre-authorization | Place a hold at check-in; add room service and minibar charges before checking out. |
+| Fuel / fleet cards | Authorize an estimated amount at the pump; adjust down to the exact fill amount. |
+| Variable-total orders | Reserve a ceiling at checkout; adjust to the final total once it is confirmed. |
+| Extended stay | Extend the authorization validity period to prevent expiry on long bookings. |
+
+Authorization adjustment is supported on card rails. Support is ultimately determined by the issuing bank — some issuers decline adjustments.
+
+<Callout type="info">
+Pre-authorizations and adjustments expire. The validity window depends on the card scheme and issuer — typically up to 7 days. Use the adjustment flow to extend validity when needed.
+</Callout>
+
+## How it works
+
+The flow has three steps:
+
+1. **Pre-authorize** — create a payment with `captureMethod: 'manual'` and flag it as a pre-authorization.
+2. **Adjust** — update the authorized amount one or more times as the final total becomes known.
+3. **Capture** — capture the final amount once fulfilment is complete.
+
+Each adjustment request returns the new authorized amount. Adjustments can increase or decrease the hold, and VINR supports both asynchronous and synchronous adjustment flows.
+
+See [Adjust an authorization](/docs/payments/payment-operations/authorization-adjustment/adjust-an-authorization) for the full step-by-step implementation guide.
+
+## Limits
+
+- Maximum of 50 adjustments per payment transaction. After that, further adjustment requests are declined; the last successfully authorized amount remains capturable.
+- Zero-value adjustments are not permitted.
+- Adjustment support varies by card scheme and Merchant Category Code (MCC).
+
+## Next steps
+
+<Cards>
+  <Card title="Adjust an authorization" href="/docs/payments/payment-operations/authorization-adjustment/adjust-an-authorization" description="Step-by-step: pre-authorize, adjust the amount, and capture." />
+  <Card title="Capture" href="/docs/payments/payment-operations/capture" description="Capture the final authorized amount." />
+  <Card title="Cancel" href="/docs/payments/payment-operations/cancel" description="Void the pre-authorization if the order is abandoned." />
+</Cards>

@@ -16,6 +16,7 @@ import type { ReactNode } from "react";
 import { AskAIPanel } from "./components/ask-ai-panel";
 import { AnalyticsScripts } from "./components/analytics-scripts";
 import { PageViewTracker } from "./components/page-view-tracker";
+import { DevWarningFilter } from "./components/dev-warning-filter";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -62,6 +63,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <AskAIPanel />
         <AnalyticsScripts />
         <PageViewTracker />
+        <DevWarningFilter />
       </body>
     </html>
   );

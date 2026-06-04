@@ -2,6 +2,11 @@
   "title": "Payment operations",
   "pages": [
     "index",
+    "capture",
+    "cancel",
+    "refund",
+    "reverse",
+    "authorization-adjustment",
     "analytics",
     "balances-and-settlement",
     "compliance-and-security",
@@ -10,7 +15,6 @@
     "disputes",
     "radar",
     "payouts",
-    "receipts",
-    "refunds-and-cancellations"
+    "receipts"
   ]
 }

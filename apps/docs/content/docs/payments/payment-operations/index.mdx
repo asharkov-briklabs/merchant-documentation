@@ -7,12 +7,21 @@ lastUpdated: "2026-06-01"
 
 Running payments in production means more than processing individual transactions. The operational layer covers the tools and practices you need to understand payment performance, keep cash flowing predictably, and meet compliance obligations without surprises.
 
-This section covers observability — acceptance rates, authentication performance, and optimization signals — alongside the practical mechanics of balances and settlement timing, compliance obligations, decline diagnosis, and automated receipts. For dispute handling, refund workflows, and fraud prevention, see [Disputes](/docs/payments/disputes), [Refunds](/docs/payments/refunds), and [Fraud prevention](/docs/payments/fraud-prevention).
+This section covers modifying payments after authorization, observability, cash flow management, and compliance. For fraud prevention, see [Fraud prevention](/docs/payments/fraud-prevention).
 
-## Pages in this section
+## Modify a payment
+
+- **[Capture](/docs/payments/payment-operations/capture)** — Control when authorized funds settle: immediately, on a delay, or manually on fulfilment.
+- **[Cancel](/docs/payments/payment-operations/cancel)** — Void an authorization before capture to release the hold immediately.
+- **[Refund](/docs/payments/payment-operations/refund)** — Return captured funds fully or partially after settlement.
+- **[Reverse](/docs/payments/payment-operations/reverse)** — Undo a captured payment before it settles — faster than a refund.
+- **[Authorization Adjustment](/docs/payments/payment-operations/authorization-adjustment)** — Increase or decrease a pre-authorized amount before capturing.
+
+## Observe and manage
 
 - **[Analytics](/docs/payments/payment-operations/analytics)** — Acceptance rates, 3DS performance, and optimization signals surfaced by VINR.
 - **[Balances and settlement time](/docs/payments/payment-operations/balances-and-settlement)** — How funds move through your VINR balance before reaching your bank, including timing by payment method and payout options.
 - **[Compliance and security](/docs/payments/payment-operations/compliance-and-security)** — PCI DSS, SCA, sanctions screening, and data storage rules — what VINR handles and what you own.
 - **[Declines](/docs/payments/payment-operations/declines)** — Types of declines, how to read the outcome object, and recovery strategies by decline type.
+- **[Disputes](/docs/payments/payment-operations/disputes)** — Respond to chargebacks and retrievals.
 - **[Receipts](/docs/payments/payment-operations/receipts)** — Automatic email receipts: how to configure, customize, and suppress them.

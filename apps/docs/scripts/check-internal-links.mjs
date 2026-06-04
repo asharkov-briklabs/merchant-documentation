@@ -79,11 +79,36 @@ for (const [, label, rawPath] of navText.matchAll(NAV_ITEM_RE)) {
   navBroken.push({ label, rawPath });
 }
 
-const totalBroken = broken.size + navBroken.length;
+// ── next.config.mjs redirect destinations ────────────────────────────────────
+// The redirects() array in next.config.mjs contains hand-maintained /docs/...
+// destination paths that silently rot when content is renamed. The generic
+// source-file scan above skips next.config.mjs (it's .mjs, not .ts/.tsx), so
+// stale redirect destinations pass CI undetected. This third pass closes that
+// gap by extracting every destination: "..." value and validating it.
+const CONFIG_FILE = join(ROOT, "next.config.mjs");
+const configText = readFileSync(CONFIG_FILE, "utf8");
+const REDIRECT_DEST_RE = /destination:\s*["']([^"']+)["']/g;
+const redirectBroken = []; // { destination, source }
+
+// Also capture source: so the error output names the broken redirect clearly.
+// We walk source/destination pairs by matching them in order of appearance.
+const REDIRECT_PAIR_RE =
+  /source:\s*["']([^"']+)["'][^}]{0,300}?destination:\s*["']([^"']+)["']/gs;
+
+for (const [, source, destination] of configText.matchAll(REDIRECT_PAIR_RE)) {
+  if (!destination.startsWith("/docs")) continue; // skip /api-reference etc.
+  if (destination.includes(":")) continue; // skip wildcard/param destinations (e.g. :path*)
+  const docPath = destination.split("#")[0]; // strip any anchor
+  if (resolves(docPath)) continue;
+  redirectBroken.push({ source, destination });
+}
+
+const totalBroken = broken.size + navBroken.length + redirectBroken.length;
 
 if (totalBroken === 0) {
   console.log("✔ internal docs links: all resolve to content pages");
   console.log("✔ nav-taxonomy.ts paths: all resolve to content pages");
+  console.log("✔ next.config.mjs redirect destinations: all resolve to content pages");
   process.exit(0);
 }
 
@@ -104,9 +129,18 @@ if (navBroken.length > 0) {
   }
 }
 
+if (redirectBroken.length > 0) {
+  console.error(
+    `\n✖ ${redirectBroken.length} redirect destination(s) in next.config.mjs point to missing content pages:\n`
+  );
+  for (const { source, destination } of redirectBroken) {
+    console.error(`  ${destination}  (redirected from: ${source})`);
+  }
+}
+
 console.error(
   "\nEither create the content page or update the link. These links are hand-" +
-    "maintained (lib/nav-taxonomy.ts, app/[locale]/page.tsx) and not derived\n" +
+    "maintained (lib/nav-taxonomy.ts, app/[locale]/page.tsx, next.config.mjs) and not derived\n" +
     "from the content tree, so this guard is the only thing catching the drift."
 );
 process.exit(1);

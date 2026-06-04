@@ -8,7 +8,7 @@ interface SidebarBridge {
   setOpen: (v: boolean) => void;
 }
 
-// Null = no sidebar exists on this page (home, ask, personas, etc.)
+// Null = no sidebar exists on this page (home, ask, etc.)
 const BridgeCtx = createContext<SidebarBridge | null>(null);
 
 /**

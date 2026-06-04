@@ -1,0 +1,85 @@
+---
+title: Update & replace
+description: What can be changed on a saved payment method via the API, and when to re-collect card details from the customer.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+Not all card fields can be updated via the API. Understanding the distinction between fields you can update in place and fields that require re-collection prevents unnecessary friction in customer-facing flows.
+
+## What can be updated
+
+The following fields can be updated on a saved card without asking the customer to re-enter their full card details:
+
+- Name on card
+- Billing address
+- Expiration date
+- Metadata
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+await vinr.paymentMethods.update('pm_XYZ789', {
+  billingDetails: {
+    name: 'Alex Ivanov',
+    address: {
+      line1: '15 Vitosha Blvd',
+      city: 'Sofia',
+      postalCode: '1000',
+      country: 'BG',
+    },
+  },
+  card: {
+    expMonth: 12,
+    expYear: 2029,
+  },
+});
+```
+
+## When to re-collect card details
+
+Any change involving the card number (PAN) cannot be made via the API — it requires re-collecting full card details from the customer and creating a new `PaymentMethod`. This applies to:
+
+- A customer wants to use a different card entirely.
+- The card was replaced with a new number (not handled by automatic updates — see [Automatic card updates](/docs/payments/payment-methods/manage-payment-methods/automatic-card-updates)).
+- The card brand changed (for example, Visa re-issued as Mastercard).
+
+When re-collecting, use a Setup flow to vault the new card and then detach the old payment method:
+
+```typescript
+// After new PaymentMethod is vaulted via Setup flow:
+const newMethod = 'pm_NEW456';
+
+// Set it as default for future charges
+await vinr.customers.update('cus_ABC123', {
+  invoiceSettings: {
+    defaultPaymentMethod: newMethod,
+  },
+});
+
+// Detach the old method
+await vinr.paymentMethods.detach('pm_OLD789');
+```
+
+## Changing the default payment method
+
+To change which payment method is used for recurring charges and invoices, update the customer's `invoice_settings.default_payment_method`:
+
+```typescript
+await vinr.customers.update('cus_ABC123', {
+  invoiceSettings: {
+    defaultPaymentMethod: 'pm_XYZ789',
+  },
+});
+```
+
+This change applies to all future charges against this customer. In-flight charges that have already been created are not affected.
+
+## See also
+
+<Cards>
+  <Card title="Save a payment method" href="/docs/payments/payment-methods/manage-payment-methods/save" description="Save during a payment or without charging." />
+  <Card title="Automatic card updates" href="/docs/payments/payment-methods/manage-payment-methods/automatic-card-updates" description="How VINR automatically refreshes card details on re-issuance." />
+</Cards>

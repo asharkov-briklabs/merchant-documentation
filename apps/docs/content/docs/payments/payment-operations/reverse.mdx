@@ -1,0 +1,73 @@
+---
+title: Reverse
+description: Undo a captured payment before it settles — faster than a refund because funds never leave the issuer.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+A reversal undoes a captured payment on the same business day, before settlement completes. Because the funds have not yet moved out of the issuer's holding, a reversal resolves faster than a standard refund — typically within hours rather than days.
+
+| Operation | When to use | Timing |
+|---|---|---|
+| [Cancel](/docs/payments/payment-operations/cancel) | Authorization not yet captured | Immediate |
+| **Reverse** | Captured, not yet settled (same day) | Hours |
+| [Refund](/docs/payments/payment-operations/refund) | Already settled | 5–10 business days (cards) |
+
+<Callout type="info">
+The reversal window is typically the same business day as the capture. Once settlement runs, the payment can no longer be reversed — use a refund instead.
+</Callout>
+
+## Reverse via API
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const reversal = await vinr.payments.reverse('pay_3Nf8x2a');
+
+// reversal.status → "pending"
+```
+
+```bash
+curl -X POST https://api.vinr.com/v1/payments/pay_3Nf8x2a/reverse \
+  -H "X-Api-Key: $VINR_SECRET_KEY"
+```
+
+The response has `status: "pending"` — the reversal is processed asynchronously. If the settlement window has already closed, VINR automatically converts the reversal into a standard refund and you receive a `refund.created` event instead.
+
+## Reverse in VINR Dashboard
+
+1. Go to **Dashboard → Payments**.
+2. Open the payment.
+3. Select **Reverse** and confirm.
+
+The option is only shown while the payment is eligible for reversal. If the window has passed, the button is replaced by **Refund**.
+
+## Webhooks
+
+| Event | When it fires |
+|---|---|
+| `payment.reversed` | Reversal accepted and processed. |
+| `refund.created` | Settlement window closed — VINR converted the reversal to a standard refund. |
+
+```typescript
+const event = vinr.webhooks.verify(rawBody, req.headers['x-vinr-signature']);
+
+switch (event.type) {
+  case 'payment.reversed':
+    await markOrderReversed(event.data.paymentId);
+    break;
+  case 'refund.created':
+    // Reversal converted to refund — track the refund lifecycle instead
+    await trackRefund(event.data.id);
+    break;
+}
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Refund" href="/docs/payments/payment-operations/refund" description="Return funds after settlement completes." />
+  <Card title="Cancel" href="/docs/payments/payment-operations/cancel" description="Void an authorization before capture." />
+</Cards>

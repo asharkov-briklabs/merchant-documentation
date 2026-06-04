@@ -7,7 +7,7 @@ const withMDX = createMDX();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// CSP is now generated per-request in proxy.ts with a cryptographic nonce,
+// CSP is now generated per-request in middleware.ts with a cryptographic nonce,
 // replacing the static 'unsafe-inline' baseline that was here. The remaining
 // headers below are response-level and don't need to be per-request.
 const securityHeaders = [
@@ -69,7 +69,7 @@ const config = {
       { source: "/docs/payments/online-payments", destination: "/docs/payments/payment-page", permanent: true },
       { source: "/docs/payments/advanced-integrations", destination: "/docs/payments/elements", permanent: true },
       { source: "/docs/payments/advanced-integrations/:path*", destination: "/docs/payments/elements/:path*", permanent: true },
-      { source: "/docs/payments/refunds", destination: "/docs/payments/payment-operations/refunds-and-cancellations", permanent: true },
+      { source: "/docs/payments/refunds", destination: "/docs/payments/payment-operations/refund", permanent: true },
       { source: "/docs/payments/disputes", destination: "/docs/payments/payment-operations/disputes", permanent: true },
       { source: "/docs/payments/fraud-prevention", destination: "/docs/payments/payment-operations/radar", permanent: true },
     ];

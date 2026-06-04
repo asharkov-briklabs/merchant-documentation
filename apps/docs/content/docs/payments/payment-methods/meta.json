@@ -3,10 +3,15 @@
   "pages": [
     "index",
     "cards",
+    "wallets",
+    "revolut-pay",
+    "instalments",
+    "meal-vouchers",
     "bank-transfers",
     "local-methods",
     "stablecoins",
     "add-payment-methods",
+    "---",
     "manage-payment-methods"
   ]
 }

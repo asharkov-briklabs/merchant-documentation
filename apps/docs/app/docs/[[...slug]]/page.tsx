@@ -41,6 +41,7 @@ export default async function Page(props: {
     <>
       <script
         type="application/ld+json"
+        suppressHydrationWarning
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
     <DocsPage
@@ -59,7 +60,7 @@ export default async function Page(props: {
     >
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
-      <PageActions markdownPath={markdownPath} askHref={askHref} tone="light" installSkillsHref="/docs/guides/developer" />
+      <PageActions markdownPath={markdownPath} askHref={askHref} tone="light" installSkillsHref="/docs/guides" />
       <DocsBody>
         {page.data.quickstartStep && <QuickstartTracker />}
         <MDX components={{ ...defaultMdxComponents, Step, Steps, Tab, Tabs, Accordion, Accordions, TypeTable, File, Files, Folder, ImageZoom, Attributes, Attribute, Advanced, h2: ({ id, children }: { id?: string; children?: ReactNode }) => (<MdxHeading id={id} pageTitle={page.data.title} markdownPath={markdownPath}>{children}</MdxHeading>) }} />

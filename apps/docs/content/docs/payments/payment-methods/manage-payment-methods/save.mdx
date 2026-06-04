@@ -1,0 +1,99 @@
+---
+title: Save a payment method
+description: Save a customer's payment method during a payment or without charging using a Setup flow.
+priority: P0
+lastUpdated: "2026-06-04"
+---
+
+There are two ways to save a payment method: during a payment using `setup_future_usage`, or without charging using a Setup flow when you want to collect and vault card details upfront.
+
+## Save during a payment
+
+Add `setup_future_usage` to a payment to save the payment method used for that charge:
+
+- **`on_session`** — saves the method for future checkouts where the customer will be present on your site.
+- **`off_session`** — saves the method for background charges (subscriptions, reorders) where the customer will not be present. VINR requests stronger authentication upfront so future off-session charges can proceed without additional friction.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 2900,
+  currency: 'EUR',
+  customer: 'cus_ABC123',
+  setupFutureUsage: 'off_session',  // or 'on_session'
+  method: 'card',
+  returnUrl: 'https://yoursite.com/checkout/complete',
+});
+```
+
+After the payment completes, retrieve the `PaymentMethod` ID from the payment object and store it against your customer record:
+
+```typescript
+const completedPayment = await vinr.payments.retrieve('pay_ABC123');
+const savedMethodId = completedPayment.paymentMethodId; // → "pm_XYZ789"
+```
+
+## Save without charging (Setup flow)
+
+Use a SetupIntent when you want to vault a payment method without an immediate charge — for example, at trial sign-up or when a customer adds a card to their account settings.
+
+<Steps>
+
+### Create the SetupIntent server-side
+
+```typescript
+const setupIntent = await vinr.setupIntents.create({
+  customer: 'cus_ABC123',
+  usage: 'off_session',          // or 'on_session'
+});
+
+// Return setupIntent.clientSecret to the client
+```
+
+### Collect card details client-side
+
+Pass the `clientSecret` to the VINR payment components. The customer enters their card details and submits. VINR authenticates and vaults the card.
+
+### Retrieve the saved payment method
+
+On completion, VINR fires a `payment_method.attached` event with the new `PaymentMethod` ID. Store this ID against the customer record in your system.
+
+```typescript
+if (event.type === 'payment_method.attached') {
+  const paymentMethod = event.data.object;
+  await db.customers.updatePaymentMethod(paymentMethod.customer, paymentMethod.id);
+}
+```
+
+</Steps>
+
+## List and remove saved methods
+
+List all saved payment methods for a customer:
+
+```typescript
+const methods = await vinr.customers.listPaymentMethods('cus_ABC123', {
+  type: 'card',
+});
+
+for (const method of methods.data) {
+  console.log(method.id, method.card?.brand, method.card?.last4);
+}
+```
+
+Remove a method when a customer deletes a saved card from their account:
+
+```typescript
+await vinr.paymentMethods.detach('pm_XYZ789');
+// The method is removed from the customer and can no longer be charged
+```
+
+## See also
+
+<Cards>
+  <Card title="Update & replace" href="/docs/payments/payment-methods/manage-payment-methods/update" description="What can be changed on a saved method and when to re-collect." />
+  <Card title="Customer-initiated & Merchant-initiated" href="/docs/payments/payment-methods/cards/cit-mit" description="Compliance requirements when charging saved payment methods." />
+</Cards>

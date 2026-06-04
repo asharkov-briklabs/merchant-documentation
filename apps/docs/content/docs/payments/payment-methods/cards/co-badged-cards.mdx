@@ -1,0 +1,55 @@
+---
+title: Co-badged cards & EU compliance
+description: EU requirement to offer cardholders a choice of card network when their card carries two network logos.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+The European Union requires businesses to give customers the option to choose which card network processes their transaction when their card carries two network logos. This is the **co-badged cards** requirement, established under the EU Interchange Fee Regulation and enforced across the European Economic Area.
+
+## What is a co-badged card?
+
+A co-badged card carries two network logos — for example, a debit card issued in Bulgaria displaying both the Maestro and Mastercard logos. When a customer pays with such a card, either network could technically process the transaction. EU regulation requires you to present the customer with a choice.
+
+<Callout type="info">
+In Bulgaria, Maestro/Mastercard co-badged debit cards are common. The EU choice requirement applies to all transactions processed by VINR merchants operating in the EEA.
+</Callout>
+
+## How VINR handles brand choice
+
+VINR's payment components surface a network picker automatically when a customer enters a co-badged card number. No additional integration is required for the hosted checkout.
+
+The customer's selection is reflected in the `card.networks.preferred` field on the `PaymentMethod` object:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const paymentMethod = await vinr.paymentMethods.retrieve('pm_ABC123');
+
+console.log(paymentMethod.card?.networks);
+// {
+//   available: ['maestro', 'mastercard'],
+//   preferred: 'mastercard'
+// }
+```
+
+For custom integrations that bypass the hosted checkout, you can pass the customer's chosen network when confirming a payment:
+
+```typescript
+const payment = await vinr.payments.confirm('pay_ABC123', {
+  preferredNetwork: 'maestro', // or 'mastercard'
+});
+```
+
+## Cartes Bancaires
+
+In France, cards are commonly co-badged with **Cartes Bancaires** and either Visa or Mastercard. The EU choice requirement applies equally to these cards. VINR surfaces the Cartes Bancaires option for eligible cards when your account has Cartes Bancaires enabled. Contact VINR support to enable Cartes Bancaires on your account.
+
+## See also
+
+<Cards>
+  <Card title="Supported card brands" href="/docs/payments/payment-methods/cards/supported-brands" description="Which networks VINR accepts and their capabilities." />
+  <Card title="Strong Customer Authentication" href="/docs/payments/strong-customer-authentication" description="SCA requirements for European transactions under PSD2." />
+</Cards>

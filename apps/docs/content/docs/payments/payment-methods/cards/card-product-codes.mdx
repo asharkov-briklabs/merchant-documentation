@@ -1,0 +1,387 @@
+---
+title: Card product codes
+description: Visa and Mastercard product code reference for the brand_product field in the VINR API.
+priority: P2
+lastUpdated: "2026-06-04"
+---
+
+Product codes identify the specific program or product associated with a card — for example, whether a Visa card is a Classic, Platinum, or Infinite product. VINR currently supports product codes for Visa and Mastercard only.
+
+## Retrieving product codes
+
+When using the VINR Payments API, the product code is stored on the `PaymentMethod` object in the `brand_product` field within the `card` hash. After a payment is confirmed, `brand_product` is also present in `payment_method_details.card` on the corresponding charge object.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const paymentMethod = await vinr.paymentMethods.retrieve('pm_ABC123');
+console.log(paymentMethod.card?.brandProduct); // e.g. "I" (Visa Infinite)
+```
+
+The `brand_product` field may be `null` if:
+
+- The product code has not yet been collected (for example, immediately after card creation before confirmation).
+- The card network for that card does not support product codes.
+
+## Visa product codes
+
+| Product code | Product description |
+|---|---|
+| A | Traditional |
+| B | Traditional Rewards |
+| B1 | Visa Secured Enhanced |
+| C | Signature |
+| D | Signature Preferred |
+| DS | Distribution |
+| F | Classic |
+| F2 | Visa Flexible Credential |
+| F3 | Visa Flexible Credential Standard |
+| G | Business |
+| G1 | Signature Business |
+| G3 | Platinum Business |
+| G4 | Infinite Business |
+| G5 | Business Rewards |
+| GV | Government Disbursement |
+| I | Infinite |
+| I1 | Visa Infinite Privilege |
+| I2 | Visa Ultra High Net Worth |
+| J3 | Healthcare |
+| K | Corporate |
+| K1 | Government Corporate |
+| L | Electron |
+| N | Platinum |
+| N1 | Rewards |
+| N2 | Select |
+| P | Gold |
+| PP | Payroll |
+| Q | Private Label |
+| Q2 | Private Label Basic |
+| Q3 | Private Label Standard |
+| Q4 | Private Label Enhanced |
+| Q5 | Private Label Specialized |
+| Q6 | Private Label Premium |
+| R | Proprietary |
+| S | Purchasing |
+| S1 | Purchasing With Fleet |
+| S2 | Government Purchasing |
+| S3 | Government Purchasing With Fleet |
+| S4 | Commercial Agriculture |
+| S5 | Commercial Transport |
+| S6 | Commercial Marketplace |
+| S7 | Distribution |
+| U | Travel Money |
+| V | V Pay |
+| X | Visa Commercial Choice Travel |
+| X1 | Visa Commercial Choice Omni |
+
+## Mastercard product codes
+
+| Product code | Product description |
+|---|---|
+| ACS | Digital Debit |
+| BPC | Bill Pay Commercial |
+| BPD | Business Premium Debit |
+| BPE | Mastercard World Elite Business |
+| BPL | Mastercard Business Credit Plus |
+| CIR | Cirrus |
+| CPP | Mastercard Credit Prepaid Platinum |
+| CPS | Mastercard Credit Prepaid Standard |
+| DAG | Global Debit Mastercard Salary |
+| DAP | Platinum Debit Mastercard Salary |
+| DAS | Standard Debit Mastercard Salary |
+| DBS | Consumer Charge Card |
+| DCB | Line of Credit or Offset Linked Card |
+| DCO | Consumer Elite Card |
+| DLA | Business Executive Charge Card |
+| DLG | Debit Mastercard Gold Delayed Debit |
+| DLH | Debit Mastercard World Embossed Delayed Debit |
+| DLP | Debit Mastercard Platinum Delayed Debit |
+| DLS | Debit Mastercard Card Delayed Debit |
+| DOS | Standard Debit Mastercard Social |
+| DPP | Mastercard Debit Prepaid Platinum |
+| DPS | Mastercard Debit Prepaid Standard |
+| ETA | Mastercard Installment Payments A |
+| ETB | Mastercard Installment Payments B |
+| ETC | Mastercard Installment Payments C |
+| ETD | Mastercard Installment Payments D |
+| ETE | Mastercard Installment Payments E |
+| ETF | Mastercard Installment Payments F |
+| ETG | Mastercard Installment Payments G |
+| ETH | Prepaid Installment Payments A |
+| ETI | Prepaid Installment Payments B |
+| ETJ | Prepaid Installment Payments C |
+| ETK | Prepaid Installment Payments D |
+| ETL | Prepaid Installment Payments E |
+| ETM | Prepaid Installment Payments F |
+| ETN | Prepaid Installment Payments G |
+| FIA | Mastercard B2B VIP 27 |
+| FIB | Mastercard B2B VIP 28 |
+| FIC | Mastercard B2B VIP 29 |
+| FID | Mastercard B2B VIP 30 |
+| FIE | Mastercard B2B VIP 31 |
+| FIF | Mastercard B2B VIP 32 |
+| FIG | Mastercard B2B VIP 33 |
+| FIH | Mastercard B2B VIP 34 |
+| GCP | Mastercard Installments Card Premium |
+| GCS | Mastercard Shop & Split Standard |
+| GPP | Mastercard Prepaid Installments Card Premium |
+| GPS | Mastercard Prepaid Installment Payments Card |
+| MAB | World Elite Mastercard for Business Card |
+| MAC | Mastercard World Elite Corporate Card |
+| MAJ | Mastercard World Legend Business Card |
+| MAP | Mastercard Commercial Payments Account |
+| MAQ | Mastercard Prepaid Commercial Payments Account |
+| MBA | Mastercard B2B Product 2 |
+| MBB | Mastercard Prepaid Consumer |
+| MBC | Mastercard Prepaid Voucher |
+| MBD | Mastercard Professional Debit BusinessCard |
+| MBE | Mastercard Electronic Business Card |
+| MBF | Prepaid Mastercard Food |
+| MBG | Mastercard B2B Product 3 |
+| MBH | Mastercard B2B Product 4 |
+| MBI | Mastercard B2B Product 5 |
+| MBJ | Mastercard B2B Product 6 |
+| MBK | Mastercard Black Card |
+| MBL | Mastercard B2B Product 28 |
+| MBN | Mastercard B2B Product 29 |
+| MBO | Mastercard B2B Product 30 |
+| MBP | Mastercard Corporate Prepaid |
+| MBQ | Mastercard B2B Product 31 |
+| MBR | Mastercard B2B Product 32 |
+| MBS | Mastercard B2B Product |
+| MBT | Mastercard B2B Product 33 |
+| MBU | Mastercard B2B Product 34 |
+| MBV | Mastercard B2B Product 35 |
+| MBW | World Mastercard Black Edition Debit |
+| MBX | Mastercard B2B Product 36 |
+| MBY | Mastercard B2B Product 37 |
+| MBZ | Mastercard B2B Product 38 |
+| MCB | Mastercard BusinessCard |
+| MCC | Mastercard Credit Card (mixed BIN) |
+| MCE | Mastercard Electronic Card |
+| MCF | Mastercard Fleet Card |
+| MCG | Gold Mastercard Card |
+| MCH | Mastercard Premium Charge |
+| MCO | Mastercard Corporate Card |
+| MCP | Mastercard Purchasing Card |
+| MCS | Standard Mastercard Card |
+| MCT | Titanium Mastercard Card |
+| MCV | Merchant-Branded Program |
+| MCW | World Mastercard Card |
+| MDA | Mastercard World Legend Debit |
+| MDB | Debit Mastercard BusinessCard |
+| MDD | Mastercard CoBadge Debit |
+| MDE | Mastercard Essential Prepaid |
+| MDG | Gold Debit Mastercard Card |
+| MDH | World Debit Embossed Mastercard Card |
+| MDJ | Debit Mastercard (Enhanced) |
+| MDL | Business Debit Other |
+| MDO | Debit Other |
+| MDP | Platinum Debit Mastercard Card |
+| MDR | Debit Brokerage |
+| MDS | Debit Mastercard |
+| MDT | Commercial Debit Mastercard Card |
+| MDW | World Elite Debit Mastercard |
+| MEB | Mastercard Executive BusinessCard |
+| MEC | Mastercard Electronic Commercial |
+| MEE | Mastercard Essential Prepaid Credit |
+| MEF | Mastercard Electronic Payment Account |
+| MEO | Mastercard Corporate Executive Card |
+| MES | Mastercard Enterprise Solutions |
+| MET | Titanium Debit Mastercard Card |
+| MFB | Flex World Elite |
+| MFD | Flex Platinum |
+| MFE | Flex Charge World Elite |
+| MFH | Flex World |
+| MFI | Mastercard Debit Financial Inclusion |
+| MFL | Flex Charge Platinum |
+| MFW | Flex Charge World |
+| MGF | Mastercard Government Commercial Card |
+| MGP | Mastercard Prepaid Gold Payroll |
+| MGS | Platinum Mastercard Prepaid General Spend |
+| MHA | Mastercard Healthcare Prepaid Non-Tax |
+| MHB | Mastercard HSA Substantiated (Debit Mastercard) |
+| MHD | HELOC Debit Standard |
+| MHH | Mastercard HSA Non-Substantiated (Debit Mastercard) |
+| MHK | Magna Health Access Card |
+| MHL | HELOC Debit Gold |
+| MHM | HELOC Debit Platinum |
+| MHN | HELOC Debit Premium |
+| MIA | Prepaid Mastercard Unembossed Student Card |
+| MIK | Prepaid Mastercard Electronic Student (Non-US) |
+| MIL | Unembossed Mastercard Student Card (Non-US) |
+| MIP | Prepaid Debit Mastercard Student Card |
+| MIU | Debit Mastercard Unembossed (Non-US) |
+| MKA | Digital Gold Debit |
+| MKB | Digital Platinum Debit |
+| MKC | Digital World Debit |
+| MKD | Digital World Elite Debit |
+| MKE | Digital Platinum |
+| MKF | Digital World |
+| MKG | Digital World Elite |
+| MKH | Digital World Elite Exclusive |
+| MLA | Mastercard Central Travel Solutions Air |
+| MLB | Mastercard Brazil Benefit for Home Improvement |
+| MLD | Mastercard Distribution Card |
+| MLE | Mastercard Brazil General Benefits |
+| MLF | Mastercard Agro |
+| MLL | Mastercard Central Travel Solutions Land |
+| MNF | Mastercard Public Sector Commercial Card |
+| MNW | Mastercard World Card |
+| MOC | Standard Maestro Social |
+| MOG | Maestro Gold Card |
+| MOP | Maestro Platinum |
+| MOW | World Maestro |
+| MPA | Prepaid Debit Standard Payroll |
+| MPB | Mastercard Preferred Business Card |
+| MPD | Mastercard Flex Prepaid |
+| MPF | Mastercard Prepaid Debit Standard Gift |
+| MPG | Debit Mastercard Standard Prepaid General Spend |
+| MPH | Mastercard Cash |
+| MPJ | Prepaid Debit Mastercard Card Gold |
+| MPK | Mastercard Prepaid Government Commercial Card |
+| MPL | Platinum Mastercard Card |
+| MPM | Mastercard Prepaid Debit Standard Consumer Incentive |
+| MPN | Mastercard Prepaid Debit Standard Insurance |
+| MPO | Mastercard Prepaid Debit Standard Offer |
+| MPP | Mastercard Prepaid Card |
+| MPQ | White Label Routing |
+| MPR | Mastercard Prepaid Debit Standard Travel |
+| MPT | Mastercard Prepaid Debit Standard Teen |
+| MPV | Mastercard Prepaid Debit Standard Government |
+| MPW | Debit Mastercard Business Card Prepaid Workplace Business |
+| MPX | Mastercard Prepaid Debit Standard Flex Benefit |
+| MPY | Mastercard Prepaid Debit Standard Employee Incentive |
+| MPZ | Mastercard Prepaid Debit Standard Government Consumer |
+| MRB | Mastercard Prepaid Electronic Business Card (Non-US) |
+| MRC | Prepaid Mastercard Electronic Card (Non-US) |
+| MRD | Mastercard Prepaid Platinum Debit General Spend (Asia-Pacific) |
+| MRF | Standard Deferred |
+| MRG | Mastercard Prepaid Card (Non-US) |
+| MRH | Mastercard Platinum Prepaid Travel (US) |
+| MRJ | Prepaid Mastercard Gold Card |
+| MRK | Prepaid Mastercard Public Sector Commercial Card |
+| MRL | Prepaid Mastercard Electronic Commercial Card (Non-US) |
+| MRO | Mastercard Rewards Only |
+| MRP | Standard Retailer Centric Payments |
+| MRS | Prepaid Mastercard ISIC Student Card |
+| MRW | Prepaid Mastercard Business Card (Non-US) |
+| MSA | Prepaid Maestro Payroll Card |
+| MSB | Maestro Small Business Card |
+| MSF | Prepaid Maestro Gift Card |
+| MSG | Prepaid Maestro Consumer Reloadable Card |
+| MSI | Maestro Small Business Card |
+| MSJ | Prepaid Maestro Gold |
+| MSM | Prepaid Maestro Consumer Promotion Card |
+| MSN | Prepaid Maestro Insurance Card |
+| MSO | Prepaid Maestro Other Card |
+| MSQ | Reserved for Future Use |
+| MSR | Prepaid Maestro Travel Card |
+| MST | Prepaid Maestro Teen Card |
+| MSV | Prepaid Maestro Government Benefit Card |
+| MSW | Prepaid Maestro Corporate Card |
+| MSX | Prepaid Maestro Flex Benefit Card |
+| MSY | Prepaid Maestro Employee Incentive Card |
+| MSZ | Prepaid Maestro Emergency Assistance Card |
+| MTA | Mastercard B2B Product 7 |
+| MTB | Mastercard B2B Product 8 |
+| MTC | Mastercard B2B Product 9 |
+| MTD | Mastercard B2B Product 10 |
+| MTE | Mastercard B2B Product 11 |
+| MTF | Mastercard B2B Product 12 |
+| MTG | Mastercard B2B Product 13 |
+| MTH | Mastercard B2B Product 14 |
+| MTI | Mastercard B2B Product 15 |
+| MTJ | Mastercard B2B Product 16 |
+| MTK | Mastercard B2B Product 17 |
+| MTL | Mastercard B2B Product 18 |
+| MTM | Mastercard B2B Product 19 |
+| MTN | Mastercard B2B Product 20 |
+| MTO | Mastercard B2B Product 21 |
+| MTP | Mastercard Platinum Prepaid Travel (UK and Brazil) |
+| MTQ | Mastercard B2B Product 22 |
+| MTR | Mastercard B2B Product 23 |
+| MTS | Mastercard B2B Product 24 |
+| MTT | Mastercard B2B Product 25 |
+| MTU | Mastercard B2B Product 26 |
+| MTV | Mastercard B2B Product 27 |
+| MTW | Mastercard B2B Product 39 |
+| MTX | Mastercard B2B Product 40 |
+| MTY | Mastercard B2B Product 41 |
+| MTZ | Mastercard B2B Product 42 |
+| MUS | Prepaid Unembossed Mastercard Card |
+| MUW | Mastercard World Domestic Affluent |
+| MVA | Mastercard B2B VIP 1 |
+| MVB | Mastercard B2B VIP 2 |
+| MVC | Mastercard B2B VIP 3 |
+| MVD | Mastercard B2B VIP 4 |
+| MVE | Mastercard B2B VIP 5 |
+| MVF | Mastercard B2B VIP 6 |
+| MVG | Mastercard B2B VIP 7 |
+| MVH | Mastercard B2B VIP 8 |
+| MVI | Mastercard B2B VIP 9 |
+| MVJ | Mastercard B2B VIP 10 |
+| MVK | Mastercard B2B VIP 11 |
+| MVL | Mastercard B2B VIP 12 |
+| MVM | Mastercard B2B VIP 13 |
+| MVN | Mastercard B2B VIP 14 |
+| MVO | Mastercard B2B VIP 15 |
+| MVP | Mastercard B2B VIP 16 |
+| MVQ | Mastercard B2B VIP 17 |
+| MVR | Mastercard B2B VIP 18 |
+| MVS | Mastercard B2B VIP 19 |
+| MVT | Mastercard B2B VIP 20 |
+| MVU | Mastercard B2B VIP 21 |
+| MVV | Mastercard B2B VIP 22 |
+| MVW | Mastercard B2B VIP 23 |
+| MVX | Mastercard B2B VIP 24 |
+| MVY | Mastercard B2B VIP 25 |
+| MVZ | Mastercard B2B VIP 26 |
+| MWA | Mastercard B2B Product 43 |
+| MWB | World Elite Mastercard Business Card |
+| MWC | Mastercard B2B Product 44 |
+| MWD | Mastercard B2B Product 45 |
+| MWE | World Elite Mastercard Card |
+| MWF | Mastercard Humanitarian Prepaid |
+| MWG | Mastercard B2B Product 46 |
+| MWH | Mastercard B2B Product 47 |
+| MWJ | Mastercard World Legend |
+| MWK | Mastercard Consumer Plus |
+| MWL | Mastercard Consumer Plus Flex |
+| MWO | World Elite Mastercard Corporate Card |
+| MWP | World Prepaid |
+| MWR | World Retailer Centric Payments |
+| MXG | Gold Debit Mastercard Card |
+| MXP | Digital Enablement Program |
+| OLB | Maestro Small Business Delayed Debit |
+| OLG | Maestro Gold Delayed Debit |
+| OLP | Maestro Platinum Delayed Debit |
+| OLS | Maestro Delayed Debit |
+| OLW | World Maestro Delayed Debit |
+| PVA | Private Label A |
+| PVB | Private Label B |
+| PVC | Private Label C |
+| PVD | Private Label D |
+| PVE | Private Label E |
+| PVF | Private Label F |
+| PVG | Private Label G |
+| PVH | Private Label H |
+| PVI | Private Label I |
+| PVJ | Private Label J |
+| PVL | Private Label L |
+| PVT | Private Label T |
+| SAG | Gold Mastercard Salary Immediate Debit |
+| SAL | Standard Maestro Salary |
+| SAP | Platinum Mastercard Salary Immediate Debit |
+| SAS | Standard Mastercard Salary Immediate Debit |
+| SBJ | Prepaid Installment Payments H |
+| SBK | Prepaid Installment Payments I |
+
+## See also
+
+<Cards>
+  <Card title="Supported card brands" href="/docs/payments/payment-methods/cards/supported-brands" description="Which networks VINR accepts and their capabilities." />
+  <Card title="Cards overview" href="/docs/payments/payment-methods/cards" description="Back to the Cards section." />
+</Cards>
