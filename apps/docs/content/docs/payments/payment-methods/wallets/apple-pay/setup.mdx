@@ -1,0 +1,42 @@
+---
+title: Set up Apple Pay
+description: Configure domain verification and prerequisites for Apple Pay with VINR.
+priority: P0
+lastUpdated: "2026-06-04"
+---
+
+## Prerequisites
+
+- An Apple Developer account.
+- A domain served over HTTPS.
+- Apple Pay enabled on your VINR account (VINR Dashboard → **Settings → Payment methods → Apple Pay**).
+
+## Domain verification
+
+Apple requires you to host a domain association file at a specific path on every domain (and subdomain) where the Apple Pay button will appear.
+
+<Steps>
+
+### Download the domain association file
+
+In the VINR Dashboard under **Settings → Payment methods → Apple Pay**, click **Add domain** and download the association file.
+
+### Host the file
+
+Place the file at the following path on your web server, served with `Content-Type: application/octet-stream`:
+
+```
+https://yourdomain.com/.well-known/apple-pay-domain-associations
+```
+
+The file must be publicly accessible without redirects.
+
+### Register the domain
+
+Click **Verify** in the Dashboard. VINR fetches the file and registers the domain with Apple. Repeat this for every domain and subdomain where Apple Pay will appear.
+
+</Steps>
+
+<Callout type="warn">
+Apple Pay does not work on unverified domains, including localhost. Use a tunneling tool that provides a public HTTPS URL for local testing.
+</Callout>

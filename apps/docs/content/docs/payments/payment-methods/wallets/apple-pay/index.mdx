@@ -1,0 +1,32 @@
+---
+title: Apple Pay
+description: Accept Apple Pay on Safari, iOS, and macOS with VINR.
+priority: P0
+lastUpdated: "2026-06-04"
+---
+
+Apple Pay lets customers pay with a card stored in their Apple Wallet using Face ID, Touch ID, or a device passcode. It works on Safari on iOS and macOS, and can be embedded in native iOS apps. The payment is tokenized — Apple sends VINR a cryptogram rather than the raw card number.
+
+## Payment flow
+
+When a customer taps the Apple Pay button:
+
+1. The device presents the Apple Pay payment sheet with the stored card.
+2. The customer authenticates with Face ID, Touch ID, or passcode.
+3. Apple generates a one-time cryptogram and sends it to VINR.
+4. VINR decrypts the cryptogram and authorizes the payment with the card network.
+5. The payment is captured and confirmed; you receive a `payment.completed` webhook.
+
+The `payment_method.card.wallet.type` field is set to `apple_pay` on the resulting payment.
+
+## Cartes Bancaires with Apple Pay
+
+In France, Cartes Bancaires cards stored in Apple Wallet can be used with Apple Pay. VINR supports this when Cartes Bancaires is enabled on your account. See [Supported card brands](/docs/payments/payment-methods/cards/supported-brands) for details.
+
+## See also
+
+<Cards>
+  <Card title="Set up Apple Pay" href="/docs/payments/payment-methods/wallets/apple-pay/setup" description="Domain verification and prerequisites." />
+  <Card title="Google Pay" href="/docs/payments/payment-methods/wallets/google-pay" description="Set up Google Pay with its own merchant verification flow." />
+  <Card title="3D Secure" href="/docs/payments/3d-secure" description="How wallet authentication interacts with SCA." />
+</Cards>

@@ -2,16 +2,20 @@
   "title": "Payment methods",
   "pages": [
     "index",
+    "add-payment-methods",
+    "---Card-based---",
     "cards",
+    "---Digital wallets---",
     "wallets",
     "revolut-pay",
+    "---Buy now, pay later---",
     "instalments",
+    "---Alternative methods---",
     "meal-vouchers",
     "bank-transfers",
     "local-methods",
     "stablecoins",
-    "add-payment-methods",
-    "---",
+    "---Management---",
     "manage-payment-methods"
   ]
 }

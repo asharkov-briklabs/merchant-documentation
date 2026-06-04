@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "node scripts/clean-webpack-cache.mjs && fumadocs-mdx && node scripts/generate-embeddings.mjs",
+    "predev": "fumadocs-mdx",
     "dev": "next dev",
     "prebuild": "fumadocs-mdx && node scripts/generate-embeddings.mjs",
     "build": "next build",
