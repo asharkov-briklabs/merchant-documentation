@@ -1,0 +1,91 @@
+---
+title: "Cartes Bancaires with Apple Pay"
+description: "Learn how to integrate Cartes Bancaires with Apple Pay."
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+<Callout type="info">
+VINR only supports EUR payments for Cartes Bancaires with Apple Pay.
+</Callout>
+
+<Tabs items={["iOS", "Web"]}>
+<Tab value="iOS">
+
+## Before you begin
+
+To avoid issues with failed payments, take the following steps:
+
+- Add Cartes Bancaires to your list of enabled networks only if the transaction is in Euros.
+- Only enable Cartes Bancaires with Apple Pay if you support charges through Cartes Bancaires.
+- If you're a platform using the `on_behalf_of` parameter, make sure the connected account supports Cartes Bancaires charges. Check an account's eligibility using the Capabilities API.
+
+## Set up VINR
+
+You need a VINR account. Register in the [VINR Dashboard](https://dashboard.vinr.com).
+
+## Accept Apple Pay
+
+Follow the [Apple Pay setup guide](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/setup) to start accepting Apple Pay in your iOS app.
+
+## Add Cartes Bancaires as an enabled network
+
+When your app starts, configure the SDK with Cartes Bancaires as an enabled Apple Pay network.
+
+```swift
+// AppDelegate.swift
+VinrAPI.additionalEnabledApplePayNetworks = [.cartesBancaires]
+```
+
+## Test Apple Pay
+
+Apple Pay Wallet can't save test card information. Instead, VINR recognises when you're using your test API keys and provides a successful test card token for you to use. This allows you to make test payments using a live card without any charges being applied.
+
+Make sure you test using a Cartes Bancaires card obtained from one of the Apple Pay participating banks.
+
+</Tab>
+<Tab value="Web">
+
+## Before you begin
+
+To avoid issues with failed payments, take the following steps:
+
+- Include `cartesBancaires` in your supported networks only if the transaction is in Euros.
+- Only enable Cartes Bancaires with Apple Pay if you support charges through Cartes Bancaires.
+- If you're a platform using the `on_behalf_of` parameter, make sure the connected account supports Cartes Bancaires charges. Check an account's eligibility using the Capabilities API.
+
+## Set up VINR
+
+You need a VINR account. Register in the [VINR Dashboard](https://dashboard.vinr.com).
+
+## Accept Apple Pay
+
+Follow the [Apple Pay setup guide](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/setup) to complete domain verification and enable Apple Pay on your VINR account.
+
+## Add Cartes Bancaires as a supported network
+
+When creating your payment request, include `cartesBancaires` in the `supportedNetworks` array. Only include it when the payment currency is `EUR`.
+
+```javascript
+const paymentRequest = vinr.paymentRequest({
+  country: 'FR',
+  currency: 'eur',
+  total: {
+    label: 'Your order',
+    amount: 2000,
+  },
+  supportedNetworks: ['visa', 'mastercard', 'cartesBancaires'],
+  merchantCapabilities: ['supports3DS'],
+});
+```
+
+If you're using the Payment Element or Express Checkout Element, VINR automatically includes Cartes Bancaires in the supported networks when the currency is EUR and your account supports it — no additional configuration is required.
+
+## Test Apple Pay
+
+Apple Pay Wallet can't save test card information. Instead, VINR recognises when you're using your test API keys and provides a successful test card token. This allows you to make test payments using a live card without any charges being applied.
+
+Make sure you test using a Cartes Bancaires card obtained from one of the Apple Pay participating banks.
+
+</Tab>
+</Tabs>

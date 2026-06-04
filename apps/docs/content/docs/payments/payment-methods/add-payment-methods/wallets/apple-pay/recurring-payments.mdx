@@ -1,0 +1,81 @@
+---
+title: "Manage recurring payments"
+description: "Improve authorization rates for recurring Apple Pay transactions."
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+## How recurring Apple Pay payments work
+
+To make recurring payments, some businesses need to save the Apple Pay payment method on file when a user is on-session, then make the recurring payments later when the user is off-session. The first on-session payment is often called a customer-initiated transaction (CIT), and the later recurring payments are often called merchant-initiated transactions (MIT). Two examples of recurring payments (MIT) are:
+
+- Subscriptions where users get billed on a fixed frequency.
+- Recurring off-session payments where the billing frequency is inconsistent, or where customers can vary the frequency.
+
+When users interact with the Apple Pay payment sheet, to keep the PAN (the original card number) private, Apple Pay generates a Device Primary Account Number (DPAN) or [Merchant Token](https://developer.apple.com/apple-pay/merchant-tokens/) (MPAN) depending on the device OS version and integration. DPANs are tied to the specific Apple device and can be unintentionally deactivated if a user switches to a new device and adds the same card to it. MPAN is the more reliable option for recurring payments — MPANs aren't deactivated when users switch devices and come with better visibility and lifecycle management features.
+
+Beyond these differences, MPAN and DPAN behave similarly. See [Merchant tokens](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/merchant-tokens) for integration details.
+
+## Expired cryptogram can cause authorization failures
+
+When a DPAN or MPAN is generated, it comes with an expiring one-time-use cryptogram. VINR must conduct the CIT and send both the DPAN or MPAN and cryptogram to the authorization network before the cryptogram expires. This expiration mechanism adds a layer of security to Apple Pay wallets, but failing to trigger the CIT in time is the most common cause of authorization failures.
+
+When the first CIT using the cryptogram fails, subsequent MITs using the same payment method will likely also fail because they are internally linked to the CIT. These recurring payment failures reduce your overall authorization rate.
+
+## Improve authorization for your API integration
+
+To implement recurring Apple Pay transactions using the API:
+
+1. Save the DPAN or MPAN and cryptogram in a payment method.
+1. Initiate a CIT to consume the cryptogram before it expires. Use a SetupIntent to send a 0 USD validation or a charge transaction to the authorization network, and keep a record of the returned network transaction.
+1. Reuse the payment method for future off-session MITs. VINR sends the DPAN or MPAN and the network transaction ID of the original CIT to the authorization network to improve the authorization rate.
+
+Consume cryptograms as soon as they're created using the following recommendations.
+
+### Use subscriptions for free trials
+
+When a customer signs up for a free trial, they're not charged until the free trial period ends. To make sure you consume the DPAN or MPAN cryptogram before it expires, use VINR Subscriptions. The subscription creates a SetupIntent that generates a 0 USD validation with the authorization network. This acts as the CIT, consuming the cryptogram immediately rather than delaying the first transaction until after the free trial when the cryptogram has expired.
+
+You can also create a SetupIntent directly to save the Apple Pay payment method for future use. SetupIntent confirmation initiates the same CIT 0 USD validation to consume the cryptogram. You can then use the authorized Apple Pay payment method to create a subscription later.
+
+### Create a SetupIntent for legacy integrations
+
+If you're using a legacy token-based integration — creating an Apple Pay payment token and then charging the user when the trial ends — you can improve your authorization rate with the following steps.
+
+1. Create a payment method immediately after you create the token:
+
+   ```bash
+   curl https://api.vinr.com/v1/payment_methods \
+     -u YOUR_SECRET_KEY: \
+     -d "type"="card" \
+     -d "card[token]"="tok_123"
+   ```
+
+1. Immediately create a SetupIntent with the new payment method to perform a 0 USD validation transaction.
+
+Completing these two steps performs the CIT and sends the cryptogram to the network for authorization before it expires. You can combine these steps by calling `vinr.confirmCardSetup` with the token.
+
+You can now make off-session MIT payments using the saved Apple Pay payment method. Set `off_session=true` on the PaymentIntent to indicate that the customer isn't in your checkout flow.
+
+<Callout type="warn">
+We discourage using legacy token and charges APIs for recurring Apple Pay payments. The token API doesn't trigger the authorization request in time to consume the cryptogram, causing the cryptogram expiration failures described above. Migrate to the PaymentIntents and SetupIntents APIs where possible.
+</Callout>
+
+### Set up off-session payments
+
+If you're setting up deferred off-session Apple Pay payments to collect payment information for future off-session use — such as a hotel reservation — see Apple Pay's [list of supported payment types](https://developer.apple.com/apple-pay/planning/).
+
+Apple Pay supports `usage=off_session` payments using DPANs or MPANs when the customer is outside of the checkout flow. However, they carry a slightly higher risk because they don't receive a liability shift from the network and may see lower authorization rates.
+
+<Callout type="warn">
+Apple Pay terms forbid using a saved payment method for `usage=on_session` payments. If the customer is in the checkout flow, they must authorize and generate a new cryptogram for that transaction.
+</Callout>
+
+Apple Pay supports incremental authorizations only when you increase the amount of an authorized charge before capturing it.
+
+You can initiate a CIT for your integration in either of the following ways:
+
+- Create a SetupIntent to perform a 0 USD validation, creating a reusable DPAN or MPAN-based payment method for off-session payments.
+- Create a PaymentIntent with `setup_future_usage=off_session`.
+
+You can then make off-session MIT payments using the saved payment method. Set `off_session=true` on the PaymentIntent confirm call to indicate that the customer isn't in your checkout flow.

@@ -2,6 +2,10 @@
   "title": "Apple Pay",
   "pages": [
     "setup",
-    "test-and-go-live"
+    "test-and-go-live",
+    "merchant-tokens",
+    "recurring-payments",
+    "cartes-bancaires",
+    "disputes-and-refunds"
   ]
 }

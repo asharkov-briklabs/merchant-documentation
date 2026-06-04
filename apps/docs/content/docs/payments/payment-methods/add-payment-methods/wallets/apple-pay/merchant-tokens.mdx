@@ -1,0 +1,187 @@
+---
+title: "Merchant tokens"
+description: "Learn how to use Apple Pay merchant tokens for recurring, deferred, and automatic reload payments."
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+An [Apple Pay merchant token (MPAN)](https://developer.apple.com/apple-pay/merchant-tokens/) ties together a payment card, a business, and a customer, and enables the wallet holder to manage access to a card stored in their Apple wallet. Apple Pay's latest guidelines recommend merchant tokens over device tokens (DPANs) because merchant tokens:
+
+- Allow for continuity across multiple devices
+- Enable recurring payments independent of a device
+- Keep payment information active in a new device even when it's removed from a lost or stolen device
+
+## Merchant token types
+
+You can use Apple Pay to request an MPAN in three ways. Each type of request has different parameters that affect how the user is presented with Apple Wallet. Almost all request types provide the option to supply a `managementURL`, which routes customers to a webpage to manage their payment methods. If you request an MPAN and the issuer supports MPAN generation, you receive an MPAN. Otherwise, you receive a DPAN.
+
+| MPAN request type | Use case | Support |
+|---|---|---|
+| Recurring [PKRecurringPaymentRequest](https://developer.apple.com/documentation/passkit/pkrecurringpaymentrequest) | Issues an MPAN for use in a recurring payment such as a subscription. | Apple Pay on the Web · iOS > v16.0 |
+| Automatic reload [PKAutomaticReloadPaymentRequest](https://developer.apple.com/documentation/passkit/pkautomaticreloadpaymentrequest) | Issues an MPAN for use in a store card top-up or prepaid account. `automaticReloadBilling` shows billing details when you present Apple Pay. | Apple Pay on the Web · iOS > v16.0 |
+| Deferred payment [PKDeferredPaymentRequest](https://developer.apple.com/documentation/passkit/pkdeferredpaymentrequest) | Issues an MPAN for use in reservations such as hotels. `freeCancellationDate` shows the cancellation deadline. `billingAgreement` shows the terms of service. | Apple Pay on the Web · Xcode 14.3 · iOS > v16.4 |
+
+## Add Apple Pay merchant tokens
+
+You can add a merchant token when presenting Apple Pay in the Express Checkout Element, web Payment Element, and mobile Payment Element. VINR automatically handles merchant token requests in VINR Checkout integrations.
+
+### Express Checkout Element
+
+1. Set up your [Express Checkout Element integration](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/setup).
+1. Pass the `applePay` object relevant to your MPAN use case.
+1. Include relevant parameters for your use case.
+
+<Tabs items={["Recurring payments", "Automatic reload", "Deferred payment"]}>
+<Tab value="Recurring payments">
+
+```javascript
+elements.create('expressCheckout', {
+  applePay: {
+    recurringPaymentRequest: {
+      paymentDescription: 'Standard Subscription',
+      regularBilling: {
+        amount: 1000,
+        label: 'Standard Package',
+        recurringPaymentStartDate: new Date('2023-03-31'),
+        recurringPaymentEndDate: new Date('2024-03-31'),
+        recurringPaymentIntervalUnit: 'year',
+        recurringPaymentIntervalCount: 1,
+      },
+      billingAgreement: 'billing agreement',
+      managementURL: 'https://example.com/billing',
+    },
+  },
+});
+```
+
+</Tab>
+<Tab value="Automatic reload">
+
+```javascript
+elements.create('expressCheckout', {
+  applePay: {
+    automaticReloadPaymentRequest: {
+      paymentDescription: 'My automatic reload payment',
+      managementURL: 'https://example.com/billing',
+      automaticReloadBilling: {
+        amount: 2500,
+        label: 'Automatic Reload',
+        automaticReloadPaymentThresholdAmount: 500,
+      },
+    },
+  },
+});
+```
+
+</Tab>
+<Tab value="Deferred payment">
+
+```javascript
+elements.create('expressCheckout', {
+  applePay: {
+    deferredPaymentRequest: {
+      paymentDescription: 'My deferred payment',
+      managementURL: 'https://example.com/billing',
+      deferredBilling: {
+        amount: 2500,
+        label: 'Deferred Fee',
+        deferredPaymentDate: new Date('2024-01-05'),
+      },
+    },
+  },
+});
+```
+
+</Tab>
+</Tabs>
+
+### Web Payment Element
+
+1. Create an instance of the Payment Element.
+1. Pass the `applePay` object relevant to your MPAN use case.
+1. Include relevant parameters for your use case.
+
+<Tabs items={["Recurring payments", "Automatic reload", "Deferred payment"]}>
+<Tab value="Recurring payments">
+
+```javascript
+const paymentElement = elements.create('payment', {
+  applePay: {
+    recurringPaymentRequest: {
+      paymentDescription: 'My subscription',
+      managementURL: 'https://example.com/billing',
+      regularBilling: {
+        amount: 2500,
+        label: 'Monthly subscription fee',
+        recurringPaymentIntervalUnit: 'month',
+        recurringPaymentIntervalCount: 1,
+      },
+    },
+  },
+});
+```
+
+</Tab>
+<Tab value="Automatic reload">
+
+```javascript
+const paymentElement = elements.create('payment', {
+  applePay: {
+    automaticReloadPaymentRequest: {
+      paymentDescription: 'My subscription',
+      managementURL: 'https://example.com/billing',
+      automaticReloadBilling: {
+        amount: 2500,
+        label: 'Automatic Reload',
+        automaticReloadPaymentThresholdAmount: 500,
+      },
+    },
+  },
+});
+```
+
+</Tab>
+<Tab value="Deferred payment">
+
+```javascript
+const paymentElement = elements.create('payment', {
+  applePay: {
+    deferredPaymentRequest: {
+      paymentDescription: 'My deferred payment',
+      managementURL: 'https://example.com/billing',
+      deferredBilling: {
+        amount: 2500,
+        label: 'Deferred Fee',
+        deferredPaymentDate: new Date('2024-01-05'),
+      },
+    },
+  },
+});
+```
+
+</Tab>
+</Tabs>
+
+## Merchant token auth rate monitoring
+
+The `charges` table contains a `card_token_type` enum field to indicate whether a charge is using an `mpan` or `dpan` card. The following query example calculates the MPAN auth rate:
+
+```sql
+-- deduplicated MPAN auth rate
+select
+  100.0 * count(
+    case
+      when charge_outcome in ('authorized', 'manual_review') then 1
+    end
+  ) / count(*) as deduplicated_auth_rate_pct,
+  count(*) as n_attempts
+from
+  authentication_report_attempts a
+  join charges c on c.id = a.charge_id
+where
+  c.created >= date('2021-01-01')
+  and c.card_tokenization_method = 'apple_pay'
+  and c.card_token_type = 'mpan'
+  -- deduplicate multiple manual retries to a single representative charge
+  and is_final_attempt
+```
