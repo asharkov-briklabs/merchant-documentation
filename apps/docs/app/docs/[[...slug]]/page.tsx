@@ -46,6 +46,7 @@ export default async function Page(props: {
     <DocsPage
       toc={page.data.toc}
       full={page.data.full}
+      breadcrumb={{ includePage: true, includeRoot: true }}
       lastUpdate={
         page.data.lastUpdated ? new Date(page.data.lastUpdated) : undefined
       }
@@ -56,9 +57,9 @@ export default async function Page(props: {
         path: `apps/docs/content/docs/${page.path}`,
       }}
     >
-      <PageActions markdownPath={markdownPath} askHref={askHref} tone="light" />
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
+      <PageActions markdownPath={markdownPath} askHref={askHref} tone="light" installSkillsHref="/docs/guides/developer" />
       <DocsBody>
         {page.data.quickstartStep && <QuickstartTracker />}
         <MDX components={{ ...defaultMdxComponents, Step, Steps, Tab, Tabs, Accordion, Accordions, TypeTable, File, Files, Folder, ImageZoom, Attributes, Attribute, Advanced, h2: ({ id, children }: { id?: string; children?: ReactNode }) => (<MdxHeading id={id} pageTitle={page.data.title} markdownPath={markdownPath}>{children}</MdxHeading>) }} />
