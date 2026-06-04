@@ -4,7 +4,7 @@
     "index",
     "google-pay",
     "apple-pay",
-    "samsung-pay",
-    "other-wallets"
+    "revolut-pay",
+    "samsung-pay"
   ]
 }
