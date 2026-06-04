@@ -1,8 +1,7 @@
 {
   "title": "Apple Pay",
   "pages": [
-    "setup",
-    "test-and-go-live",
+    "best-practices",
     "merchant-tokens",
     "recurring-payments",
     "cartes-bancaires",

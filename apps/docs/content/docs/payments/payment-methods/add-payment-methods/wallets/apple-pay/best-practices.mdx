@@ -1,0 +1,86 @@
+---
+title: "Best practices"
+description: "Follow these best practices to make the most of your Apple Pay integration."
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+In a normal checkout flow, customers usually need to enter their card information, billing and shipping address, email, or phone number. With Apple Pay, customers can provide this information by authorising a payment with Touch ID, or by double-clicking the side button of their Apple Watch.
+
+Apple Pay can help boost metrics like conversion rate, new user acquisition, and purchase frequency, while reducing risk and the overall cost of payment acceptance.
+
+## Implement an express checkout
+
+You can provide app users and website visitors with more opportunities to make a purchase by adding Apple Pay to product detail pages, product list views, or search results pages. Apple Pay enables new and existing customers to make a purchase with a single tap.
+
+- For customers who have set up Apple Pay, display the **Apple Pay** button on product detail pages, product list views, or search results pages.
+- Ask the customer for all mandatory information about their order (size, colour, quantity, and so on) before showing the Apple Pay button.
+- Never display the Apple Pay button in a disabled state. Instead, highlight incomplete product selections if the customer selects the Apple Pay button before completing them.
+- If you already display an **Express Checkout** button in your checkout, consider replacing it with the Apple Pay button to avoid user confusion.
+
+## Remove or move registration until after purchase
+
+Apple Pay enables customers to seamlessly create new accounts after making their first purchase. By postponing account creation until after the transaction, customers are more likely to complete their purchase.
+
+- For Apple Pay–ready customers, remove any mandatory sign-up from the beginning of the payment process.
+- Don't request any customer information that Apple Pay already provides during the payment request (for example, name or address).
+- Only request the information you need as part of the transaction. For example, don't request a shipping address for digital goods or services.
+- Request any additional information needed to create an account (for example, a password) on the payment confirmation page, after payment is complete.
+
+## Default to Apple Pay
+
+[Wish](https://www.wish.com/) conducted an A/B test measuring the impact on conversion rates for new Apple Pay–ready users. Defaulting to Apple Pay yielded a 2× higher conversion rate.
+
+If your customer is on an Apple Pay-enabled device, consider offering Apple Pay as the default payment method.
+
+- For new customers that have Apple Pay set up on their device, skip the payment method selection page so they can complete their purchase quickly.
+- Pre-select Apple Pay in the payment method selector to reduce the number of steps a customer needs to perform.
+- Show the Apple Pay button for a stronger call to action.
+
+## Offer to set up Apple Pay within your app or website
+
+The Apple Pay API lets you identify customers with an Apple Pay-capable device who haven't yet added a card to Wallet. You can then offer those users the opportunity to set up Apple Pay from within your app.
+
+Consider displaying a **Set Up Apple Pay** button:
+
+- Next to other payment options on the payment method selection page during checkout for capable devices.
+- Next to other payment options on the payment method management page in the customer's account settings.
+- In any messages that request customers add or update their payment information (for example, emails prompting them to update an expired card).
+
+If you already support other payment methods that offer account setup during checkout, always display a **Set Up Apple Pay** button for capable devices.
+
+## Communicate Apple Pay acceptance
+
+After integrating Apple Pay, let your Apple Pay-ready customers know.
+
+- Add the Apple Pay mark next to other payment marks in your checkout.
+- Use a banner or additional messaging before the checkout process to announce that you now accept Apple Pay.
+- Announce it through your marketing channels (email, push notifications, social media, and so on).
+- Make any banner or messaging actionable so customers can start using Apple Pay with a single tap.
+- Update the screenshots and description of your app within the App Store to reflect Apple Pay acceptance.
+
+## Apple Pay certificate renewal
+
+Apple sends notifications to the team agent of the Apple Developer Account at 30 days, 15 days, and 7 days prior to certificate expiration. Certificates are valid for 25 months from activation. Generate and activate a new certificate before your current one expires to avoid any disruption.
+
+Go to **Settings → Payment methods → Apple Pay** in the VINR Dashboard, click **Add new application**, and follow the guide there.
+
+Download a new CSR from VINR for creating the new certificate — never reuse an older CSR. Upload the new certificate to VINR before activating it in the Apple Developer portal. Apple uses the new public key to encrypt Apple Pay tokens approximately 5 minutes after you click **Activate**. Make sure both the old and new certificates are present in the VINR Dashboard before activating the new one so that either certificate can be used during the transition.
+
+You don't need to update your app after replacing the certificate. Run an Apple Pay transaction with test API keys after the swap to confirm the integration is working as expected.
+
+## Always test on updates to your Apple Pay integration
+
+Before applying changes that update your integration or switch your Apple Merchant ID, verify that you can create tokens and use them to complete payments successfully.
+
+## Best practice for Apple Pay recurring transactions
+
+If you accept Apple Pay payments, configure the Apple Pay interface to return a merchant token to enable merchant-initiated transactions (MIT) such as recurring and deferred payments and automatic reloads. Merchant tokens (MPANs) connect your business with your customer's Apple Wallet payment method, work across multiple devices, and keep payment information active when a card is moved to a new device. See [Merchant tokens](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/merchant-tokens) for integration details and [Manage recurring payments](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/recurring-payments) for recommendations to prevent recurring authorisation failures due to cryptogram expiration.
+
+## See also
+
+<Cards>
+  <Card title="Apple Pay" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay" description="Domain verification and prerequisites for Apple Pay with VINR." />
+  <Card title="Merchant tokens" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/merchant-tokens" description="Use MPANs for recurring, deferred, and automatic reload payments." />
+  <Card title="Manage recurring payments" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/recurring-payments" description="Improve authorisation rates for recurring Apple Pay transactions." />
+</Cards>

@@ -1,11 +1,67 @@
 ---
 title: Apple Pay
-description: Accept Apple Pay on Safari, iOS, and macOS with VINR.
+description: Allow customers to securely make payments using Apple Pay on their iPhone, iPad, or Apple Watch.
 priority: P0
 lastUpdated: "2026-06-04"
 ---
 
-Apple Pay lets customers pay with a card stored in their Apple Wallet using Face ID, Touch ID, or a device passcode. It works on Safari on iOS and macOS, and can be embedded in native iOS apps. The payment is tokenized — Apple sends VINR a cryptogram rather than the raw card number.
+Allow customers to securely make payments using Apple Pay on their iPhone, iPad, or Apple Watch.
+
+<Callout type="info">
+**Apple Pay is SCA-ready.** As of September 2019, a regulation called Strong Customer Authentication (SCA) requires businesses in Europe to request additional authentication for online payments. Apple Pay fully supports SCA as it already handles payment flows with a built-in layer of authentication (biometric or password). [Learn more about SCA](/docs/payments/3d-secure).
+</Callout>
+
+Refer to [Apple's compatibility documentation](https://support.apple.com/en-us/105107) to learn which devices support Apple Pay.
+
+Apple Pay is compatible with most VINR products and features. VINR users can accept Apple Pay in iOS applications on iOS 9 and above, and on the web in Safari starting with iOS 10 or macOS Sierra. There are no additional fees to process Apple Pay payments — pricing is the same as for other card transactions.
+
+Apple Pay is available to cardholders at participating banks in supported countries. For more information, refer to [Apple's participating banks documentation](https://support.apple.com/en-us/102775).
+
+<Tabs items={["Payment method properties", "Business locations", "Product support"]}>
+<Tab value="Payment method properties">
+
+| Property | Value |
+|---|---|
+| Customer locations | Worldwide except India |
+| Presentment currency | See [supported presentment currencies](/docs/payments/currencies) |
+| Payment confirmation | Customer-initiated |
+| Payment method family | Wallet |
+| Recurring payments | Yes |
+| Payout timing | Standard payout timing applies |
+| Connect support | Yes |
+| Dispute support | Yes |
+| Manual capture support | Yes |
+| Refunds / Partial refunds | Yes / Yes |
+
+</Tab>
+<Tab value="Business locations">
+
+Apple Pay is available to merchants in the following regions:
+
+- **Europe** — All EEA countries plus the United Kingdom
+- **United States** — All 50 states and DC
+- **Canada**
+- **Australia and New Zealand**
+- **Singapore, Hong Kong, Japan**
+
+Contact your VINR account manager to confirm availability in your region.
+
+</Tab>
+<Tab value="Product support">
+
+| VINR product | Supported |
+|---|---|
+| Hosted Checkout | Yes — Apple Pay appears automatically for eligible devices |
+| Payment Element | Yes |
+| Express Checkout Element | Yes |
+| Payment Links | Yes |
+| Native iOS SDK | Yes |
+| React Native SDK | Yes |
+| Terminal (in-person) | Yes — via NFC contactless |
+| Invoicing | No |
+
+</Tab>
+</Tabs>
 
 ## Payment flow
 
@@ -14,19 +70,144 @@ When a customer taps the Apple Pay button:
 1. The device presents the Apple Pay payment sheet with the stored card.
 2. The customer authenticates with Face ID, Touch ID, or passcode.
 3. Apple generates a one-time cryptogram and sends it to VINR.
-4. VINR decrypts the cryptogram and authorizes the payment with the card network.
+4. VINR decrypts the cryptogram and authorises the payment with the card network.
 5. The payment is captured and confirmed; you receive a `payment.completed` webhook.
 
 The `payment_method.card.wallet.type` field is set to `apple_pay` on the resulting payment.
 
-## Cartes Bancaires with Apple Pay
+## In-app purchase eligibility for Apple Pay
 
-In France, Cartes Bancaires cards stored in Apple Wallet can be used with Apple Pay. VINR supports this when Cartes Bancaires is enabled on your account. See [Supported card brands](/docs/payments/payment-methods/add-payment-methods/cards) for details.
+This guide explains how to configure your app to accept Apple Pay directly for physical goods, services, and other eligible items. VINR processes these payments and you pay only VINR's standard processing fees.
+
+For digital products, content, and subscriptions sold in the United States or European Economic Area (EEA), your app can accept Apple Pay by redirecting to an external payment page. You can use the following payment UIs:
+
+- VINR Checkout
+- Web Elements
+- Payment Links (best for a limited number of products and prices)
+
+In other regions, your app cannot accept Apple Pay for digital products, content, or subscriptions.
+
+## Accept Apple Pay
+
+VINR offers a variety of methods to add Apple Pay as a payment method. Select the integration method you prefer:
+
+<Tabs items={["Native iOS", "React Native iOS", "Web"]}>
+<Tab value="Native iOS">
+
+Add the VINR iOS SDK via Swift Package Manager:
+
+```swift
+dependencies: [
+    .package(
+        url: "https://github.com/vinr/vinr-ios-sdk.git",
+        from: "1.0.0"
+    )
+]
+```
+
+Configure Apple Pay in your `AppDelegate`:
+
+```swift
+import VinrSDK
+
+VinrAPI.defaultPublishableKey = "pk_live_..."
+
+// Register supported networks — add .cartesBancaires only for EUR transactions
+let supportedNetworks: [PKPaymentNetwork] = [.visa, .masterCard, .amex]
+```
+
+Then present the Apple Pay payment sheet using `PKPaymentAuthorizationController`. VINR handles merchant validation and token decryption automatically. See [Merchant tokens](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/merchant-tokens) if you need to support recurring or deferred payments.
+
+</Tab>
+<Tab value="React Native iOS">
+
+Install the VINR React Native SDK:
+
+```bash
+npm install @vinr/react-native-sdk
+# or
+yarn add @vinr/react-native-sdk
+```
+
+Wrap your app with the `VinrProvider` and use the `useApplePay` hook:
+
+```tsx
+import { useApplePay, VinrProvider } from '@vinr/react-native-sdk';
+
+function CheckoutButton() {
+  const { presentApplePay, confirmApplePayPayment } = useApplePay();
+
+  const pay = async () => {
+    const { error } = await presentApplePay({
+      cartItems: [{ label: 'Your order', amount: '20.00' }],
+      country: 'US',
+      currency: 'USD',
+    });
+    if (!error) {
+      await confirmApplePayPayment('pay_...');
+    }
+  };
+
+  return <Button onPress={pay} title="Buy with Apple Pay" />;
+}
+```
+
+</Tab>
+<Tab value="Web">
+
+You can accept Apple Pay on the web using Checkout or Elements. No additional configuration is required to use Apple Pay in Checkout. For Elements, use the Express Checkout Element or Payment Element — Apple Pay appears automatically for eligible devices and browsers.
+
+**Web integration considerations**
+
+- **iframes with Elements** — The iframe origin must match the top-level origin (except for Safari 17+ when specifying the `allow="payment"` attribute). Two pages share an origin if the protocol, host, and port are identical.
+- **Top-level domain and iframe domain** — If the top-level domain differs from the iframe domain, both must be registered as payment method domains on the associated account.
+- **Embedded checkout** (`ui_mode: 'embedded'`) — Supports only Safari 17 or later and iOS 17 or later.
+
+Use of Apple Pay on the web is subject to the [Apple Pay on the Web terms of service](https://developer.apple.com/apple-pay/acceptable-use-guidelines-for-websites/).
+
+</Tab>
+</Tabs>
+
+## Register your domain with Apple Pay
+
+To use Apple Pay on the web, you must register all domains that show an Apple Pay button with Apple. This includes top-level domains (for example, `yourstore.com`) and subdomains (for example, `shop.yourstore.com`), in both production and testing.
+
+<Callout type="info">
+`www` is a subdomain (for example, `www.yourstore.com`) and must also be registered separately.
+</Callout>
+
+VINR handles Apple merchant validation for you, including creating an Apple Merchant ID and Certificate Signing Request. Do not follow the merchant validation process in the Apple Pay documentation directly. Instead, register your domain with VINR:
+
+You can do this on the **Payment method domains** page in the VINR Dashboard, or via the API using your live secret key:
+
+```bash
+curl https://api.vinr.com/v1/payment_method_domains \
+  -u YOUR_SECRET_KEY: \
+  -d "domain_name=example.com"
+```
+
+Do not register the same domain more than once per account.
+
+When using direct charges with Connect, you need to configure the domain for each connected account separately using the API. This is not required for connected accounts using other charge types.
+
+After registering your domains, you can accept live Apple Pay payments on your site.
+
+## Recurring payments
+
+We recommend implementing [Apple Pay merchant tokens](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/merchant-tokens) to enable merchant-initiated transactions (MIT) such as recurring and deferred payments and automatic reloads. Merchant tokens (MPANs) connect your business with your customer's Apple Wallet payment method, work across multiple devices, and keep payment information active when a card is moved to a new device.
+
+## Test Apple Pay
+
+To test Apple Pay, use a real credit card number with your test API keys. VINR recognises that you're in test mode and returns a successful test card token without charging the card.
+
+You cannot save VINR test cards or Apple Pay test cards to an Apple Pay wallet for testing.
+
+If Apple Pay does not appear as a payment option, check that your device and integration meet the requirements listed above.
 
 ## See also
 
 <Cards>
-  <Card title="Set up Apple Pay" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/setup" description="Domain verification and prerequisites." />
-  <Card title="Google Pay" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay" description="Set up Google Pay with its own merchant verification flow." />
+  <Card title="Merchant tokens" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/merchant-tokens" description="Use MPANs for recurring, deferred, and automatic reload payments." />
+  <Card title="Best practices" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/best-practices" description="Improve conversion and maintain your Apple Pay integration." />
   <Card title="3D Secure" href="/docs/payments/3d-secure" description="How wallet authentication interacts with SCA." />
 </Cards>
