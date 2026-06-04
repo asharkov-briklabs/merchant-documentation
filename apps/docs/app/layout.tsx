@@ -57,7 +57,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         {nonce && <meta property="csp-nonce" content={nonce} />}
       </head>
       <body className="flex min-h-screen flex-col antialiased">
-        <RootProvider search={{ options: { tags: CATEGORY_TAGS } }}>
+        <RootProvider theme={{ nonce }} search={{ options: { tags: CATEGORY_TAGS } }}>
           {children}
         </RootProvider>
         <AskAIPanel />

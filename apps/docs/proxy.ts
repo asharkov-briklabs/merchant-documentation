@@ -76,7 +76,7 @@ function generateNonce(): string {
   return btoa(Array.from(bytes, b => String.fromCharCode(b)).join(""));
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const nonce = generateNonce();
   const csp = buildCsp(nonce);
 
