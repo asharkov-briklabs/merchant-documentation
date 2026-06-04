@@ -1,10 +1,8 @@
 {
   "title": "Wallets",
   "pages": [
-    "index",
     "google-pay",
     "apple-pay",
-    "revolut-pay",
-    "samsung-pay"
+    "revolut-pay"
   ]
 }

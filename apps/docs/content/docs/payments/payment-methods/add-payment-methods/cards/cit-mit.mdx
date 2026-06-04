@@ -1,40 +1,46 @@
 ---
-title: Customer-initiated & Merchant-initiated transactions
-description: Card network rules based on who initiates a transaction, and what compliance each type requires.
+title: CITs and MITs
+description: Card network rules based on who initiates a transaction.
 priority: P1
 lastUpdated: "2026-06-04"
 ---
 
-Card networks divide payments into two categories depending on whether the cardholder is actively participating in the payment flow: **Customer-Initiated Transactions (CIT)** and **Merchant-Initiated Transactions (MIT)**.
+Learn about card network rules based on who initiates a transaction.
 
-Each type carries different requirements — including different authorization validity windows and compliance obligations. To determine the authorization window for a specific charge, use the `capture_before` field on the charge object returned by the VINR API; it reflects the actual expiry for that transaction type and issuer.
+The card networks divide card payments into two types, depending on whether the customer is participating in the payment flow: **Customer-Initiated Transactions (CIT)** and **Merchant-Initiated Transactions (MIT)**.
+
+<Callout type="info">
+Card networks assign different characteristics and requirements to transactions depending on whether they're customer-initiated or merchant-initiated. For example, a Visa transaction's authorization validity period varies depending on its type. The `capture_before` field on the charge object returned by the VINR API is the most reliable way to determine the authorization window for a specific charge.
+</Callout>
 
 ## Merchant-Initiated Transactions (MIT)
 
-An MIT is a transaction you initiate without the direct participation of your customer, based on a prior agreement authorizing you to store and charge their payment method. A subscription renewal that runs automatically each month is a typical example.
+An MIT is a transaction that you initiate without direct participation of your customer, based on a prior agreement with that customer authorizing you to store and use their credentials. For example, you operate a subscription-based business and your customer has consented to you collecting their future monthly payments using their credit card on file.
 
 ### Compliance
 
-When you save a customer's payment information — for any reason — you are responsible for compliance with all applicable laws, regulations, and card network rules. Your terms must clearly state how you save and use payment method details, and customers must affirmatively opt in before their information is stored.
+When you save a customer's payment information, regardless of the reason, you are responsible for compliance with all applicable laws, regulations, and network rules. Include terms on your website or app that state how you save payment method details, and require customers to opt in before you save their payment information.
 
-A saved payment method may only be used for the specific purposes covered in your terms. To charge a customer when they are not present (an off-session MIT), your terms must include:
+When you save a payment method, you can only use it for the specific purposes included in your terms. For example, if you want to automatically charge a saved payment method for future subscription renewals, you must first get explicit consent from the customer.
 
-- The customer's agreement to have payments initiated on their behalf.
-- The anticipated timing and frequency of charges — for example, monthly subscription, weekly installments, or unscheduled top-ups.
-- How the payment amount is determined.
-- Your cancellation policy.
+To charge customers when they are offline, include the following in your terms:
 
-Keep a record of each customer's agreement, including the date and version of the terms they accepted.
+- The customer's agreement to your initiating a payment or a series of payments on their behalf for specified transactions.
+- The anticipated timing and frequency of payments — for example, whether the charges are for scheduled instalments, subscription payments, or unscheduled top-ups.
+- How you determine the payment amount.
+- Your cancellation policy for any subscription services.
+
+Keep a record of each customer's agreement to your terms.
 
 ### Card brand changes
 
-VINR's automatic card updater refreshes saved card details when a bank re-issues a card. In some cases this update changes the card's **brand** — for example, a Visa card re-issued as Mastercard. When that happens, the prior cardholder agreement is no longer valid for MITs on the new card.
+VINR's [automatic card updates](/docs/payments/payment-methods/manage-payment-methods/automatic-card-updates) automatically refreshes saved cards when necessary, such as when a card expires or is re-issued. In some cases, an automatic update changes a card's brand — for example, from Visa to Mastercard. When a card's brand changes, you must prompt the cardholder to update their payment method.
 
 <Callout type="warn">
-When a card's brand changes, you cannot initiate any MIT against it until you obtain a new cardholder agreement authorizing charges on the new brand.
+When a card's brand changes, you cannot charge it for any MITs until you obtain a new cardholder agreement.
 </Callout>
 
-Identify brand changes by listening for the `payment_method.automatically_updated` event and comparing the `brand` field in `previousAttributes` with the brand on the updated card:
+Identify card brand changes by listening for the `payment_method.automatically_updated` event and comparing the `brand` in `previousAttributes` with the `brand` on the updated card:
 
 ```typescript
 // POST /webhooks/vinr
@@ -53,14 +59,14 @@ if (event.type === 'payment_method.automatically_updated') {
 
 ## Customer-Initiated Transactions (CIT)
 
-A CIT is any transaction where the cardholder is actively present in the payment flow — for example, a customer placing an order on your website, or tapping their card at a point-of-sale terminal.
+CITs include all transactions where the cardholder is present and participating in the payment flow — for example, a customer manually placing an order on your website.
 
-Standard checkout flows are CITs. Authentication requirements — such as 3D Secure — are applied based on transaction value, issuer rules, and VINR risk signals. Under SCA, European CITs above threshold typically require the customer to authenticate.
+Standard checkout flows are CITs. Authentication requirements such as 3D Secure are applied based on transaction value, issuer rules, and VINR risk signals. Under SCA, European CITs above the regulatory threshold typically require the customer to authenticate.
 
 ## See also
 
 <Cards>
-  <Card title="How card payments work" href="/docs/payments/payment-methods/add-payment-methods/cards/how-cards-work" description="Authorization, capture, and automatic card updates." />
+  <Card title="Automatic card updates" href="/docs/payments/payment-methods/manage-payment-methods/automatic-card-updates" description="How VINR refreshes saved card details when a bank re-issues a card." />
   <Card title="Strong Customer Authentication" href="/docs/payments/strong-customer-authentication" description="SCA requirements for European transactions under PSD2." />
   <Card title="Manage payment methods" href="/docs/payments/payment-methods/manage-payment-methods" description="Save, update, and remove stored payment methods." />
 </Cards>

@@ -5,19 +5,63 @@ priority: P1
 lastUpdated: "2026-06-04"
 ---
 
-The European Union requires businesses to give customers the option to choose which card network processes their transaction when their card carries two network logos. This is the **co-badged cards** requirement, established under the EU Interchange Fee Regulation and enforced across the European Economic Area.
+Regulation (EU) 2015/751 requires businesses in the European Economic Area (EEA) to honour customers' card brand choice for co-badged cards (for example, Cartes Bancaires cards co-badged with Visa). This means you must allow cardholders to select a preferred card brand on your payment page in accordance with these guidelines:
 
-## What is a co-badged card?
+- **Display available card networks** — All available card networks must be clearly identified during checkout. The visual quality, clarity, and size of brand logos must be consistent, and it must be clear to cardholders how to select a network.
+- **Honour the cardholder's choice** — Where the cardholder selects a preferred network, you must use it when confirming a payment or storing card details for future use. If the cardholder does not make a choice, you may choose the network for the transaction.
+- **Allow updates to the preferred network** — When cardholders update a saved payment method, you must give them the option to change their preferred network. For example, through a customer portal for managing saved payment methods.
 
-A co-badged card carries two network logos — for example, a debit card issued in Bulgaria displaying both the Maestro and Mastercard logos. When a customer pays with such a card, either network could technically process the transaction. EU regulation requires you to present the customer with a choice.
+## Does this regulation apply to me?
+
+Regulation (EU) 2015/751 applies to all businesses in the EEA that can process Cartes Bancaires.
+
+### When regulation applies
+
+| Payment channel | Subject to card brand choice regulation | Transaction types |
+|---|---|---|
+| Online | Businesses in the EEA that can process Cartes Bancaires | The payment method is a co-badged Cartes Bancaires card and the currency is EUR |
+| In-person | Businesses in France that can process Cartes Bancaires | The payment method is a co-badged Cartes Bancaires card |
+| In-person | Businesses in Germany that can process Girocard | The payment method is a co-badged Girocard |
+
+Applicable in: Austria, Belgium, Bulgaria, Croatia, Cyprus, Czech Republic, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Liechtenstein, Lithuania, Luxembourg, Malta, Netherlands, Norway, Poland, Portugal, Romania, Slovakia, Slovenia, Spain, Sweden.
+
+## Integration guides
+
+VINR-hosted UIs — including hosted checkout, Payment Links, VINR Elements, and the mobile SDK — automatically display a network selector when you meet the applicability criteria. You must configure these UIs according to the guides below.
+
+For other integrations, you are fully responsible for ensuring your integration complies with the regulation requirements.
 
 <Callout type="info">
-In Bulgaria, Maestro/Mastercard co-badged debit cards are common. The EU choice requirement applies to all transactions processed by VINR merchants operating in the EEA.
+When using the sandbox, Cartes Bancaires is always enabled for online payments, which means you may see the network selector in VINR-hosted UIs in the sandbox even if Cartes Bancaires is not enabled on your live account. This lets you preview how co-badged card handling works before going live.
 </Callout>
 
-## How VINR handles brand choice
+<Tabs items={["Checkout and Payment Links", "Elements", "Mobile Elements", "Terminal"]}>
+<Tab value="Checkout and Payment Links">
 
-VINR's payment components surface a network picker automatically when a customer enters a co-badged card number. No additional integration is required for the hosted checkout.
+VINR hosted checkout supports customer card brand choice by default. Customers who enter a co-badged card at checkout can select their preferred network before confirming payment.
+
+### Identify the processing network
+
+The charge object associated with a successful payment contains a `network` field indicating which card network processed the payment:
+
+```json
+{
+  "id": "ch_1Ff52K2eZvKYlo2CWe10i0s7",
+  "object": "charge",
+  "payment_method_details": {
+    "card": {
+      "brand": "visa",
+      "network": "cartes_bancaires"
+    },
+    "type": "card"
+  }
+}
+```
+
+</Tab>
+<Tab value="Elements">
+
+VINR Elements surfaces a network selector automatically when a customer enters a co-badged card number — no additional integration is required.
 
 The customer's selection is reflected in the `card.networks.preferred` field on the `PaymentMethod` object:
 
@@ -30,26 +74,67 @@ const paymentMethod = await vinr.paymentMethods.retrieve('pm_ABC123');
 
 console.log(paymentMethod.card?.networks);
 // {
-//   available: ['maestro', 'mastercard'],
-//   preferred: 'mastercard'
+//   available: ['cartes_bancaires', 'visa'],
+//   preferred: 'cartes_bancaires'
 // }
 ```
 
-For custom integrations that bypass the hosted checkout, you can pass the customer's chosen network when confirming a payment:
+For custom integrations that bypass the hosted UI, pass the customer's chosen network when confirming a payment:
 
 ```typescript
 const payment = await vinr.payments.confirm('pay_ABC123', {
-  preferredNetwork: 'maestro', // or 'mastercard'
+  preferredNetwork: 'cartes_bancaires', // or 'visa' / 'mastercard'
 });
 ```
 
-## Cartes Bancaires
+### Identify the processing network
 
-In France, cards are commonly co-badged with **Cartes Bancaires** and either Visa or Mastercard. The EU choice requirement applies equally to these cards. VINR surfaces the Cartes Bancaires option for eligible cards when your account has Cartes Bancaires enabled. Contact VINR support to enable Cartes Bancaires on your account.
+The charge object associated with a successful payment contains a `network` field indicating which card network processed the payment:
+
+```json
+{
+  "id": "ch_1Ff52K2eZvKYlo2CWe10i0s7",
+  "object": "charge",
+  "payment_method_details": {
+    "card": {
+      "brand": "visa",
+      "network": "cartes_bancaires"
+    },
+    "type": "card"
+  }
+}
+```
+
+</Tab>
+<Tab value="Mobile Elements">
+
+The VINR mobile SDK renders a network selector automatically when the customer enters a co-badged card. No additional configuration is required.
+
+The selected network is returned in the `card.networks.preferred` field on the confirmed `PaymentMethod` object, identical to the web Elements integration.
+
+</Tab>
+<Tab value="Terminal">
+
+For in-person Terminal integrations in France (Cartes Bancaires) and Germany (Girocard), the VINR Terminal SDK handles network selection at the reader level in accordance with regional requirements.
+
+The charge object contains a `network` field indicating which network was used. Review regional Terminal requirements for Cartes Bancaires-specific routing rules.
+
+</Tab>
+</Tabs>
+
+## Testing
+
+Use the following co-badged test card numbers in the sandbox. Any future expiry date and any 3-digit CVC are accepted.
+
+| Number | Brand | CVC | Date |
+|---|---|---|---|
+| 4000002500001001 | Cartes Bancaires or Visa | Any 3 digits | Any future date |
+| 5555552500001001 | Cartes Bancaires or Mastercard | Any 3 digits | Any future date |
 
 ## See also
 
 <Cards>
-  <Card title="Supported card brands" href="/docs/payments/payment-methods/add-payment-methods/cards/supported-brands" description="Which networks VINR accepts and their capabilities." />
+  <Card title="Cartes Bancaires" href="/docs/payments/payment-methods/add-payment-methods/cards/cartes-bancaires" description="France's local card network — availability, disputes, and integration." />
+  <Card title="Cards" href="/docs/payments/payment-methods/add-payment-methods/cards" description="Supported card brands, capabilities, and geographic considerations." />
   <Card title="Strong Customer Authentication" href="/docs/payments/strong-customer-authentication" description="SCA requirements for European transactions under PSD2." />
 </Cards>

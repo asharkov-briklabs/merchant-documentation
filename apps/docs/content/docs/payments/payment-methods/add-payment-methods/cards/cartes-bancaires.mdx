@@ -1,0 +1,56 @@
+---
+title: Cartes Bancaires
+description: Accept Cartes Bancaires — France's local card network — with VINR.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+Learn about Cartes Bancaires, a common payment method in France.
+
+Cartes Bancaires (CB) is France's local card network. More than 95% of these cards are co-badged with either Visa or Mastercard, meaning you can process them over either the Cartes Bancaires or the Visa/Mastercard networks. Businesses processing co-badged cards in the EEA must provide customers a choice of which network they prefer at checkout. See [Co-badged cards & EU compliance](/docs/payments/payment-methods/add-payment-methods/cards/co-badged-cards).
+
+Cartes Bancaires can improve your acceptance rate in France. If a charge is declined on the Cartes Bancaires network for a technical reason, VINR automatically retries the charge on the Visa or Mastercard network.
+
+## Payment method properties
+
+| Property | Value |
+|---|---|
+| Customer locations | Europe |
+| Presentment currency | EUR |
+| Payment confirmation | Customer-initiated |
+| Payment method family | Cards |
+| Recurring payments | Yes |
+| Payout timing | Standard payout timing applies |
+| Dispute support | Yes |
+| Manual capture support | Yes |
+| Multicapture support | Yes |
+| Refunds / Partial refunds | Yes / Yes |
+
+## Availability
+
+Your business must be located in the Single Euro Payments Area (SEPA). You can activate Cartes Bancaires in the Dashboard under **Settings → Payment methods**.
+
+If your business is not based in France, you must process at least one payment from a Cartes Bancaires-eligible card to fully enable this payment method.
+
+VINR accounts in the following countries can accept Cartes Bancaires payments:
+
+AT, AU, BE, BG, CA, CH, CY, CZ, DE, DK, EE, ES, FI, FR, GB, GI, GR, HK, HR, HU, IE, IS, IT, JP, LI, LT, LU, LV, MT, MX, NL, NO, NZ, PL, PT, RO, SE, SG, SI, SK, US
+
+## Disputes
+
+As with Visa and Mastercard, cardholders can dispute Cartes Bancaires charges. Because Cartes Bancaires dispute rules are more stringent, there are fewer grounds on which a cardholder can raise a dispute — this typically results in a lower dispute rate compared to Visa and Mastercard. Businesses cannot contest Cartes Bancaires disputes. The dispute fee is €0 on Cartes Bancaires.
+
+<Callout type="info">
+In some cases, Cartes Bancaires may withdraw a dispute, and the dispute status becomes `won`.
+</Callout>
+
+## Integration
+
+If you can already [accept card payments](/docs/guides/accept-a-payment), you can accept Cartes Bancaires without additional integration work. See the [Co-badged cards & EU compliance](/docs/payments/payment-methods/add-payment-methods/cards/co-badged-cards) guide to handle customer network selection and find test cards for your integration.
+
+## See also
+
+<Cards>
+  <Card title="Co-badged cards & EU compliance" href="/docs/payments/payment-methods/add-payment-methods/cards/co-badged-cards" description="EU requirement to offer cardholders a choice of network on co-badged cards." />
+  <Card title="Cards" href="/docs/payments/payment-methods/add-payment-methods/cards" description="Supported card brands, capabilities, and geographic considerations." />
+</Cards>

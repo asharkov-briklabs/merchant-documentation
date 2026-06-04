@@ -2,7 +2,6 @@
   "title": "Payment methods",
   "collapsible": false,
   "pages": [
-    "index",
     "add-payment-methods",
     "manage-payment-methods"
   ]

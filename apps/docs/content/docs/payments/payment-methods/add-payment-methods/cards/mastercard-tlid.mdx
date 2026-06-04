@@ -1,0 +1,42 @@
+---
+title: Mastercard TLID
+description: Mastercard's Transaction Link ID (TLID) — what it is and how VINR handles it.
+priority: P2
+lastUpdated: "2026-06-04"
+---
+
+Learn more about Mastercard's Transaction Link ID (TLID).
+
+Transaction Link ID (TLID) is a unique identifier that Mastercard generates for each transaction. It links transactions across authorization and clearing messages, similar to the network transaction ID (NTID). TLIDs are 22 characters long, alphanumeric (`A-Z`, `a-z`), case sensitive, and can include `-` and `_`. For example:
+
+- `e7R9d3L2-Q9vS6pP1_WzEh`
+- `Z0fE_2qV-3pWft4vHt7Ki6M`
+
+## Timeline
+
+Starting June 2, 2026, Mastercard requires acquirers and businesses to retain TLIDs for:
+
+- Cardholder-initiated transactions (CITs) that store card credentials for future use.
+- Account status inquiry (ASI) requests.
+
+Starting October 23, 2026, Mastercard requires you to send the TLID retained from the original CIT with merchant-initiated transactions (MITs).
+
+No changes are expected to NTID. Its use continues in parallel with TLID.
+
+| Date | Requirement |
+|---|---|
+| June 2, 2026 | Retain TLIDs from CITs that set up future card use and from ASI requests. The acquirer or business must retain these TLIDs. |
+| October 23, 2026 | Send the TLID retained from the original CIT or ASI request with all subsequent MITs as the economically related TLID. |
+
+## Impact
+
+VINR stores TLIDs for all businesses when Mastercard provides them. VINR populates the economically related TLID on an MIT if a saved TLID is available — for example, when the original CIT was processed through VINR.
+
+If the CIT was processed before June 2, 2026, VINR sends the TLID from the earliest authorized MIT after June 2, 2026, as Mastercard recommends.
+
+## See also
+
+<Cards>
+  <Card title="CITs and MITs" href="/docs/payments/payment-methods/add-payment-methods/cards/cit-mit" description="Card network rules based on who initiates a transaction." />
+  <Card title="Cartes Bancaires" href="/docs/payments/payment-methods/add-payment-methods/cards/cartes-bancaires" description="France's local card network — availability, disputes, and integration." />
+</Cards>

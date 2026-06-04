@@ -1,7 +1,6 @@
 {
   "title": "Google Pay",
   "pages": [
-    "index",
     "setup",
     "test-and-go-live"
   ]

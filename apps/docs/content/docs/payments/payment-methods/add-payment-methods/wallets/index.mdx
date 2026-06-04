@@ -1,6 +1,6 @@
 ---
 title: Wallets
-description: Accept Google Pay, Apple Pay, Samsung Pay, and other digital wallets with VINR.
+description: Accept Google Pay, Apple Pay, and other digital wallets with VINR.
 priority: P0
 lastUpdated: "2026-06-04"
 ---
@@ -15,7 +15,6 @@ Wallets reduce friction at checkout: the customer authenticates with Face ID, To
 |---|---|---|
 | Google Pay | Android Chrome, any browser with saved card | Biometric / PIN |
 | Apple Pay | iOS Safari, macOS Safari, in-app (iOS) | Face ID / Touch ID / passcode |
-| Samsung Pay | Samsung devices, in-app (Android) | Biometric / PIN |
 
 <Callout type="info">
 In Bulgaria, Apple Pay and Google Pay adoption is growing across all major issuing banks. Both wallets work for all cardholders regardless of which bank issued their card — VINR handles the tokenization at the network level.
@@ -28,7 +27,7 @@ A wallet payment follows the same lifecycle as a card payment — authorization 
 From your perspective:
 
 - The `payment` object, webhooks, and settlement timeline are identical to a standard card payment.
-- The `payment_method.card.wallet` field identifies the wallet provider (`apple_pay`, `google_pay`, `samsung_pay`).
+- The `payment_method.card.wallet` field identifies the wallet provider (`apple_pay`, `google_pay`).
 - 3D Secure is typically not required for wallet payments — the device authentication satisfies SCA for most European transactions.
 
 ## Enabling wallets
@@ -40,7 +39,6 @@ Enable wallets in the VINR Dashboard under **Settings → Payment methods**. Onc
 <Cards>
   <Card title="Google Pay" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay" description="Merchant verification, domain setup, and the Google Pay API integration." />
   <Card title="Apple Pay" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay" description="Domain verification, merchant setup, and Apple Pay integration." />
-  <Card title="Samsung Pay" href="/docs/payments/payment-methods/add-payment-methods/wallets/samsung-pay" description="Enable Samsung Pay for Android customers." />
 </Cards>
 
 ## See also

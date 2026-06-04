@@ -1,11 +1,11 @@
 {
   "title": "Cards",
   "pages": [
-    "index",
-    "how-cards-work",
-    "supported-brands",
     "cit-mit",
+    "how-cards-work",
     "card-product-codes",
+    "cartes-bancaires",
+    "mastercard-tlid",
     "co-badged-cards"
   ]
 }

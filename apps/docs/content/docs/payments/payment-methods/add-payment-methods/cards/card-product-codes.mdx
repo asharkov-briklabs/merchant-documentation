@@ -5,11 +5,15 @@ priority: P2
 lastUpdated: "2026-06-04"
 ---
 
-Product codes identify the specific program or product associated with a card — for example, whether a Visa card is a Classic, Platinum, or Infinite product. VINR currently supports product codes for Visa and Mastercard only.
+Learn about product codes for cards.
+
+Product codes exist as a way to identify the specific program or product associated with a credit card.
 
 ## Retrieving product codes
 
-When using the VINR Payments API, the product code is stored on the `PaymentMethod` object in the `brand_product` field within the `card` hash. After a payment is confirmed, `brand_product` is also present in `payment_method_details.card` on the corresponding charge object.
+When using the VINR Payments API, the product code is stored on the `PaymentMethod` object in the `brand_product` field within the `card` hash. After successfully confirming a payment, the `brand_product` field is also present in `payment_method_details.card` on the corresponding charge object in the API response.
+
+The `brand_product` field might be `null` if the product code hasn't been collected yet (for example, when creating a card) or the product codes for the particular card network aren't supported. VINR currently supports Visa and Mastercard product codes only.
 
 ```typescript
 import { Vinr } from '@vinr/sdk';
@@ -20,12 +24,11 @@ const paymentMethod = await vinr.paymentMethods.retrieve('pm_ABC123');
 console.log(paymentMethod.card?.brandProduct); // e.g. "I" (Visa Infinite)
 ```
 
-The `brand_product` field may be `null` if:
+## Product codes
 
-- The product code has not yet been collected (for example, immediately after card creation before confirmation).
-- The card network for that card does not support product codes.
+The following table lists product code values for each card brand:
 
-## Visa product codes
+#### Visa
 
 | Product code | Product description |
 |---|---|
@@ -76,7 +79,7 @@ The `brand_product` field may be `null` if:
 | X | Visa Commercial Choice Travel |
 | X1 | Visa Commercial Choice Omni |
 
-## Mastercard product codes
+#### Mastercard
 
 | Product code | Product description |
 |---|---|
@@ -136,7 +139,7 @@ The `brand_product` field may be `null` if:
 | MBA | Mastercard B2B Product 2 |
 | MBB | Mastercard Prepaid Consumer |
 | MBC | Mastercard Prepaid Voucher |
-| MBD | Mastercard Professional Debit BusinessCard |
+| MBD | Mastercard Professional Debit BusinessCard Card |
 | MBE | Mastercard Electronic Business Card |
 | MBF | Prepaid Mastercard Food |
 | MBG | Mastercard B2B Product 3 |
@@ -158,7 +161,7 @@ The `brand_product` field may be `null` if:
 | MBX | Mastercard B2B Product 36 |
 | MBY | Mastercard B2B Product 37 |
 | MBZ | Mastercard B2B Product 38 |
-| MCB | Mastercard BusinessCard |
+| MCB | Mastercard BusinessCard Card |
 | MCC | Mastercard Credit Card (mixed BIN) |
 | MCE | Mastercard Electronic Card |
 | MCF | Mastercard Fleet Card |
@@ -171,7 +174,7 @@ The `brand_product` field may be `null` if:
 | MCV | Merchant-Branded Program |
 | MCW | World Mastercard Card |
 | MDA | Mastercard World Legend Debit |
-| MDB | Debit Mastercard BusinessCard |
+| MDB | Debit Mastercard BusinessCard Card |
 | MDD | Mastercard CoBadge Debit |
 | MDE | Mastercard Essential Prepaid |
 | MDG | Gold Debit Mastercard Card |
@@ -184,7 +187,7 @@ The `brand_product` field may be `null` if:
 | MDS | Debit Mastercard |
 | MDT | Commercial Debit Mastercard Card |
 | MDW | World Elite Debit Mastercard |
-| MEB | Mastercard Executive BusinessCard |
+| MEB | Mastercard Executive BusinessCard Card |
 | MEC | Mastercard Electronic Commercial |
 | MEE | Mastercard Essential Prepaid Credit |
 | MEF | Mastercard Electronic Payment Account |
@@ -210,7 +213,7 @@ The `brand_product` field may be `null` if:
 | MHM | HELOC Debit Platinum |
 | MHN | HELOC Debit Premium |
 | MIA | Prepaid Mastercard Unembossed Student Card |
-| MIK | Prepaid Mastercard Electronic Student (Non-US) |
+| MIK | Prepaid Mastercard Electronic Student (Non-US) Card |
 | MIL | Unembossed Mastercard Student Card (Non-US) |
 | MIP | Prepaid Debit Mastercard Student Card |
 | MIU | Debit Mastercard Unembossed (Non-US) |
@@ -222,12 +225,12 @@ The `brand_product` field may be `null` if:
 | MKF | Digital World |
 | MKG | Digital World Elite |
 | MKH | Digital World Elite Exclusive |
-| MLA | Mastercard Central Travel Solutions Air |
+| MLA | Mastercard Central Travel Solutions Air Card |
 | MLB | Mastercard Brazil Benefit for Home Improvement |
 | MLD | Mastercard Distribution Card |
 | MLE | Mastercard Brazil General Benefits |
 | MLF | Mastercard Agro |
-| MLL | Mastercard Central Travel Solutions Land |
+| MLL | Mastercard Central Travel Solutions Land Card |
 | MNF | Mastercard Public Sector Commercial Card |
 | MNW | Mastercard World Card |
 | MOC | Standard Maestro Social |
@@ -378,10 +381,86 @@ The `brand_product` field may be `null` if:
 | SAS | Standard Mastercard Salary Immediate Debit |
 | SBJ | Prepaid Installment Payments H |
 | SBK | Prepaid Installment Payments I |
+| SBP | Small Business Prepaid |
+| SOL | UK Domestic Solo brand |
+| SOS | Standard Mastercard Salary Immediate Debit |
+| SPP | Mastercard Installment Payments P |
+| SPS | Mastercard Installment Payments S |
+| SUR | Prepaid Unembossed Mastercard Card (Non-US) |
+| SWI | UK Domestic Switch brand |
+| TBE | Mastercard Electronic Business Immediate Debit |
+| TCB | Mastercard Corporate Immediate Debit |
+| TCC | Mastercard (mixed BIN) Immediate Debit |
+| TCE | Mastercard Electronic Immediate Debit |
+| TCF | Mastercard Fleet Card Immediate Debit |
+| TCG | Gold Mastercard Card Immediate Debit |
+| TCM | Mastercard Titanium II |
+| TCO | Mastercard Corporate Immediate Debit |
+| TCP | Mastercard Purchasing Card Immediate Debit |
+| TCS | Mastercard Standard Card Immediate Debit |
+| TCW | World Signia Immediate Debit |
+| TEB | Mastercard Executive BusinessCard Card |
+| TEC | Mastercard Electronic Commercial Immediate Debit |
+| TEO | Mastercard Corporate Executive Card Immediate Debit |
+| TNF | Mastercard Public Sector Commercial Card Immediate Debit |
+| TNW | Mastercard New World Immediate Debit |
+| TPB | Mastercard Preferred Business Card Immediate Debit |
+| TPL | Platinum Mastercard Immediate Debit |
+| TPM | Mastercard Titanium Prepaid |
+| TWB | World Mastercard Black Edition Immediate Debit |
+| WAA | Mastercard Commercial B2B Product 1 |
+| WAB | Mastercard Commercial B2B Product 2 |
+| WAC | Mastercard Commercial B2B Product 3 |
+| WAD | Mastercard Commercial B2B Product 4 |
+| WAE | Mastercard Commercial B2B Product 5 |
+| WAF | Mastercard Commercial B2B Product 6 |
+| WAG | Mastercard Commercial B2B Product 7 |
+| WAH | Mastercard Commercial B2B Product 8 |
+| WAI | Mastercard Commercial B2B Product 9 |
+| WAJ | Mastercard Commercial B2B Product 10 |
+| WAK | Mastercard Commercial B2B Product 11 |
+| WAL | Mastercard Commercial B2B Product 12 |
+| WAM | Mastercard Commercial B2B Product 13 |
+| WAN | Mastercard Commercial B2B Product 14 |
+| WAO | Mastercard Commercial B2B Product 15 |
+| WAP | Mastercard Commercial B2B Product 16 |
+| WAQ | Mastercard Commercial B2B Product 17 |
+| WAT | Mastercard Commercial B2B Product 18 |
+| WAU | Mastercard Commercial B2B Product 19 |
+| WAV | Mastercard Commercial B2B Product 20 |
+| WAW | Mastercard Commercial B2B Product 21 |
+| WAX | Mastercard Commercial B2B Product 22 |
+| WAY | Mastercard Commercial B2B Product 23 |
+| WAZ | Mastercard Commercial B2B Product 24 |
+| WBA | Mastercard Commercial B2B Product 25 |
+| WBB | Mastercard Commercial B2B Product 26 |
+| WBC | Mastercard Commercial B2B Product 27 |
+| WBD | Mastercard Commercial B2B Product 28 |
+| WBE | World Mastercard Black Edition |
+| WBF | Mastercard Commercial B2B Product 29 |
+| WBG | Mastercard Commercial B2B Product 30 |
+| WBH | Mastercard Commercial B2B Product 31 |
+| WBI | Mastercard Commercial B2B Product 32 |
+| WBJ | Mastercard Commercial B2B Product 33 |
+| WBK | Mastercard Commercial B2B Product 34 |
+| WBL | Mastercard Commercial B2B Product 35 |
+| WPD | World Prepaid Debit |
+
+## Testing
+
+Use the following sandbox card numbers to simulate purchases with specific card product codes, returned in the `brand_product` field. Any future expiry date, any three-digit CVC, and any postal code are accepted.
+
+| Description | Number | Product code |
+|---|---|---|
+| Mastercard Standard Debit | 5555050360000007 | MDS |
+| Mastercard Platinum Debit | 5555050360000015 | MDP |
+| Mastercard World Credit | 5200000360000076 | MCW |
+| Mastercard World Elite Credit | 5200000360000068 | MWE |
+| Mastercard World Elite for Business Credit | 5200500000100004 | MAB |
 
 ## See also
 
 <Cards>
-  <Card title="Supported card brands" href="/docs/payments/payment-methods/add-payment-methods/cards/supported-brands" description="Which networks VINR accepts and their capabilities." />
-  <Card title="Cards overview" href="/docs/payments/payment-methods/add-payment-methods/cards" description="Back to the Cards section." />
+  <Card title="Cards" href="/docs/payments/payment-methods/add-payment-methods/cards" description="Supported card brands, capabilities, and geographic considerations." />
+  <Card title="How cards work" href="/docs/payments/payment-methods/add-payment-methods/cards/how-cards-work" description="Authorization, capture, and settlement mechanics." />
 </Cards>

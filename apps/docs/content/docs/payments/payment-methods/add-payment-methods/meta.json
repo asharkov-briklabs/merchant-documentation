@@ -1,7 +1,6 @@
 {
   "title": "Add payment methods",
   "pages": [
-    "index",
     "integration-options",
     "manage-default-payment-methods",
     "---Payment method types---",

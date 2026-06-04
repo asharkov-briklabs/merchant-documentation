@@ -5,11 +5,7 @@ priority: P1
 lastUpdated: "2026-06-04"
 ---
 
-Upgrade your API to manage payment methods in the Dashboard by default.
-
-In prior versions of the VINR API, if you didn't specify a `payment_method_types` parameter during the creation request, VINR would default to using the card payment method for both PaymentIntents and SetupIntents.
-
-Moving forward, VINR applies eligible payment methods that you manage from your **Dashboard → Settings → Payment methods** to your PaymentIntents and SetupIntents by default if you don't specify the `payment_method_types` parameter in the creation request.
+By default, VINR applies the eligible payment methods you manage in **Dashboard → Settings → Payment methods** to every PaymentIntent and SetupIntent. You do not need to specify `payment_method_types` — VINR selects the right methods automatically based on the transaction's currency, country, and your account configuration.
 
 ## Payment methods
 
@@ -19,13 +15,14 @@ To see how your payment methods appear to customers, enter a transaction ID or s
 
 You can enable Apple Pay and Google Pay in your payment methods settings. By default, Apple Pay is enabled and Google Pay is disabled. However, in some cases VINR filters them out even when they're enabled — for example, Google Pay is filtered if you enable automatic tax without collecting a shipping address.
 
-Checkout's VINR-hosted pages don't need integration changes to enable Apple Pay or Google Pay. VINR handles these payments the same way as other card payments.
+Apple Pay and Google Pay work automatically on VINR-hosted checkout pages — no additional integration required.
 
 ## Update your payment flows
 
 Choose the upgrade path that matches your current VINR integration.
 
-### Elements
+<Tabs items={["Elements", "Checkout and Payment Links", "API"]}>
+<Tab value="Elements">
 
 If your integration uses a Card Element or individual payment method Elements, we recommend migrating to the [Payment Element](/docs/payments/in-app/payment-element). This single, unified integration lets you accept a wide range of payment methods, and any new methods you enable in the Dashboard appear automatically without code changes.
 
@@ -50,7 +47,8 @@ If your integration uses VINR.js to confirm payments with `confirmPayment` or by
 
 When confirming payments, we recommend providing the `return_url` parameter to support payment methods that require a redirect.
 
-#### HTML + JS
+<Tabs items={["HTML + JS", "React"]}>
+<Tab value="HTML + JS">
 
 ```javascript
 const form = document.getElementById('payment-form');
@@ -79,7 +77,8 @@ form.addEventListener('submit', async (event) => {
 });
 ```
 
-#### React
+</Tab>
+<Tab value="React">
 
 ```tsx
 import React, { useState } from 'react';
@@ -127,6 +126,9 @@ const CheckoutForm = () => {
 
 export default CheckoutForm;
 ```
+
+</Tab>
+</Tabs>
 
 ### Server-side confirmation
 
@@ -181,11 +183,13 @@ const paymentIntent = await vinr.paymentIntents.create({
 });
 ```
 
-### Checkout and Payment Links
+</Tab>
+<Tab value="Checkout and Payment Links">
 
 If your integration uses Checkout and Payment Links, upgrade your API version to adopt Dashboard-managed payment methods without making changes to your integration code.
 
-### API
+</Tab>
+<Tab value="API">
 
 If your integration confirms payments with the `off_session` parameter set to `true`, your existing process remains the same and requires no further changes.
 
@@ -239,3 +243,6 @@ const paymentIntent = await vinr.paymentIntents.create({
   payment_method_types: ['card'],
 });
 ```
+
+</Tab>
+</Tabs>

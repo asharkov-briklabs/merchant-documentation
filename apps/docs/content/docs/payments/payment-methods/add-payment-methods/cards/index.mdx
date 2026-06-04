@@ -5,18 +5,79 @@ priority: P0
 lastUpdated: "2026-06-04"
 ---
 
-Cards are the most widely accepted VINR payment method and the default rail behind every hosted checkout. A single integration accepts Visa, Mastercard, American Express, Discover, UnionPay, Maestro, and Cartes Bancaires — no per-brand configuration required.
+Cards are linked to a debit or credit account at a bank. To complete a payment online, customers enter their card information at checkout. Cards are enabled by default and are supported across all [integration paths](/docs/payments/payment-methods/add-payment-methods/integration-options). You can manage payment methods from **Dashboard → Settings → Payment methods**. VINR handles the return of eligible payment methods based on factors such as the transaction's amount, currency, and payment flow.
 
 ## Payment flow
 
-A card payment moves through up to four stages:
+A customer initiates a card payment at checkout by entering their card information. Depending on their card network and country, they may have additional security verification steps.
+
+A card payment moves through the following stages:
 
 1. **Format check** — VINR validates that card details are correctly formatted (expiry date not in the past, card number passes a Luhn check).
 2. **Authentication** — For many European cards, the issuing bank requires a [3D Secure](/docs/payments/3d-secure) challenge to satisfy [Strong Customer Authentication](/docs/payments/strong-customer-authentication). VINR triggers this automatically on all hosted checkout surfaces.
 3. **Authorization** — The issuing bank reserves the funds on the cardholder's account. The payment enters `authorized`.
 4. **Capture** — You claim the reserved funds. With default immediate capture, this happens in the same request; the payment moves to `processing`, then `completed`.
 
-Cards can also fund digital wallet payments. When a customer pays with Apple Pay or Google Pay, VINR receives a network token representing the underlying card. The `payment_method.card` object is populated as normal; the `wallet` field indicates the provider.
+Cards can also act as the funding source for [wallet](/docs/payments/payment-methods/add-payment-methods/wallets) payments. When a customer pays with Apple Pay or Google Pay, VINR receives a network token representing the underlying card. The `payment_method.card` object is populated as normal; the `wallet` field indicates the provider.
+
+## Supported card brands
+
+VINR supports several card brands, from large global networks like Visa and Mastercard to regional networks like Cartes Bancaires in France. When you integrate VINR, you can accept a range of card brands without additional configuration, including:
+
+- Visa (credit, debit, and prepaid)
+- Mastercard (credit, debit, and prepaid)
+- American Express
+- Discover & Diners Club
+- China UnionPay (CUP)
+- Japan Credit Bureau (JCB)
+- Maestro (debit; 3D Secure frequently required)
+
+Some brands require additional account configuration. Contact VINR support to enable **Cartes Bancaires** on your account.
+
+### Card brand capabilities
+
+| Card Brand | Customer Region | 3D Secure | Wallets |
+|---|---|---|---|
+| **Visa** | Global | Supported | Supported |
+| **Mastercard** | Global | Supported | Supported |
+| **American Express** | Global | Supported | Supported |
+| **Discover & Diners Club** | Global | Supported | Supported |
+| **China UnionPay** | Global | Supported | Not supported |
+| **Japan Credit Bureau (JCB)** | Global | Supported | Supported |
+| **Maestro** | Europe (primary) | Supported — frequently required | Supported |
+| **Cartes Bancaires** | France (primary); EEA | Supported | Apple Pay only¹ |
+
+¹ Cartes Bancaires supports Apple Pay. For in-store NFC payments via Cartes Bancaires, contact VINR support.
+
+<Callout type="info">
+In Bulgaria, Maestro debit cards are common. 3D Secure is frequently required even for low-value transactions — ensure your integration handles the authentication challenge for all card brands, not only on transactions above SCA thresholds.
+</Callout>
+
+VINR processes payments in 135+ currencies. Some card networks have limitations on supported presentment currencies. Review your account's enabled currencies in the Dashboard under **Settings → Payment methods**.
+
+### Exclude card brands
+
+You can restrict specific card brands using custom client-side code that reads the `brand` field returned as the customer types their card number, and prevents submission for excluded brands.
+
+## Geographic considerations
+
+VINR provides an infrastructure that handles secure payments and complies with regional regulations. This is particularly relevant with Strong Customer Authentication (SCA) rules in Europe, where additional verification steps are typically required.
+
+### SCA and 3D Secure
+
+Some banks, especially in regulated regions like Europe, may prompt the customer to authenticate a purchase — for example, by sending a code to enter on the bank's website. This authentication step is part of **Strong Customer Authentication (SCA)**.
+
+[SCA](/docs/payments/strong-customer-authentication), in effect as part of PSD2 regulation in Europe, requires changes to how European customers authenticate online payments. Card payments use [3D Secure (3DS)](/docs/payments/3d-secure) to meet these requirements.
+
+VINR handles 3DS automatically on all hosted checkout and Payment Links surfaces. For custom integrations using the Payments API, authentication is triggered based on transaction value, issuer rules, and VINR risk signals.
+
+### Instalments
+
+Some regions support card-issuer-managed instalment payments. For instalment plans managed directly by VINR, see [Instalments](/docs/payments/payment-methods/add-payment-methods/instalments).
+
+### Card brand choice
+
+The European Union requires businesses to allow customers to choose which card brand processes their transaction, because cards in the EU may carry both a local network (such as Cartes Bancaires) and an international network (such as Visa or Mastercard). See [Co-badged cards & EU compliance](/docs/payments/payment-methods/add-payment-methods/cards/co-badged-cards) for how to implement this choice.
 
 ## Creating a payment
 
@@ -86,14 +147,13 @@ Card payments are reversible through **chargebacks**. A disputed payment creates
 ## In this section
 
 <Cards>
-  <Card title="How card payments work" href="/docs/payments/payment-methods/add-payment-methods/cards/how-cards-work" description="The mechanics of format check, authentication, authorization, and capture — including automatic card updates." />
-  <Card title="Supported card brands" href="/docs/payments/payment-methods/add-payment-methods/cards/supported-brands" description="Which networks VINR accepts and their regional and feature capabilities." />
-  <Card title="Customer-initiated & Merchant-initiated" href="/docs/payments/payment-methods/add-payment-methods/cards/cit-mit" description="Card network rules based on who initiates a transaction — and what compliance that requires." />
+  <Card title="How cards work" href="/docs/payments/payment-methods/add-payment-methods/cards/how-cards-work" description="The mechanics of format check, authentication, authorization, and capture — including automatic card updates." />
+  <Card title="CITs and MITs" href="/docs/payments/payment-methods/add-payment-methods/cards/cit-mit" description="Card network rules based on who initiates a transaction — and what compliance that requires." />
   <Card title="Card product codes" href="/docs/payments/payment-methods/add-payment-methods/cards/card-product-codes" description="Visa and Mastercard product code reference for the brand_product API field." />
   <Card title="Co-badged cards & EU compliance" href="/docs/payments/payment-methods/add-payment-methods/cards/co-badged-cards" description="EU requirement to offer cardholders a choice of network on co-badged cards." />
 </Cards>
 
-## Next steps
+## See also
 
 <Cards>
   <Card title="3D Secure" href="/docs/payments/3d-secure" description="When 3DS is triggered and how VINR handles the authentication challenge." />
