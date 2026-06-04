@@ -1,0 +1,106 @@
+---
+title: How card payments work
+description: The mechanics behind an online credit or debit card payment with VINR.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+Cards are one of the most widely used payment methods globally. Understanding the stages of a card payment helps you build integrations that handle every outcome correctly.
+
+## Checking card details
+
+VINR first validates that the card details provided are correctly formatted — for example, that the expiry date is not in the past and that the card number passes a Luhn check. This validation happens before any network request. A passing format check does not guarantee the card is valid or has sufficient funds.
+
+## Customer authentication
+
+Some banks, particularly in regulated regions like Europe, prompt the customer to authenticate the purchase before authorizing funds. For example, the customer may receive a one-time code by text message to enter on their bank's website, or approve the payment in their banking app.
+
+This step is part of **Strong Customer Authentication (SCA)**, a regulatory requirement across the European Economic Area under PSD2. VINR handles [3D Secure](/docs/payments/3d-secure) automatically on all hosted checkout surfaces — no additional integration is required for the standard flow. See [Strong Customer Authentication](/docs/payments/strong-customer-authentication) for details on when authentication is required and how to configure it for custom integrations.
+
+<Callout type="info">
+In Bulgaria, 3D Secure is frequently required even for low-value transactions, across all card brands including Maestro. Budget for the authentication step in your checkout UX design.
+</Callout>
+
+## Authorization
+
+The issuing bank checks for sufficient funds and, if successful, places a hold on the amount on the cardholder's account — reserving it for VINR on your behalf. The payment enters the `authorized` state.
+
+Authorization does not move money. It only reserves the funds. Uncaptured authorizations expire automatically — typically within 7 days, depending on the issuer — at which point the hold is released back to the cardholder with no charge. To capture before expiry, see [authorize & capture](/docs/payments/authorize-and-capture).
+
+## Capture
+
+The reserved funds move from the issuing bank to your VINR [balance](/docs/operations/balances). With default **immediate capture**, authorization and capture happen in a single step at checkout. If you use [authorize & capture](/docs/payments/authorize-and-capture), you separate these steps — for example, to capture at the time of shipment rather than at the time of order.
+
+## Card updates
+
+Updating a saved card via the VINR API can only change the following fields:
+
+- Name on card
+- Billing address
+- Expiration date
+- Metadata
+
+Any other change — including a new card number — requires collecting fresh card details from the customer, creating a new payment method, and deleting the old one. To let customers manage their own saved cards, implement self-service flows for adding and removing payment methods.
+
+To change a customer's default payment method for recurring charges, update the customer object:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+await vinr.customers.update('cus_ABC123', {
+  invoiceSettings: {
+    defaultPaymentMethod: 'pm_XYZ789',
+  },
+});
+```
+
+## Automatic card updates
+
+Saved card details can continue to work even when a bank re-issues the physical card. VINR works with card networks to automatically refresh saved card details whenever a customer receives a replacement card — for example, when a card expires or is reported lost or stolen. This lets customers continue using your service without interruption and reduces failed charges from stale card data.
+
+Automatic card updates require the card issuer to participate with the network. Coverage is broad across major Visa and Mastercard issuers in Bulgaria and the broader EEA.
+
+Listen for these webhook events to be notified of card update activity:
+
+- `payment_method.updated` — a card was updated via a VINR API call.
+- `payment_method.automatically_updated` — the card network automatically updated a saved card.
+
+Both events include the card's new expiration date and last four digits so you can update your own records. If the update includes a new card number, the card's `fingerprint` changes.
+
+```typescript
+// POST /webhooks/vinr
+const event = vinr.webhooks.verify(rawBody, req.headers['x-vinr-signature']);
+
+if (event.type === 'payment_method.automatically_updated') {
+  const card = event.data.object.card;
+  console.log(`Card updated: ...${card.last4}, expires ${card.expMonth}/${card.expYear}`);
+
+  // If fingerprint changed, the PAN changed — notify the customer
+  const prevFingerprint = event.data.previousAttributes?.card?.fingerprint;
+  if (prevFingerprint && prevFingerprint !== card.fingerprint) {
+    await notifyCustomerOfNewCard(event.data.object.customer);
+  }
+}
+```
+
+<Callout type="warn">
+When a card's **brand** changes during re-issuance (for example, a Visa card re-issued as a Mastercard), you cannot charge it for any merchant-initiated transactions until you obtain a new cardholder agreement. See [Customer-initiated & Merchant-initiated transactions](/docs/payments/payment-methods/add-payment-methods/cards/cit-mit).
+</Callout>
+
+## Limitations
+
+- **Cards are reversible.** Cardholders can dispute a charge through their bank, creating a chargeback. Budget for dispute exposure — unlike final rails such as SEPA Credit Transfer, a card payment can be reversed weeks after settlement. See [disputes & chargebacks](/docs/payments/disputes).
+- **3D Secure adds checkout friction.** The authentication step is mandatory for many European transactions under SCA. Design your checkout to handle the redirect gracefully, particularly on mobile.
+- **Refunds go to the original card only.** A refund cannot be redirected to a different card and typically takes several business days to appear on the customer's statement.
+- **Some prepaid and corporate cards decline deferred captures.** If you use [authorize & capture](/docs/payments/authorize-and-capture), test with prepaid and corporate card types to confirm the hold behaviour before going live.
+
+## See also
+
+<Cards>
+  <Card title="3D Secure" href="/docs/payments/3d-secure" description="When authentication is triggered and how VINR handles the challenge." />
+  <Card title="Authorize & capture" href="/docs/payments/authorize-and-capture" description="Reserve funds now and capture later." />
+  <Card title="Customer-initiated & Merchant-initiated" href="/docs/payments/payment-methods/add-payment-methods/cards/cit-mit" description="Card network rules based on who initiates a transaction." />
+  <Card title="Manage payment methods" href="/docs/payments/payment-methods/manage-payment-methods" description="Save, update, and remove stored payment methods." />
+</Cards>

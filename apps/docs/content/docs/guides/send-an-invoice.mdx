@@ -92,7 +92,7 @@ After finalize, line items are immutable. To correct a sent invoice, [void](/doc
 
 ## Collect payment
 
-The customer pays on the hosted page, which supports cards, wallets, and any [local methods](/docs/payments/payment-methods/local-methods) you've enabled. Each invoice generates an underlying `pay_` you can inspect, but you don't need to build a checkout yourself.
+The customer pays on the hosted page, which supports cards, wallets, and any [local methods](/docs/payments/payment-methods/add-payment-methods/local-methods) you've enabled. Each invoice generates an underlying `pay_` you can inspect, but you don't need to build a checkout yourself.
 
 Fulfil from the webhook so it happens exactly once, even if the customer never returns to your site.
 

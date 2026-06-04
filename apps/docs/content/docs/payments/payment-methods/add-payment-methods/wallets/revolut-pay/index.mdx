@@ -1,0 +1,54 @@
+---
+title: Revolut Pay
+description: Let Revolut account holders check out in one tap with Revolut Pay.
+priority: P0
+lastUpdated: "2026-06-04"
+---
+
+Revolut Pay is an express checkout button for Revolut account holders. When a customer taps **Pay with Revolut**, they are redirected to the Revolut app to confirm the payment — no card number entry, no 3D Secure challenge. The payment settles directly from their Revolut account balance.
+
+<Callout type="info">
+In Bulgaria, Revolut has among the highest per-capita account penetration in Europe. Enabling Revolut Pay can meaningfully lift conversion for Bulgarian customers, particularly on mobile.
+</Callout>
+
+## Payment flow
+
+<Steps>
+
+### Customer taps Revolut Pay
+
+The Revolut Pay button appears in the VINR hosted checkout alongside other payment methods. The customer taps it.
+
+### Redirect to Revolut
+
+The customer is redirected to the Revolut app (on mobile) or Revolut's web authentication page (on desktop) to confirm the payment amount and merchant name.
+
+### Customer confirms
+
+The customer approves the payment in Revolut. Revolut sends the payment confirmation to VINR.
+
+### Redirect back and webhook
+
+The customer is returned to your `returnUrl`. VINR fires a `payment.completed` webhook. Use the webhook — not the browser redirect — to trigger fulfillment.
+
+</Steps>
+
+## Currency and availability
+
+Revolut Pay is available for payments in EUR, GBP, USD, and other currencies supported by Revolut. The payment is debited from the customer's Revolut account balance in the payment currency; no FX conversion is applied by VINR.
+
+Revolut Pay is available for online payments. It does not support in-person terminal acceptance.
+
+## In this section
+
+<Cards>
+  <Card title="Accept Revolut Pay" href="/docs/payments/payment-methods/add-payment-methods/wallets/revolut-pay/accept" description="Enable Revolut Pay and integrate it into your checkout." />
+  <Card title="Refunds & disputes" href="/docs/payments/payment-methods/add-payment-methods/wallets/revolut-pay/refunds" description="Refund Revolut Pay payments and handle disputes." />
+</Cards>
+
+## See also
+
+<Cards>
+  <Card title="Local methods" href="/docs/payments/payment-methods/add-payment-methods/local-methods" description="Other redirect-based payment methods for specific regions." />
+  <Card title="Payment methods overview" href="/docs/payments/payment-methods" description="The full catalog of payment rails available on VINR." />
+</Cards>

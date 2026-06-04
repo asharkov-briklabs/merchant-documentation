@@ -44,7 +44,7 @@ if (event.type === 'payment_method.automatically_updated') {
 In some cases, a card re-issuance changes the card's **brand** — for example, a Visa card re-issued as Mastercard. This is detected by comparing `brand` in `previousAttributes` with the new `brand` on the updated card.
 
 <Callout type="warn">
-When a card's brand changes, you **cannot** charge it for any merchant-initiated transactions (MITs) until you obtain a new cardholder agreement. See [Customer-initiated & Merchant-initiated transactions](/docs/payments/payment-methods/cards/cit-mit).
+When a card's brand changes, you **cannot** charge it for any merchant-initiated transactions (MITs) until you obtain a new cardholder agreement. See [Customer-initiated & Merchant-initiated transactions](/docs/payments/payment-methods/add-payment-methods/cards/cit-mit).
 </Callout>
 
 ```typescript
@@ -79,6 +79,6 @@ if (event.type === 'payment_method.automatically_updated') {
 ## See also
 
 <Cards>
-  <Card title="Customer-initiated & Merchant-initiated" href="/docs/payments/payment-methods/cards/cit-mit" description="Re-authorization requirements when a card brand changes." />
+  <Card title="Customer-initiated & Merchant-initiated" href="/docs/payments/payment-methods/add-payment-methods/cards/cit-mit" description="Re-authorization requirements when a card brand changes." />
   <Card title="Update & replace" href="/docs/payments/payment-methods/manage-payment-methods/update" description="Manual update and re-collection flows." />
 </Cards>

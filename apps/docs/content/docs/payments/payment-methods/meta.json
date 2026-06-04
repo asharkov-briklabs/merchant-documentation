@@ -3,13 +3,6 @@
   "collapsible": false,
   "pages": [
     "index",
-    "cards",
-    "wallets",
-    "instalments",
-    "meal-vouchers",
-    "bank-transfers",
-    "local-methods",
-    "stablecoins",
     "add-payment-methods",
     "manage-payment-methods"
   ]

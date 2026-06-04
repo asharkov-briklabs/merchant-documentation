@@ -1,0 +1,54 @@
+---
+title: Google Pay
+description: Accept Google Pay across Android, Chrome, and the web with VINR.
+priority: P0
+lastUpdated: "2026-06-04"
+---
+
+Google Pay lets customers pay using a card stored in their Google account — on Android devices, in Chrome on any platform, and within native Android apps. VINR acts as the payment gateway, handling the token exchange with the Google Pay API so you never touch raw card data.
+
+<Callout type="info">
+In Bulgaria, Google Pay works for all cardholders regardless of their issuing bank. VINR manages the gateway connection at the network level — no per-bank setup is required.
+</Callout>
+
+## How Google Pay works
+
+When a customer chooses Google Pay at checkout:
+
+1. The browser or device checks whether Google Pay is available (`isReadyToPay`).
+2. The Google Pay payment sheet appears with the customer's saved card.
+3. The customer confirms — with a biometric, PIN, or Google account authentication.
+4. Google encrypts a one-time payment token and passes it to VINR.
+5. VINR decrypts the token and authorizes the payment through the card network.
+6. You receive a `payment.completed` webhook identical in structure to a standard card payment.
+
+The `payment_method.card.wallet.type` field on the resulting payment is set to `google_pay`.
+
+## Environments
+
+Google Pay operates in two environments:
+
+| Environment | Purpose |
+|---|---|
+| `TEST` | Development and QA — no real cards, no real charges |
+| `PRODUCTION` | Live payments — requires Google's production approval |
+
+The VINR sandbox maps to the Google Pay `TEST` environment automatically. When you go live, VINR switches to `PRODUCTION` after you complete Google's approval checklist. See [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live).
+
+## 3D Secure and SCA
+
+Google Pay payments typically satisfy SCA without triggering a 3D Secure challenge — the device authentication (biometric/PIN) combined with the cryptographic token is accepted as strong authentication by most European issuers. In the rare case where the issuer requires an additional challenge, VINR handles it automatically.
+
+## In this section
+
+<Cards>
+  <Card title="Set up Google Pay" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup" description="Dashboard configuration, merchant verification, and the Google Pay API integration." />
+  <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live" description="Test your integration and complete Google's production approval." />
+</Cards>
+
+## See also
+
+<Cards>
+  <Card title="Wallets" href="/docs/payments/payment-methods/add-payment-methods/wallets" description="Apple Pay, Samsung Pay, and other digital wallets." />
+  <Card title="Cards" href="/docs/payments/payment-methods/add-payment-methods/cards" description="The card rail behind most Google Pay payments." />
+</Cards>

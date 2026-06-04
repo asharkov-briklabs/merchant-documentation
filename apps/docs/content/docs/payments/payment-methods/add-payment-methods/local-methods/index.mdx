@@ -1,0 +1,89 @@
+---
+title: Local methods
+description: Region-specific payment methods — iDEAL, Blik, Bancontact, EPS, Przelewy24, and Twint.
+priority: "P1"
+lastUpdated: "2026-06-04"
+---
+
+Local methods are region-specific ways to pay that customers trust over cards in their home market. Most work as bank-redirect or app-confirmation flows: the customer approves the charge in their own banking app or bank portal, which means high conversion and, for all supported methods, payments that are final the moment they confirm — no chargeback path.
+
+## Supported methods
+
+| Method | Region | Currency | Flow |
+|---|---|---|---|
+| [iDEAL](/docs/payments/payment-methods/add-payment-methods/local-methods/ideal) | Netherlands | EUR | Bank redirect |
+| [Blik](/docs/payments/payment-methods/add-payment-methods/local-methods/blik) | Poland | PLN | 6-digit code / app |
+| [Bancontact](/docs/payments/payment-methods/add-payment-methods/local-methods/bancontact) | Belgium | EUR | Bank redirect / QR app |
+| [EPS](/docs/payments/payment-methods/add-payment-methods/local-methods/eps) | Austria | EUR | Bank redirect |
+| [Przelewy24](/docs/payments/payment-methods/add-payment-methods/local-methods/przelewy24) | Poland | PLN, EUR | Bank redirect (aggregator) |
+| [Twint](/docs/payments/payment-methods/add-payment-methods/local-methods/twint) | Switzerland | CHF | QR code / app redirect |
+
+## How the flow works
+
+A local-method payment uses the same `payment` object as any other rail but always involves a redirect or app handoff:
+
+<Steps>
+
+### Create the payment
+
+Create a `pending` payment scoped to one or more local methods and receive a `checkoutUrl`.
+
+### Customer authenticates with their bank
+
+The customer is redirected to (or confirms in) their bank or banking app. For Blik they enter a 6-digit code generated in-app; for Twint they scan a QR code.
+
+### Bank confirms and redirects back
+
+On approval the bank pushes the customer to your `returnUrl`. The payment moves to `completed`. Most local methods are **final** at this point with no chargeback path.
+
+### Fulfill on the webhook
+
+Treat `payment.completed` — not the browser redirect — as the source of truth before releasing goods.
+
+</Steps>
+
+## Passing multiple methods or 'auto'
+
+You can restrict to a specific method or pass `'auto'` to let VINR surface the right method based on the customer's region and the payment currency:
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+// Let VINR pick the right local method automatically
+const payment = await vinr.payments.create({
+  amount: 2500,
+  currency: 'EUR',
+  description: 'Order #4471',
+  methods: ['auto'],
+  returnUrl: 'https://yoursite.com/payment/complete',
+});
+
+// Or specify the methods you want to offer
+const payment2 = await vinr.payments.create({
+  amount: 2500,
+  currency: 'EUR',
+  methods: ['ideal', 'bancontact', 'eps'],
+  returnUrl: 'https://yoursite.com/payment/complete',
+});
+```
+
+<Callout type="info">
+Local methods are single-currency: a customer paying with iDEAL must be charged in EUR, Blik in PLN. If you pass `methods: ['auto']`, VINR only surfaces methods that match the payment currency and the customer's detected region.
+</Callout>
+
+## Settlement & refunds
+
+All local methods capture in full at confirmation. Funds land in your [balance](/docs/operations/balances) immediately and follow your [settlement](/docs/operations/settlement) schedule. Refunds are supported via the standard refund API and are returned to the customer's originating bank account within a few business days.
+
+## Method pages
+
+<Cards>
+  <Card title="iDEAL" href="/docs/payments/payment-methods/add-payment-methods/local-methods/ideal" description="Bank redirect for Dutch customers. EUR only." />
+  <Card title="Blik" href="/docs/payments/payment-methods/add-payment-methods/local-methods/blik" description="6-digit code or app push for Polish customers. PLN only." />
+  <Card title="Bancontact" href="/docs/payments/payment-methods/add-payment-methods/local-methods/bancontact" description="Bank redirect or QR app for Belgian customers. EUR only." />
+  <Card title="EPS" href="/docs/payments/payment-methods/add-payment-methods/local-methods/eps" description="Austria's national bank-redirect scheme. EUR only." />
+  <Card title="Przelewy24" href="/docs/payments/payment-methods/add-payment-methods/local-methods/przelewy24" description="150+ Polish banks in one redirect. PLN and EUR." />
+  <Card title="Twint" href="/docs/payments/payment-methods/add-payment-methods/local-methods/twint" description="QR code or app redirect for Swiss customers. CHF only." />
+</Cards>

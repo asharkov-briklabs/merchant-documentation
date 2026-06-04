@@ -1,0 +1,16 @@
+{
+  "title": "Add payment methods",
+  "pages": [
+    "index",
+    "integration-options",
+    "manage-default-payment-methods",
+    "---Payment method types---",
+    "cards",
+    "wallets",
+    "instalments",
+    "meal-vouchers",
+    "bank-transfers",
+    "local-methods",
+    "stablecoins"
+  ]
+}

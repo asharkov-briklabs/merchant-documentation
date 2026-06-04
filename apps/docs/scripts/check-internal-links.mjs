@@ -1,12 +1,13 @@
 // Link-integrity guard for hand-maintained internal docs links.
 //
 // The marketing mega-menu (lib/nav-taxonomy.ts) and the homepage link grids
-// (app/[locale]/page.tsx — TRY_TASKS / QUICK_LINKS / HELP_LINKS) hardcode ~40
+// (app/page.tsx — TRY_TASKS / QUICK_LINKS / HELP_LINKS) hardcode ~40
 // deep `/docs/...` paths that are NOT derived from the content tree. Nothing
 // else verifies they resolve, so renaming or moving a content page would
 // silently 404 the nav/homepage with a green build. This script scans every
-// source file under app/ and lib/ for `/docs/...` string literals and asserts
-// each one maps to a real page under content/docs, failing CI if any dangle.
+// source file under app/ and lib/ for `/docs/...` string literals, and every
+// MDX file under content/docs for href="/docs/..." attributes, asserting each
+// one maps to a real page under content/docs and failing CI if any dangle.
 //
 // Scope: only `/docs` content links (which map deterministically to .mdx
 // files). App routes like `/ask` are Next pages, not content, and are skipped.
@@ -25,6 +26,17 @@ function sourceFiles(dir) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) out.push(...sourceFiles(full));
     else if (/\.tsx?$/.test(entry.name)) out.push(full);
+  }
+  return out;
+}
+
+/** Recursively collect .mdx files under a directory. */
+function mdxFiles(dir) {
+  const out = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...mdxFiles(full));
+    else if (entry.name.endsWith(".mdx")) out.push(full);
   }
   return out;
 }
@@ -54,6 +66,24 @@ for (const dir of SCAN_DIRS) {
       if (!broken.has(docPath)) broken.set(docPath, new Set());
       broken.get(docPath).add(relative(ROOT, file));
     }
+  }
+}
+
+// ── MDX content href scan ────────────────────────────────────────────────────
+// href="/docs/..." attributes in .mdx files are not covered by the source-file
+// scan above (which only reads .ts/.tsx). A restructure or rename that updates
+// the folder but misses an MDX cross-reference 404s silently. This pass scans
+// every .mdx file under content/docs for href="/docs/..." values and validates
+// each one resolves to a real page.
+const MDX_HREF_RE = /href="(\/docs[a-z0-9/_-]*)"/g;
+const mdxBroken = new Map(); // path -> Set(files)
+
+for (const file of mdxFiles(CONTENT_DIR)) {
+  const text = readFileSync(file, "utf8");
+  for (const [, docPath] of text.matchAll(MDX_HREF_RE)) {
+    if (resolves(docPath)) continue;
+    if (!mdxBroken.has(docPath)) mdxBroken.set(docPath, new Set());
+    mdxBroken.get(docPath).add(relative(ROOT, file));
   }
 }
 
@@ -103,10 +133,11 @@ for (const [, source, destination] of configText.matchAll(REDIRECT_PAIR_RE)) {
   redirectBroken.push({ source, destination });
 }
 
-const totalBroken = broken.size + navBroken.length + redirectBroken.length;
+const totalBroken = broken.size + mdxBroken.size + navBroken.length + redirectBroken.length;
 
 if (totalBroken === 0) {
   console.log("✔ internal docs links: all resolve to content pages");
+  console.log("✔ MDX content hrefs: all resolve to content pages");
   console.log("✔ nav-taxonomy.ts paths: all resolve to content pages");
   console.log("✔ next.config.mjs redirect destinations: all resolve to content pages");
   process.exit(0);
@@ -115,6 +146,14 @@ if (totalBroken === 0) {
 if (broken.size > 0) {
   console.error(`✖ ${broken.size} internal docs link(s) point to missing content pages:\n`);
   for (const [docPath, files] of broken) {
+    console.error(`  ${docPath}`);
+    for (const f of files) console.error(`      ↳ ${f}`);
+  }
+}
+
+if (mdxBroken.size > 0) {
+  console.error(`\n✖ ${mdxBroken.size} MDX href(s) in content/docs point to missing content pages:\n`);
+  for (const [docPath, files] of mdxBroken) {
     console.error(`  ${docPath}`);
     for (const f of files) console.error(`      ↳ ${f}`);
   }
@@ -139,8 +178,8 @@ if (redirectBroken.length > 0) {
 }
 
 console.error(
-  "\nEither create the content page or update the link. These links are hand-" +
-    "maintained (lib/nav-taxonomy.ts, app/[locale]/page.tsx, next.config.mjs) and not derived\n" +
-    "from the content tree, so this guard is the only thing catching the drift."
+  "\nEither create the content page or update the link. Links in nav-taxonomy.ts,\n" +
+    "app/page.tsx, next.config.mjs, and MDX href attributes are hand-maintained\n" +
+    "and not derived from the content tree — this guard is the only thing catching the drift."
 );
 process.exit(1);

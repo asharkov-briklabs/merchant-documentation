@@ -3,7 +3,7 @@ import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import type { ReactNode } from "react";
 import { getTranslations } from "@/lib/translations";
 import { decorateEnterpriseTree } from "@/lib/enterprise-nav";
-import { getSectionSlug, scopeTreeToSection } from "@/lib/drilldown-tree";
+import { getSectionSlug, scopeTreeToSection, flattenFolderByRef } from "@/lib/drilldown-tree";
 import { SiteNav } from "../components/site-nav";
 import { SidebarBridgeProvider, SidebarBridgeSetter } from "../components/sidebar-bridge";
 import { headers } from "next/headers";
@@ -22,7 +22,10 @@ import type * as PageTree from "fumadocs-core/page-tree";
 const _enterpriseUrls = new Set(
   source.getPages().filter((p) => p.data.enterprise).map((p) => p.url),
 );
-const _decoratedTree = decorateEnterpriseTree(source.pageTree, _enterpriseUrls);
+const _decoratedTree = flattenFolderByRef(
+  decorateEnterpriseTree(source.pageTree, _enterpriseUrls),
+  "payments/payment-methods",
+);
 
 type SectionEntry = { folder: PageTree.Folder; tree: PageTree.Root };
 const _sectionTrees = new Map<string, SectionEntry>();

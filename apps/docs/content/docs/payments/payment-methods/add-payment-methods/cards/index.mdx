@@ -1,0 +1,103 @@
+---
+title: Cards
+description: Accept credit and debit cards across global networks with VINR.
+priority: P0
+lastUpdated: "2026-06-04"
+---
+
+Cards are the most widely accepted VINR payment method and the default rail behind every hosted checkout. A single integration accepts Visa, Mastercard, American Express, Discover, UnionPay, Maestro, and Cartes Bancaires — no per-brand configuration required.
+
+## Payment flow
+
+A card payment moves through up to four stages:
+
+1. **Format check** — VINR validates that card details are correctly formatted (expiry date not in the past, card number passes a Luhn check).
+2. **Authentication** — For many European cards, the issuing bank requires a [3D Secure](/docs/payments/3d-secure) challenge to satisfy [Strong Customer Authentication](/docs/payments/strong-customer-authentication). VINR triggers this automatically on all hosted checkout surfaces.
+3. **Authorization** — The issuing bank reserves the funds on the cardholder's account. The payment enters `authorized`.
+4. **Capture** — You claim the reserved funds. With default immediate capture, this happens in the same request; the payment moves to `processing`, then `completed`.
+
+Cards can also fund digital wallet payments. When a customer pays with Apple Pay or Google Pay, VINR receives a network token representing the underlying card. The `payment_method.card` object is populated as normal; the `wallet` field indicates the provider.
+
+## Creating a payment
+
+Create a `payment` with an amount, currency, and return URL, then redirect the customer to the hosted `checkoutUrl`. The hosted page collects card details and handles 3D Secure automatically.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 4500,            // €45.00 in minor units
+  currency: 'EUR',
+  method: 'card',
+  description: 'Order #1042',
+  returnUrl: 'https://yoursite.com/checkout/complete',
+  metadata: { orderId: '1042' },
+});
+
+// payment.id          → "pay_3Nf8x2a..."
+// payment.status      → "pending"
+// payment.checkoutUrl → redirect the customer here
+```
+
+Confirm the final state from the webhook rather than the browser redirect, which a customer may interrupt or close:
+
+```typescript
+// POST /webhooks/vinr
+const event = vinr.webhooks.verify(payload, req.headers['x-vinr-signature']);
+
+if (event.type === 'payment.completed') {
+  const payment = event.data;
+  await fulfillOrder(payment.metadata.orderId);
+}
+```
+
+<Callout type="info">
+In sandbox, use `4242 4242 4242 4242` for a success, `4000 0000 0000 0002` for a decline, and `4000 0000 0000 3220` to trigger a 3D Secure challenge. Any future expiry and any CVC work.
+</Callout>
+
+## Settlement & timing
+
+- **Authorized** — funds reserved on the card immediately; not yet in your balance.
+- **Captured** — funds move into your VINR [balance](/docs/operations/balances) within seconds of capture.
+- **Settled** — funds paid out to your bank per your settlement schedule (typically T+2 to T+3 business days), net of fees.
+
+Uncaptured authorizations expire automatically — usually within 7 days, depending on the issuer — after which the hold is released back to the cardholder.
+
+## Refunds
+
+Refund a captured card payment in full or in part. Refunds return funds to the original card and cannot be redirected to a different card.
+
+```typescript
+const refund = await vinr.refunds.create({
+  payment: 'pay_3Nf8x2a...',
+  amount: 1500,            // partial refund of €15.00; omit for full refund
+  reason: 'requested_by_customer',
+});
+```
+
+If a payment is still in `authorized` state (not yet captured), cancel it rather than refunding — this reverses the authorization at no cost and releases the hold faster.
+
+<Callout type="warn">
+Card payments are reversible through **chargebacks**. A disputed payment creates a `dispute` object and debits your balance until resolved. See [disputes & chargebacks](/docs/payments/payment-operations/disputes).
+</Callout>
+
+## In this section
+
+<Cards>
+  <Card title="How card payments work" href="/docs/payments/payment-methods/add-payment-methods/cards/how-cards-work" description="The mechanics of format check, authentication, authorization, and capture — including automatic card updates." />
+  <Card title="Supported card brands" href="/docs/payments/payment-methods/add-payment-methods/cards/supported-brands" description="Which networks VINR accepts and their regional and feature capabilities." />
+  <Card title="Customer-initiated & Merchant-initiated" href="/docs/payments/payment-methods/add-payment-methods/cards/cit-mit" description="Card network rules based on who initiates a transaction — and what compliance that requires." />
+  <Card title="Card product codes" href="/docs/payments/payment-methods/add-payment-methods/cards/card-product-codes" description="Visa and Mastercard product code reference for the brand_product API field." />
+  <Card title="Co-badged cards & EU compliance" href="/docs/payments/payment-methods/add-payment-methods/cards/co-badged-cards" description="EU requirement to offer cardholders a choice of network on co-badged cards." />
+</Cards>
+
+## Next steps
+
+<Cards>
+  <Card title="3D Secure" href="/docs/payments/3d-secure" description="When 3DS is triggered and how VINR handles the authentication challenge." />
+  <Card title="Strong Customer Authentication" href="/docs/payments/strong-customer-authentication" description="SCA requirements for European transactions under PSD2." />
+  <Card title="Authorize & capture" href="/docs/payments/authorize-and-capture" description="Reserve funds now and capture later — for example, at time of shipment." />
+  <Card title="Disputes & chargebacks" href="/docs/payments/payment-operations/disputes" description="Respond to card chargebacks and manage exposure." />
+</Cards>

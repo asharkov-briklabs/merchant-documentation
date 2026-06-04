@@ -1,0 +1,104 @@
+---
+title: Payment method integration options
+description: Learn about the different ways to integrate payment methods with VINR.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+Learn about the different ways to integrate payment methods.
+
+You can add or remove payment methods directly from the VINR Dashboard without writing any code. For example, you can turn on payment methods such as Apple Pay, Klarna, iDEAL, and more. See [Payment methods overview](/docs/payments/payment-methods) to learn about all the payment methods your integration can support.
+
+The payment methods you can offer depend on the currency, country, and VINR products you integrate with. Use this guide to make sure your chosen payment methods work for your business and to determine how you want to add payment methods.
+
+## Choose your integration
+
+The table below describes several of the ways you can get started with your integration, including no-code, low-code, and advanced integration paths.
+
+In addition to the paths described below, you can use [VINR invoicing](/docs/guides/send-an-invoice) to automatically charge your customer's saved payment method or email invoices without writing any code.
+
+| &nbsp; | **PAYMENT LINKS** | **HOSTED CHECKOUT** | **EMBEDDED CHECKOUT** | **ELEMENTS** | **ADVANCED INTEGRATION** |
+|---|---|---|---|---|---|
+| **UI** | Payment Links | VINR-hosted checkout | Embedded checkout widget | VINR Elements | VINR Elements |
+| **API** | `payments.create()` | `payments.create()` | `payments.create()` | `payments.create()` | `paymentIntents.create()` |
+| **Integration effort** | No code required | Low coding | Low coding | More coding | Most coding |
+| **Hosting** | VINR-hosted page | VINR-hosted page | Embed on your site | Embed on your site | Embed on your site |
+| **UI customization** | Limited customization¹ | Limited customization¹ | Limited customization¹ | Extensive customization via Appearance API | Extensive customization via Appearance API |
+| **PAYMENT METHODS**² | | | | | |
+| Dynamically display 40+ payment methods | ✓ Supported | ✓ Supported | ✓ Supported | ✓ Supported | ✓ Supported |
+| Manage payment methods in the Dashboard without coding | ✓ Supported | ✓ Supported | ✓ Supported | ✓ Supported | ✓ Supported |
+| **Wallet payment methods** such as [Apple Pay](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay) and [Google Pay](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay) | ✓ Supported | ✓ Supported | ✓ Supported³ | ✓ Supported³ | ✓ Supported³ |
+| **Buy now, pay later** such as Klarna and Afterpay | ✓ Supported | ✓ Supported | ✓ Supported | ✓ Supported | ✓ Supported |
+| **Custom payment methods** | — Unsupported | — Unsupported | — Unsupported | — Unsupported | ✓ Supported |
+
+¹ Limited customization provides preset fonts, border radius options, logo and background customization, and a custom button colour.
+
+² For detailed support for each payment method, see [Payment methods overview](/docs/payments/payment-methods).
+
+³ Wallet payment methods require registering your domain before they appear at checkout.
+
+## Payment method support
+
+Payment methods only support certain currencies, countries, products, and API features. Make sure your chosen payment methods work for your scenario by reviewing the [Payment methods overview](/docs/payments/payment-methods) page.
+
+## Add payment methods
+
+Your customers see the available payment methods during the checkout process. You can either manage payment methods from the Dashboard or list payment methods manually in code. See the [Accept a payment](/docs/guides/accept-a-payment) guide for detailed steps.
+
+### Use dynamic payment methods
+
+VINR dynamically displays the most relevant payment methods to your customers based on the payment method preferences you set in the Dashboard and eligibility factors such as transaction amount, currency, and payment flow. To enable and manage your payment method preferences, go to **Dashboard → Settings → Payment methods**. VINR enables certain payment methods for you by default and may enable additional payment methods after notifying you.
+
+Unless you have to list payment methods manually, we recommend using dynamic payment methods. Dynamic payment methods automatically determine which payment methods to display based on the rules you configure in the Dashboard.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const paymentIntent = await vinr.paymentIntents.create({
+  amount: 4900,
+  currency: 'EUR',
+  automatic_payment_methods: { enabled: true },
+});
+```
+
+### Manually list payment methods
+
+Listing payment methods manually requires some coding. Every payment method you want to accept must be specified explicitly. Unless your integration requires that you list payment methods manually, we recommend that you manage payment methods from the Dashboard. VINR handles returning eligible payment methods based on factors such as the transaction's amount, currency, and payment flow.
+
+#### Hosted checkout
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 4900,
+  currency: 'EUR',
+  description: 'Order #1234',
+  returnUrl: 'https://yoursite.com/checkout/complete',
+  paymentMethods: ['bancontact', 'card', 'eps', 'ideal', 'p24', 'sepa_debit'],
+});
+```
+
+#### PaymentIntents
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const paymentIntent = await vinr.paymentIntents.create({
+  amount: 4900,
+  currency: 'EUR',
+  payment_method_types: ['bancontact', 'card', 'eps', 'ideal', 'p24', 'sepa_debit'],
+});
+```
+
+When multiple payment methods are specified, VINR dynamically reorders them to prioritise the most relevant options based on the customer's location and other characteristics. Lower priority payment methods are hidden in an overflow menu.
+
+<Callout type="info">
+  To avoid restricting checkout unnecessarily, prefer dynamic payment methods and manage your method preferences from the Dashboard instead of hard-coding a fixed list.
+</Callout>

@@ -21,3 +21,36 @@ export function scopeTreeToSection(
 ): PageTree.Root {
   return { ...tree, children: folder.children };
 }
+
+/**
+ * Return a new tree with the folder at `folderRef` (the `$ref.folder` path,
+ * e.g. "payments/payment-methods") flattened — its children are inlined
+ * directly into the parent instead of wrapped in a folder group. Use when a
+ * meta.json separator already labels the section and the folder's own group
+ * label would be redundant.
+ */
+export function flattenFolderByRef(
+  tree: PageTree.Root,
+  folderRef: string,
+): PageTree.Root {
+  return { ...tree, children: _flattenNodes(tree.children, folderRef) };
+}
+
+function _flattenNodes(
+  nodes: PageTree.Node[],
+  folderRef: string,
+): PageTree.Node[] {
+  const out: PageTree.Node[] = [];
+  for (const node of nodes) {
+    if (node.type === "folder") {
+      if (node.$ref?.folder === folderRef) {
+        out.push(...node.children);
+      } else {
+        out.push({ ...node, children: _flattenNodes(node.children, folderRef) });
+      }
+    } else {
+      out.push(node);
+    }
+  }
+  return out;
+}

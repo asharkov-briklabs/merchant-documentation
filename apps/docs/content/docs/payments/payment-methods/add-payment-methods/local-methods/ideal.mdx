@@ -1,0 +1,116 @@
+---
+title: iDEAL
+description: Accept iDEAL — the Netherlands' most popular payment method — with VINR.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+iDEAL is the dominant online payment method in the Netherlands, used for more than 70% of Dutch e-commerce transactions. Customers pay directly from their bank account through a redirect to their bank's secure login. Payments are final the moment the bank confirms — there is no chargeback path.
+
+## Availability
+
+| Detail | Value |
+|---|---|
+| Countries | Netherlands |
+| Currency | EUR only |
+| Flow | Bank redirect |
+| Finality | Final on confirmation |
+| Refunds | Supported via standard refund API |
+
+## Payment flow
+
+<Steps>
+
+### Create the payment
+
+Create a payment with `methods: ['ideal']` and a EUR amount. You receive a `checkoutUrl` pointing to the VINR-hosted iDEAL bank picker.
+
+### Customer selects their bank and authenticates
+
+The customer picks their bank from the iDEAL bank list and is redirected to their bank's secure login. They confirm the payment using their bank credentials or banking app.
+
+### Bank confirms and redirects back
+
+On approval the bank sends a confirmation to VINR and redirects the customer to your `returnUrl`. The payment moves to `completed`.
+
+### Fulfill on the webhook
+
+Use `payment.completed` as the fulfillment trigger — not the browser redirect, which the customer may close before it lands.
+
+</Steps>
+
+## Creating an iDEAL payment
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 4995,              // €49.95 in minor units
+  currency: 'EUR',
+  description: 'Order #8812',
+  methods: ['ideal'],
+  returnUrl: 'https://yoursite.com/payment/complete',
+  metadata: { orderId: '8812' },
+});
+
+// Redirect the customer to payment.checkoutUrl
+```
+
+Handle fulfillment from the webhook:
+
+```typescript
+// POST /webhooks/vinr
+const event = vinr.webhooks.verify(rawBody, req.headers['x-vinr-signature']);
+
+if (event.type === 'payment.completed') {
+  const payment = event.data;
+  // payment.method → "ideal"
+  await fulfillOrder(payment.metadata.orderId);
+}
+```
+
+## iDEAL 2.0
+
+The iDEAL 2.0 standard (rolled out from 2024) supports in-app confirmation alongside the classic browser redirect. When a customer's bank supports iDEAL 2.0, the VINR-hosted checkout automatically uses the upgraded flow — no changes to your integration are needed.
+
+<Callout type="info">
+In-app confirmation via iDEAL 2.0 shows a push notification in the customer's banking app. The customer approves without leaving the browser, which reduces redirect drop-off. The resulting webhook event and payment object are identical to the classic redirect flow.
+</Callout>
+
+## Settlement & timing
+
+iDEAL payments are confirmed in seconds and captured in full at the moment of approval. The amount lands in your [balance](/docs/operations/balances) immediately and follows your normal [settlement](/docs/operations/settlement) schedule.
+
+## Refunds
+
+Refunds are returned to the customer's originating Dutch bank account, typically within one to three business days.
+
+```typescript
+const refund = await vinr.refunds.create({
+  payment: 'pay_...',
+  amount: 4995,   // full refund; omit amount for full
+  reason: 'requested_by_customer',
+});
+```
+
+Because iDEAL payments are final, there are no chargebacks. A refund is the only way to return funds after the payment completes.
+
+## Testing
+
+In the VINR sandbox, iDEAL redirects open a VINR test page where you choose **Approve** or **Fail** instead of a real bank login. Use sandbox API keys — regular test cards do not apply to redirect flows.
+
+## Limitations
+
+- **EUR only.** iDEAL cannot process amounts in any other currency.
+- **Netherlands only.** The method only appears for customers with a Dutch bank account; presenting it to customers outside the Netherlands returns `method_not_available`.
+- **No manual capture.** iDEAL captures in full at confirmation; there is no authorize-now / capture-later flow.
+
+## See also
+
+<Cards>
+  <Card title="Local methods" href="/docs/payments/payment-methods/add-payment-methods/local-methods" description="Overview of all region-specific payment methods." />
+  <Card title="Bancontact" href="/docs/payments/payment-methods/add-payment-methods/local-methods/bancontact" description="Bank redirect for Belgian customers." />
+  <Card title="Refunds" href="/docs/payments/payment-operations/refund" description="Issue full or partial refunds via the API." />
+</Cards>

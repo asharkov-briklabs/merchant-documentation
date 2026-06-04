@@ -33,9 +33,9 @@ function withBadge(name: ReactNode): ReactNode {
  * Enterprise badge appended to the name of every page item whose URL is in
  * `enterpriseUrls`. Folders are badged when their index page is enterprise.
  *
- * Non-mutating on purpose: `source.pageTree[locale]` is built once at module
- * load and shared across requests, so mutating it would double-append badges
- * over the life of the process.
+ * Non-mutating on purpose: `source.pageTree` is built once at module load and
+ * shared across requests, so mutating it would double-append badges over the
+ * life of the process.
  */
 export function decorateEnterpriseTree(
   tree: PageTree.Root,

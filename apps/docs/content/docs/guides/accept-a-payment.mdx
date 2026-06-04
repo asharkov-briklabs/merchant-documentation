@@ -57,7 +57,7 @@ The `idempotencyKey` guarantees that a retried request (timeout, refresh) reuses
 
 ## Collect payment details
 
-Redirect the customer to the hosted page. VINR handles card entry, wallets, 3D Secure, and any [local methods](/docs/payments/payment-methods/local-methods) you've enabled.
+Redirect the customer to the hosted page. VINR handles card entry, wallets, 3D Secure, and any [local methods](/docs/payments/payment-methods/add-payment-methods/local-methods) you've enabled.
 
 ```typescript
 const { checkoutUrl } = await fetch('/api/checkout', {

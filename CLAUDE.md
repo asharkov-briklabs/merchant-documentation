@@ -36,17 +36,14 @@ CI (`.github/workflows/ci.yml`) runs, in order: `type-check` → `lint` → `che
 ### The taxonomy is split across several hand-maintained lists — keep them in sync
 This is the main footgun. A doc's category, the nav, and the search facets are defined in different places:
 - `lib/schema.ts` — `CategoryEnum` (must match the top-level `content/docs` folders) and `PersonaEnum`. A build-time assertion in `app/api/search/route.ts` throws if a content folder is missing from `CategoryEnum`.
-- `lib/taxonomy.ts` — `CATEGORIES` registry (label/description/icon per category). Intended single source for the search facet and sidebar product switcher (`ROOTS` in `app/[locale]/docs/layout.tsx`).
+- `lib/taxonomy.ts` — `CATEGORIES` registry (label/description/icon per category). Intended single source for the search facet and sidebar product switcher (`ROOTS` in `app/docs/layout.tsx`).
 - `lib/nav-taxonomy.ts` — `NAV_GROUPS`, the marketing mega-menu. Intentionally a *curated* view (hand-picked sub-links), **not** a projection of the registry.
-- The homepage (`app/[locale]/page.tsx`) hardcodes link grids (`TRY_TASKS`/`QUICK_LINKS`/`HELP_LINKS`).
+- The homepage (`app/page.tsx`) hardcodes link grids (`TRY_TASKS`/`QUICK_LINKS`/`HELP_LINKS`).
 
 `pnpm check-links` (`scripts/check-internal-links.mjs`) scans `app/` and `lib/` for `/docs/...` string literals and asserts each resolves to a real `.mdx` page — this is what catches a renamed page silently 404-ing the nav/homepage. Run it after touching content paths or any of the lists above. There is a tracked plan to consolidate these into one registry; until then, edit them together.
 
 ### Frontmatter
-Custom fields (all optional) defined in `lib/schema.ts`: `category` (overrides the folder default — only set to classify a doc outside its physical folder), `persona[]`, `priority` (P0/P1/P2, default P1), `lastUpdated`. Persona pages (`app/[locale]/personas/[persona]/page.tsx`) are driven by the `persona` frontmatter, not by a hardcoded list.
-
-### i18n
-`lib/i18n.ts` is currently **single-locale (`en`)**. The bilingual (`bg`) scaffolding (translations, per-link labels, `[locale]` route segment) is retained but Bulgarian was removed because there was no content (every `/bg/*` page 404'd). To re-enable: add the locale to `i18n.ts` and ship `*.bg.mdx` content together. `middleware.ts` runs the i18n middleware on the **Edge runtime** — keep its import graph Edge-safe (no Node globals); `fumadocs-core` is version-pinned for this reason.
+Custom fields (all optional) defined in `lib/schema.ts`: `category` (overrides the folder default — only set to classify a doc outside its physical folder), `persona[]`, `priority` (P0/P1/P2, default P1), `lastUpdated`. Persona pages (`app/personas/[persona]/page.tsx`) are driven by the `persona` frontmatter, not by a hardcoded list.
 
 ### Ask-AI assistant
 - `app/api/ask/route.ts` — `runtime = "nodejs"`, streams from Claude (`claude-haiku-4-5`) via the Vercel AI SDK (`@ai-sdk/anthropic`).

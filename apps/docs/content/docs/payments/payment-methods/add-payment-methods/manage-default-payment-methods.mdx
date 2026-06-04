@@ -1,0 +1,241 @@
+---
+title: Manage default payment methods in the Dashboard
+description: Upgrade your API to manage payment methods in the Dashboard by default.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+Upgrade your API to manage payment methods in the Dashboard by default.
+
+In prior versions of the VINR API, if you didn't specify a `payment_method_types` parameter during the creation request, VINR would default to using the card payment method for both PaymentIntents and SetupIntents.
+
+Moving forward, VINR applies eligible payment methods that you manage from your **Dashboard → Settings → Payment methods** to your PaymentIntents and SetupIntents by default if you don't specify the `payment_method_types` parameter in the creation request.
+
+## Payment methods
+
+By default, VINR enables cards and other common payment methods. You can turn individual payment methods on or off in the Dashboard. In Checkout, VINR evaluates the currency and any restrictions, then dynamically presents the supported payment methods to the customer.
+
+To see how your payment methods appear to customers, enter a transaction ID or set an order amount and currency in the Dashboard.
+
+You can enable Apple Pay and Google Pay in your payment methods settings. By default, Apple Pay is enabled and Google Pay is disabled. However, in some cases VINR filters them out even when they're enabled — for example, Google Pay is filtered if you enable automatic tax without collecting a shipping address.
+
+Checkout's VINR-hosted pages don't need integration changes to enable Apple Pay or Google Pay. VINR handles these payments the same way as other card payments.
+
+## Update your payment flows
+
+Choose the upgrade path that matches your current VINR integration.
+
+### Elements
+
+If your integration uses a Card Element or individual payment method Elements, we recommend migrating to the [Payment Element](/docs/payments/in-app/payment-element). This single, unified integration lets you accept a wide range of payment methods, and any new methods you enable in the Dashboard appear automatically without code changes.
+
+### Create the PaymentIntent
+
+Specifying the `automatic_payment_methods.enabled` parameter is optional. If you don't specify it, VINR assumes a value of `true`, which enables Dashboard-managed payment methods by default.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const paymentIntent = await vinr.paymentIntents.create({
+  amount: 1099,
+  currency: 'eur',
+});
+```
+
+### Client-side confirmations
+
+If your integration uses VINR.js to confirm payments with `confirmPayment` or by payment method, your existing process remains the same and requires no further changes.
+
+When confirming payments, we recommend providing the `return_url` parameter to support payment methods that require a redirect.
+
+#### HTML + JS
+
+```javascript
+const form = document.getElementById('payment-form');
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+
+  const { error } = await vinr.confirmPayment({
+    // `Elements` instance used to create the Payment Element
+    elements,
+    confirmParams: {
+      return_url: 'https://example.com/return_url',
+    },
+  });
+
+  if (error) {
+    // Only reached if there is an immediate error when confirming the payment.
+    // Show the error to your customer (for example, incomplete payment details).
+    const messageContainer = document.querySelector('#error-message');
+    messageContainer.textContent = error.message;
+  } else {
+    // Your customer will be redirected to your `return_url`. For some payment
+    // methods like iDEAL, your customer will be redirected to an intermediate
+    // site first to authorize the payment, then redirected to the `return_url`.
+  }
+});
+```
+
+#### React
+
+```tsx
+import React, { useState } from 'react';
+import { useVinr, useElements, PaymentElement } from '@vinr/react';
+
+const CheckoutForm = () => {
+  const vinr = useVinr();
+  const elements = useElements();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    // Prevent default form submission, which would refresh the page.
+    event.preventDefault();
+
+    if (!vinr || !elements) {
+      // VINR.js hasn't loaded yet — disable form submission until it has.
+      return;
+    }
+
+    const { error } = await vinr.confirmPayment({
+      // `Elements` instance used to create the Payment Element
+      elements,
+      confirmParams: {
+        return_url: 'https://example.com/return_url',
+      },
+    });
+
+    if (error) {
+      setErrorMessage(error.message);
+    } else {
+      // Your customer will be redirected to your `return_url`. For some payment
+      // methods like iDEAL, your customer will be redirected to an intermediate
+      // site first to authorize the payment, then redirected to the `return_url`.
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <PaymentElement />
+      <button disabled={!vinr}>Submit</button>
+      {errorMessage && <div>{errorMessage}</div>}
+    </form>
+  );
+};
+
+export default CheckoutForm;
+```
+
+### Server-side confirmation
+
+If you use server-side confirmation, you must include the `return_url` parameter in your integration.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const paymentIntent = await vinr.paymentIntents.create({
+  amount: 1099,
+  currency: 'eur',
+  confirm: true,
+  payment_method: 'PAYMENTMETHOD_ID',
+  return_url: 'https://example.com/return_url',
+});
+```
+
+Alternatively, create the PaymentIntent with `automatic_payment_methods.allow_redirects` set to `never`. This disables the `return_url` requirement on confirmation. You can still manage payment methods from the Dashboard, but payment methods that require redirects won't be eligible.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const paymentIntent = await vinr.paymentIntents.create({
+  amount: 1099,
+  currency: 'eur',
+  confirm: true,
+  payment_method: 'PAYMENTMETHOD_ID',
+  automatic_payment_methods: {
+    enabled: true,
+    allow_redirects: 'never',
+  },
+});
+```
+
+Lastly, you can create the PaymentIntent with the `payment_method_types` parameter. This also disables the `return_url` requirement on confirmation, but with this option you can't manage payment methods from the Dashboard.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const paymentIntent = await vinr.paymentIntents.create({
+  amount: 1099,
+  currency: 'eur',
+  confirm: true,
+  payment_method: 'PAYMENTMETHOD_ID',
+  payment_method_types: ['card'],
+});
+```
+
+### Checkout and Payment Links
+
+If your integration uses Checkout and Payment Links, upgrade your API version to adopt Dashboard-managed payment methods without making changes to your integration code.
+
+### API
+
+If your integration confirms payments with the `off_session` parameter set to `true`, your existing process remains the same and requires no further changes.
+
+Otherwise, you must provide the `return_url` parameter in your integration.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const paymentIntent = await vinr.paymentIntents.create({
+  amount: 1099,
+  currency: 'eur',
+  confirm: true,
+  payment_method: 'PAYMENTMETHOD_ID',
+  return_url: 'https://example.com/return_url',
+});
+```
+
+Alternatively, set `automatic_payment_methods.allow_redirects` to `never` to disable the `return_url` requirement. Payment methods that require redirects won't be eligible, but you can still manage all other methods from the Dashboard.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const paymentIntent = await vinr.paymentIntents.create({
+  amount: 1099,
+  currency: 'eur',
+  confirm: true,
+  payment_method: 'PAYMENTMETHOD_ID',
+  automatic_payment_methods: {
+    enabled: true,
+    allow_redirects: 'never',
+  },
+});
+```
+
+Or specify `payment_method_types` explicitly. This disables both the `return_url` requirement and Dashboard management of payment methods.
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const paymentIntent = await vinr.paymentIntents.create({
+  amount: 1099,
+  currency: 'eur',
+  confirm: true,
+  payment_method: 'PAYMENTMETHOD_ID',
+  payment_method_types: ['card'],
+});
+```
