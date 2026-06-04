@@ -1,0 +1,125 @@
+---
+title: Blik
+description: Accept Blik — Poland's mobile-first payment standard — with VINR.
+priority: P1
+lastUpdated: "2026-06-04"
+---
+
+Blik is Poland's leading instant payment method, built into over 20 Polish banking apps and used by tens of millions of customers. At checkout the customer opens their banking app, generates a 6-digit one-time code, and enters it on your payment page — no redirect required. Payments are final and irrevocable the moment the bank confirms.
+
+## Availability
+
+| Detail | Value |
+|---|---|
+| Countries | Poland |
+| Currency | PLN only |
+| Flow | 6-digit code (or in-app push) |
+| Finality | Final on confirmation |
+| Refunds | Supported via standard refund API |
+
+## Payment flow
+
+Blik supports two confirmation modes that VINR handles automatically based on the customer's bank:
+
+**6-digit code flow (classic)**
+
+<Steps>
+
+### Create the payment
+
+Create a payment with `methods: ['blik']` and a PLN amount. The VINR-hosted checkout displays a code entry field.
+
+### Customer generates the code
+
+The customer opens their banking app, navigates to the Blik section, and copies the 6-digit code displayed there. The code is valid for two minutes.
+
+### Customer enters the code at checkout
+
+The customer pastes or types the code into your checkout page and confirms.
+
+### Bank approves and the payment completes
+
+The bank validates the code and pushes a confirmation to VINR. The payment moves to `completed`. The customer stays on your page — no redirect.
+
+</Steps>
+
+**In-app push flow (Blik One Click / newer banks)**
+
+Some banks skip the code entirely and send a push notification to the customer's phone. The customer approves directly in the banking app while remaining on your checkout page.
+
+## Creating a Blik payment
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.payments.create({
+  amount: 12900,             // 129.00 PLN in minor units (groszy)
+  currency: 'PLN',
+  description: 'Order #2231',
+  methods: ['blik'],
+  returnUrl: 'https://yoursite.com/payment/complete',
+  metadata: { orderId: '2231' },
+});
+
+// Redirect the customer to payment.checkoutUrl
+```
+
+Fulfill from the webhook:
+
+```typescript
+// POST /webhooks/vinr
+const event = vinr.webhooks.verify(rawBody, req.headers['x-vinr-signature']);
+
+if (event.type === 'payment.completed') {
+  const payment = event.data;
+  // payment.method → "blik"
+  await fulfillOrder(payment.metadata.orderId);
+}
+```
+
+<Callout type="info">
+Because the customer stays on your page during a code-flow payment, the `returnUrl` is only reached if the session times out. Always drive fulfillment from the `payment.completed` webhook.
+</Callout>
+
+## Code expiry & retries
+
+Blik codes expire after two minutes. If the customer enters an expired code, the payment moves to `failed` with `code: blik_code_expired`. You can create a new payment and let the customer generate a fresh code — or re-present the same `checkoutUrl` if your integration allows.
+
+## Settlement & timing
+
+Blik payments authorize and capture in seconds. The captured amount lands in your [balance](/docs/operations/balances) immediately and follows your normal [settlement](/docs/operations/settlement) schedule.
+
+## Refunds
+
+Refunds are returned to the customer's originating bank account, typically within one to three business days.
+
+```typescript
+const refund = await vinr.refunds.create({
+  payment: 'pay_...',
+  amount: 12900,  // full refund; omit amount for full
+  reason: 'requested_by_customer',
+});
+```
+
+Because Blik payments are final, there are no chargebacks. A refund is the only way to return funds after the payment completes.
+
+## Testing
+
+In the VINR sandbox, Blik flows open a VINR test page where you choose **Approve** or **Fail** — no real banking app is required. Use any 6-digit value as the test code.
+
+## Limitations
+
+- **PLN only.** Blik cannot process amounts in any other currency.
+- **Poland only.** The method only appears for customers with a Blik-enabled Polish banking app; presenting it outside Poland returns `method_not_available`.
+- **No manual capture.** Blik captures in full at the moment the bank confirms.
+- **Code valid for 2 minutes.** Customers who take too long must generate a new code.
+
+## See also
+
+<Cards>
+  <Card title="Local methods" href="/docs/payments/payment-methods/local-methods" description="Overview of all region-specific payment methods." />
+  <Card title="Przelewy24" href="/docs/payments/payment-methods/local-methods/przelewy24" description="Another popular Polish payment method supporting PLN and EUR." />
+  <Card title="Refunds" href="/docs/payments/refunds" description="Issue full or partial refunds via the API." />
+</Cards>

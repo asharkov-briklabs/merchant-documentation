@@ -1,19 +1,15 @@
 {
   "title": "Payment methods",
+  "collapsible": false,
   "pages": [
     "index",
-    "---Card-Based---",
     "cards",
-    "---Digital Wallets---",
     "wallets",
-    "---Buy Now, Pay Later---",
     "instalments",
-    "---Alternative Methods---",
     "meal-vouchers",
     "bank-transfers",
     "local-methods",
     "stablecoins",
-    "---Management---",
     "add-payment-methods",
     "manage-payment-methods"
   ]

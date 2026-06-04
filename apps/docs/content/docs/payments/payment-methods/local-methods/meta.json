@@ -1,6 +1,12 @@
 {
   "title": "Local Methods",
   "pages": [
-    "index"
+    "index",
+    "ideal",
+    "blik",
+    "bancontact",
+    "eps",
+    "przelewy24",
+    "twint"
   ]
 }

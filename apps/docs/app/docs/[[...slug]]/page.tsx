@@ -47,7 +47,7 @@ export default async function Page(props: {
     <DocsPage
       toc={page.data.toc}
       full={page.data.full}
-      breadcrumb={{ includePage: true, includeRoot: true }}
+      breadcrumb={{ includePage: true, includeRoot: { url: '/' } }}
       lastUpdate={
         page.data.lastUpdated ? new Date(page.data.lastUpdated) : undefined
       }
