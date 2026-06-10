@@ -1,0 +1,115 @@
+---
+title: "Go-live checklist"
+description: "Verify your Apple Pay integration before accepting live payments."
+priority: P1
+lastUpdated: "2026-06-10"
+---
+
+Use this checklist before going live with Apple Pay on any VINR integration. Walk through it once per merchant and once per new integration surface (for example, separately for your iOS app and your website).
+
+You can test the full Apple Pay payment sheet experience at [https://applepaydemo.apple.com/](https://applepaydemo.apple.com/) — no real card is charged.
+
+---
+
+## 1. Eligibility and prerequisites
+
+- [ ] **Domain registered with Apple.** Every domain (including subdomains and `www`) that shows an Apple Pay button is registered in the VINR Dashboard under **Settings → Payment method domains**, or via the [Domain Registration API](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay#register-your-domain-with-apple-pay). Do not register the same domain more than once.
+- [ ] **Apple Pay Acceptable Use Guidelines reviewed.** Confirm the merchant's use case complies with [Apple's AUG for websites](https://developer.apple.com/apple-pay/acceptable-use-guidelines-for-websites/).
+- [ ] **Merchant validation succeeds server-side.** VINR handles this automatically. Verify no CSP or network policy is blocking requests from `checkout.vinr.com` or `api.vinr.com` to Apple's merchant validation endpoint.
+- [ ] **`canMakePayments` / eligibility check implemented.** The Apple Pay button renders only for eligible Safari sessions. VINR's hosted products do this automatically. For custom integrations, confirm the button is hidden (not disabled) on non-eligible sessions. See [Check device eligibility](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay#check-device-eligibility-before-rendering-the-button).
+
+---
+
+## 2. Button compliance
+
+- [ ] **Official button element used.** The button is rendered with the `<apple-pay-button>` web component or `PKPaymentButton` (iOS), not a custom image or HTML.
+- [ ] **Correct button type for the context.** The call-to-action verb matches the purchase type (e.g. `subscribe` for subscriptions, `donate` for donations). See [Button guidelines](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/button-guidelines).
+- [ ] **Correct locale set.** The button language matches the storefront locale.
+- [ ] **Button hidden (not disabled) when Apple Pay is unavailable.** A disabled Apple Pay button confuses customers and violates Apple HIG.
+
+---
+
+## 3. Payment request and totals
+
+- [ ] **Single ISO 4217 currency per request.** VINR does not convert currencies within a payment session.
+- [ ] **Totals match what VINR sends to the processor.** Run a test transaction and confirm the charge amount in the VINR Dashboard matches the total displayed on the Apple Pay sheet.
+- [ ] **Line items display correctly.** If you pass display items, confirm they render on the sheet and the itemized total matches the charge total.
+- [ ] **Tax and shipping recalculate correctly on address or option change.** If you use [dynamic updates](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/dynamic-updates), test with multiple addresses and shipping tiers. Confirm no handler times out.
+
+---
+
+## 4. Contact and shipping
+
+- [ ] **Shipping address collected only for physical goods.** Digital-good flows do not request a shipping address.
+- [ ] **Unserviceable address returns an inline error.** If you don't ship to a given country or region, the sheet returns a clear inline error rather than failing at payment authorization. See [Returning errors to the sheet](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/dynamic-updates#returning-errors-to-the-sheet).
+
+---
+
+## 5. Authorization and completion
+
+- [ ] **Biometric auth → token → processor round-trip tested end-to-end.** Complete a test payment using real test API keys on a real device. Verify `payment.completed` (or `checkout.session.completed`) webhook arrives and the payment appears in the VINR Dashboard.
+- [ ] **`complete()` / `confirmPayment()` called with accurate success or failure status.** Do not call `complete('success')` before the server confirms the payment with the processor.
+- [ ] **Early validation / fast decline implemented.** If options are invalid (for example, unserviceable address), fail fast before submitting to the processor.
+
+---
+
+## 6. Recurring, deferred, and auto-reload (if applicable)
+
+<Callout type="warn">
+These steps apply only to merchants with the **Recurring** capability (`apple_pay_recurring`) enabled.
+</Callout>
+
+- [ ] **MPAN requested instead of DPAN.** Confirm your integration passes the correct `recurringPaymentRequest`, `deferredPaymentRequest`, or `automaticReloadPaymentRequest` object. See [Merchant tokens](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/merchant-tokens).
+- [ ] **Cryptogram consumed immediately.** The first CIT (customer-initiated transaction) is executed before the cryptogram expires. If using free trials, a `SetupIntent` 0-value validation is sent immediately. See [Manage recurring payments](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/recurring-payments).
+- [ ] **`managementURL` is live and reachable.** The URL must load a page where the customer can manage or cancel the recurring payment.
+- [ ] **`tokenNotificationURL` is live and handling lifecycle events.** The endpoint receives `card_expiry`, `card_reissued`, and `token_deleted` notifications from Apple and updates stored payment method state accordingly. See [Merchant tokens — token lifecycle](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/merchant-tokens#token-lifecycle-notifications).
+- [ ] **MPAN auth rate monitored.** The `card_token_type` field in the `charges` table allows you to track MPAN vs. DPAN auth rates. Set up monitoring before go-live.
+
+---
+
+## 7. Order tracking (if applicable)
+
+<Callout type="warn">
+This step applies only to merchants with the **Advanced** capability (`apple_pay_order_tracking`) enabled.
+</Callout>
+
+- [ ] **`web_service_url` is live and returns valid order packages.** Apple calls your endpoint immediately after payment to populate the Wallet order card.
+- [ ] **`authentication_token` validation implemented.** Reject unauthenticated requests with `401`.
+- [ ] **Push notifications wired.** Your `/v1/push` endpoint stores device push tokens and uses them to notify Apple when order status changes.
+
+---
+
+## 8. Disbursements (if applicable)
+
+<Callout type="warn">
+This step applies only to merchants with the **Advanced** capability (`apple_pay_disbursements`) enabled.
+</Callout>
+
+- [ ] **Disbursement flow tested end-to-end in test mode.** Verify `disbursement.succeeded` webhook arrives.
+- [ ] **Ineligible card handling implemented.** If the recipient's card doesn't support push-to-card, your app displays a clear fallback message.
+
+---
+
+## 9. Fallback strategy
+
+- [ ] **Non-Safari browsers show the card form.** On Chrome, Firefox, Edge, and other non-Safari browsers, no Apple Pay button is rendered. A standard card form or alternative payment methods appear instead.
+- [ ] **Embedded checkout (if used) targets Safari 17+ / iOS 17+.** Embedded checkout (`ui_mode: 'embedded'`) only supports Apple Pay on Safari 17 or later.
+- [ ] **iframe origins match.** If you embed Elements in an iframe, the iframe origin matches the top-level origin (or `allow="payment"` is set for Safari 17+).
+
+---
+
+## 10. Final sign-off
+
+- [ ] **Certificate expiry monitored.** Apple Pay certificates are valid for 25 months. Set a calendar reminder 30 days before expiry. See [Best practices — certificate renewal](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/best-practices#apple-pay-certificate-renewal).
+- [ ] **Test transaction run after any certificate or configuration change.** Always verify end-to-end after swapping certificates or updating merchant IDs.
+- [ ] **Apple Pay mark added to checkout and marketing materials.** Inform customers you accept Apple Pay. See [Best practices — communicate acceptance](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/best-practices#communicate-apple-pay-acceptance).
+
+---
+
+## See also
+
+<Cards>
+  <Card title="Apple Pay overview" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay" description="Domain registration, eligibility, and integration methods." />
+  <Card title="Best practices" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/best-practices" description="Conversion optimisation and certificate maintenance." />
+  <Card title="Disputes and refunds" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/disputes-and-refunds" description="Post-purchase dispute and refund handling." />
+</Cards>

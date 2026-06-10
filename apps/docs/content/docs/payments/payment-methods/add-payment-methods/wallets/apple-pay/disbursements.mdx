@@ -1,0 +1,160 @@
+---
+title: "Disbursements"
+description: "Send payouts to a card stored in the recipient's Apple Wallet."
+priority: P1
+lastUpdated: "2026-06-10"
+---
+
+<Callout type="warn">
+**Capability required — Advanced tier.** Apple Pay disbursements require the `apple_pay_disbursements` capability on your VINR account. This feature is not available by default. Contact your VINR account manager to request access and discuss eligibility.
+</Callout>
+
+Apple Pay disbursements invert the standard payment flow — instead of a customer paying you, you send funds to a card stored in the recipient's Apple Wallet. The recipient authorises the payout with Face ID, Touch ID, or passcode, and the funds are pushed directly to their card.
+
+## Use cases
+
+| Vertical | Example |
+|---|---|
+| Gaming & betting | Pay out winnings to a player (MagicBet-type platforms) |
+| Marketplaces | Pay a seller after a transaction settles |
+| Gig platforms | Pay a driver, courier, or freelancer for completed work |
+| Insurance | Issue a claim payout to a policyholder |
+| Refunds | Return funds to a card not linked to an original VINR charge |
+
+For standard refunds tied to an original VINR payment, use the [Refunds API](/docs/payments/refunds) instead.
+
+## How disbursements work
+
+1. Your server initiates a disbursement request via the VINR Disbursements API.
+2. VINR presents the Apple Pay payout sheet on the recipient's device (in your app or website).
+3. The recipient authenticates with Face ID, Touch ID, or passcode.
+4. Apple returns an encrypted payout token to VINR.
+5. VINR decrypts the token and pushes the funds to the recipient's card via the card network.
+6. You receive a `disbursement.succeeded` webhook when funds are sent.
+
+## Create a disbursement
+
+```bash
+curl https://api.vinr.com/v1/disbursements \
+  -u YOUR_SECRET_KEY: \
+  -d "amount=5000" \
+  -d "currency=usd" \
+  -d "description=Winnings payout" \
+  -d "recipient[name]=Jane Smith" \
+  -d "payout_method_types[]=apple_pay"
+```
+
+The response includes a `client_secret` used to present the payout sheet on the client.
+
+## Present the payout sheet
+
+<Tabs items={["Web (JavaScript)", "Native iOS"]}>
+<Tab value="Web (JavaScript)">
+
+```javascript
+const vinr = Vinr('pk_live_...');
+
+// Create a Disbursement Intent server-side, then use its client_secret
+const { error, disbursement } = await vinr.confirmApplePayDisbursement(
+  disbursementIntentClientSecret,
+  {
+    applePay: {
+      lineItems: [
+        { label: 'Winnings', amount: '50.00', type: 'final' },
+      ],
+      total: {
+        label: 'Your payout',
+        amount: '50.00',
+        type: 'final',
+      },
+    },
+  }
+);
+
+if (error) {
+  console.error(error.message);
+} else {
+  // disbursement.status === 'processing' or 'succeeded'
+}
+```
+
+</Tab>
+<Tab value="Native iOS">
+
+```swift
+import VinrSDK
+
+let disbursement = VinrDisbursement(
+    clientSecret: "di_client_secret_...",
+    amount: NSDecimalNumber(string: "50.00"),
+    currency: "usd",
+    label: "Your payout"
+)
+
+VinrAPI.shared.confirmApplePayDisbursement(disbursement) { result in
+    switch result {
+    case .success(let disbursementResult):
+        print("Payout status: \(disbursementResult.status)")
+    case .failure(let error):
+        print("Payout failed: \(error.localizedDescription)")
+    }
+}
+```
+
+</Tab>
+</Tabs>
+
+## Supported payout networks
+
+Apple Pay disbursements are supported on Visa and Mastercard debit and prepaid cards in supported markets. Credit cards are not supported for disbursements.
+
+Check card eligibility before presenting the payout sheet — cards that don't support push-to-card will return an error at the network level.
+
+## Webhook events
+
+| Event | When it fires |
+|---|---|
+| `disbursement.created` | Disbursement Intent created |
+| `disbursement.processing` | Apple Pay token received and submitted to the network |
+| `disbursement.succeeded` | Funds successfully pushed to the recipient's card |
+| `disbursement.failed` | Network declined the payout |
+
+```json
+{
+  "type": "disbursement.succeeded",
+  "data": {
+    "object": {
+      "id": "di_123",
+      "amount": 5000,
+      "currency": "usd",
+      "status": "succeeded",
+      "payout_method": "apple_pay",
+      "recipient": {
+        "name": "Jane Smith"
+      },
+      "created": 1704067200
+    }
+  }
+}
+```
+
+## Limits and compliance
+
+- Maximum payout amount per transaction: determined by your account configuration and the recipient's card issuer.
+- Disbursements are subject to AML and sanctions screening. VINR performs this automatically; abnormal patterns may trigger a review.
+- Recipients in sanctioned countries cannot receive disbursements. VINR returns a `disbursement_blocked` error in these cases.
+- If your platform disburses on behalf of connected accounts, pass `on_behalf_of` with the connected account ID.
+
+## Test disbursements
+
+Use test API keys and a real card on a test device. VINR intercepts the Apple Pay token in test mode and simulates a successful payout without moving real funds.
+
+To simulate a failed payout, use the test card number designated for disbursement failure in your VINR Dashboard test data.
+
+## See also
+
+<Cards>
+  <Card title="Apple Pay overview" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay" description="Prerequisites and integration methods." />
+  <Card title="Refunds" href="/docs/payments/refunds" description="Refund an existing VINR payment instead of initiating a disbursement." />
+  <Card title="Go-live checklist" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/go-live-checklist" description="Verify your integration before accepting live payments." />
+</Cards>

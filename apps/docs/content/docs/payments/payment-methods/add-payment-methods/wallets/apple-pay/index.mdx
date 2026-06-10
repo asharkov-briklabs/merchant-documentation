@@ -2,7 +2,7 @@
 title: Apple Pay
 description: Allow customers to securely make payments using Apple Pay on their iPhone, iPad, or Apple Watch.
 priority: P0
-lastUpdated: "2026-06-04"
+lastUpdated: "2026-06-10"
 ---
 
 Allow customers to securely make payments using Apple Pay on their iPhone, iPad, or Apple Watch.
@@ -16,6 +16,18 @@ Refer to [Apple's compatibility documentation](https://support.apple.com/en-us/1
 Apple Pay is compatible with most VINR products and features. VINR users can accept Apple Pay in iOS applications on iOS 9 and above, and on the web in Safari starting with iOS 10 or macOS Sierra. There are no additional fees to process Apple Pay payments — pricing is the same as for other card transactions.
 
 Apple Pay is available to cardholders at participating banks in supported countries. For more information, refer to [Apple's participating banks documentation](https://support.apple.com/en-us/102775).
+
+## Merchant capabilities
+
+Apple Pay features are gated by capability. Most merchants can accept standard one-time payments immediately after setup. Advanced features require explicit enablement on your VINR account.
+
+| Tier | Features | How to enable |
+|---|---|---|
+| **Standard** | One-time payments, Hosted Checkout, Payment Links, Express Checkout Element, Payment Element | Available on all VINR accounts |
+| **Recurring** | Merchant tokens (MPAN), subscriptions, deferred payments, automatic reload | Contact your VINR account manager |
+| **Advanced** | Disbursements (payouts to shoppers), multi-merchant tokens, order tracking | Requires account approval — contact your account manager |
+
+Throughout this documentation, features that require a non-standard capability are marked with a callout.
 
 <Tabs items={["Payment method properties", "Business locations", "Product support"]}>
 <Tab value="Payment method properties">
@@ -62,6 +74,86 @@ Contact your VINR account manager to confirm availability in your region.
 
 </Tab>
 </Tabs>
+
+## Check device eligibility before rendering the button
+
+Before showing the Apple Pay button, check that the current device and browser support Apple Pay and that the customer has an active card provisioned in Wallet.
+
+<Tabs items={["Web (Elements)", "Native iOS", "React Native"]}>
+<Tab value="Web (Elements)">
+
+The Express Checkout Element and Payment Element handle eligibility automatically — they only render the Apple Pay button when the session is eligible. No additional code is needed.
+
+If you use the raw `paymentRequest` API, check availability before mounting the button:
+
+```javascript
+const paymentRequest = vinr.paymentRequest({
+  country: 'US',
+  currency: 'usd',
+  total: { label: 'Your order', amount: 2000 },
+});
+
+// canMakePayment resolves to null if Apple Pay is unavailable
+const result = await paymentRequest.canMakePayment();
+if (result && result.applePay) {
+  // Safe to show the Apple Pay button
+  mountApplePayButton();
+} else {
+  // Show standard card form or other payment methods
+  mountCardForm();
+}
+```
+
+</Tab>
+<Tab value="Native iOS">
+
+```swift
+// Check before presenting the button
+if PKPaymentAuthorizationViewController.canMakePayments(usingNetworks: supportedNetworks) {
+    // Show Apple Pay button
+} else if PKPaymentAuthorizationViewController.canMakePayments() {
+    // Device supports Apple Pay but no eligible card — offer "Set Up Apple Pay"
+    showSetUpApplePayButton()
+} else {
+    // Device does not support Apple Pay — show standard payment form
+    showCardForm()
+}
+```
+
+</Tab>
+<Tab value="React Native">
+
+```tsx
+import { useApplePay } from '@vinr/react-native-sdk';
+
+function CheckoutButton() {
+  const { isApplePaySupported } = useApplePay();
+
+  if (!isApplePaySupported) {
+    return <CardForm />;
+  }
+  return <ApplePayButton />;
+}
+```
+
+</Tab>
+</Tabs>
+
+### Non-Safari browsers and fallback strategy
+
+Apple Pay on the web is available only in Safari (iOS 10+ / macOS Sierra+). On Chrome, Firefox, and other browsers, the Apple Pay button must not appear. VINR's hosted products (Checkout, Payment Links, Elements) handle this automatically.
+
+For custom integrations, degrade gracefully:
+
+```javascript
+// The canMakePayment() check returns null on non-Safari browsers
+const result = await paymentRequest.canMakePayment();
+if (!result?.applePay) {
+  // Non-Safari: show card form or offer Google Pay / other wallets
+}
+```
+
+VINR's Express Checkout Element renders all available payment methods — Apple Pay on Safari, Google Pay on Chrome — without any additional detection logic on your side.
 
 ## Payment flow
 
@@ -207,7 +299,14 @@ If Apple Pay does not appear as a payment option, check that your device and int
 ## See also
 
 <Cards>
+  <Card title="Button guidelines" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/button-guidelines" description="HIG-compliant button styles, CTA types, localization, and sizing." />
+  <Card title="Hosted Checkout" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/hosted-checkout" description="Apple Pay in VINR Hosted Checkout — setup and configuration." />
+  <Card title="Payment Links" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/payment-links" description="Apple Pay on VINR Payment Links." />
+  <Card title="Dynamic updates" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/dynamic-updates" description="Recalculate totals, shipping, and taxes in real time during checkout." />
   <Card title="Merchant tokens" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/merchant-tokens" description="Use MPANs for recurring, deferred, and automatic reload payments." />
+  <Card title="Order tracking" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/order-tracking" description="Show live order status in Apple Wallet after purchase." />
+  <Card title="Disbursements" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/disbursements" description="Send payouts to a card in the shopper's Wallet." />
+  <Card title="Go-live checklist" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/go-live-checklist" description="Verify your integration before accepting live payments." />
   <Card title="Best practices" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/best-practices" description="Improve conversion and maintain your Apple Pay integration." />
   <Card title="3D Secure" href="/docs/payments/3d-secure" description="How wallet authentication interacts with SCA." />
 </Cards>

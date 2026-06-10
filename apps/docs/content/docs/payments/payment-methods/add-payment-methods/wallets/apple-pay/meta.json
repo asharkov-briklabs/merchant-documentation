@@ -1,10 +1,17 @@
 {
   "title": "Apple Pay",
   "pages": [
-    "best-practices",
+    "button-guidelines",
+    "hosted-checkout",
+    "payment-links",
+    "dynamic-updates",
     "merchant-tokens",
     "recurring-payments",
+    "order-tracking",
+    "disbursements",
     "cartes-bancaires",
-    "disputes-and-refunds"
+    "disputes-and-refunds",
+    "go-live-checklist",
+    "best-practices"
   ]
 }

@@ -1,0 +1,88 @@
+---
+title: "Apple Pay on Payment Links"
+description: "Accept Apple Pay through shareable VINR Payment Links — no code required."
+priority: P0
+lastUpdated: "2026-06-10"
+---
+
+VINR Payment Links support Apple Pay with no additional configuration. When a customer opens a Payment Link in Safari on an eligible device with an active Wallet card, the Apple Pay button appears above the card form automatically.
+
+Payment Links are best for selling a small number of products or collecting one-time or recurring payments without building a custom checkout page. For more dynamic needs (real-time shipping recalculation, coupon codes, custom line items), use [Hosted Checkout](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/hosted-checkout).
+
+## Create a Payment Link with Apple Pay
+
+Apple Pay is enabled by default on all Payment Links. Create a link in the Dashboard or via the API:
+
+```bash
+curl https://api.vinr.com/v1/payment_links \
+  -u YOUR_SECRET_KEY: \
+  -d "line_items[0][price]=price_123" \
+  -d "line_items[0][quantity]=1"
+```
+
+Share the returned `url` with customers. No domain registration is required — VINR's domain is already registered with Apple.
+
+## Collect shipping address and contact
+
+Enable shipping collection when creating the link:
+
+```bash
+curl https://api.vinr.com/v1/payment_links \
+  -u YOUR_SECRET_KEY: \
+  -d "line_items[0][price]=price_123" \
+  -d "line_items[0][quantity]=1" \
+  -d "shipping_address_collection[allowed_countries][]=US" \
+  -d "shipping_address_collection[allowed_countries][]=GB" \
+  -d "phone_number_collection[enabled]=true"
+```
+
+On eligible devices, the Apple Pay sheet will prompt the customer to select a shipping address from their Wallet profile. The address is returned in the `checkout.session.completed` webhook under `shipping_details`.
+
+## Subscription Payment Links
+
+<Callout type="warn">
+**Capability required — Recurring tier.** Subscription-mode Payment Links that issue merchant tokens (MPANs) require the `apple_pay_recurring` capability. Contact your VINR account manager to enable it.
+</Callout>
+
+Set `mode=subscription` to create a recurring Payment Link. VINR automatically requests an MPAN when the customer pays with Apple Pay, enabling future merchant-initiated charges without re-prompting.
+
+```bash
+curl https://api.vinr.com/v1/payment_links \
+  -u YOUR_SECRET_KEY: \
+  -d "line_items[0][price]=price_monthly_plan" \
+  -d "line_items[0][quantity]=1" \
+  -d "mode=subscription"
+```
+
+See [Merchant tokens](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/merchant-tokens) for MPAN lifecycle details.
+
+## Limitations compared to Hosted Checkout
+
+| Feature | Payment Links | Hosted Checkout |
+|---|---|---|
+| Apple Pay button | Yes (automatic) | Yes (automatic) |
+| Collect shipping address | Yes | Yes |
+| Shipping options (multiple tiers) | No | Yes |
+| Real-time address-based shipping recalculation | No | Yes |
+| Coupon / promo codes on the Apple Pay sheet | No | Yes |
+| Custom line items per session | No (set at link creation) | Yes |
+| Card-type modifiers | No | Yes |
+| Order tracking | No | Yes |
+| Custom button style / locale override | No | Yes |
+
+If you need any of the features in the right column, use Hosted Checkout instead.
+
+## Test Apple Pay on Payment Links
+
+1. Create a Payment Link using your test secret key.
+2. Open the link in Safari on an iPhone or Mac.
+3. Complete the payment with Face ID, Touch ID, or passcode — no real charge is made in test mode.
+4. Verify the `checkout.session.completed` webhook arrives with `payment_status: "paid"`.
+
+## See also
+
+<Cards>
+  <Card title="Hosted Checkout" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/hosted-checkout" description="Full-featured Apple Pay in Hosted Checkout with dynamic updates, shipping options, and more." />
+  <Card title="Merchant tokens" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/merchant-tokens" description="MPANs for subscription and recurring Payment Links." />
+  <Card title="Go-live checklist" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/go-live-checklist" description="Verify your integration before going live." />
+</Cards>

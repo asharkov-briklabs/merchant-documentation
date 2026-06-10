@@ -1,0 +1,63 @@
+---
+title: Google Pay in hosted checkout
+description: Google Pay works automatically in VINR's hosted checkout — no additional code required.
+priority: P0
+lastUpdated: "2026-06-09"
+---
+
+When Google Pay is enabled on your VINR merchant account, it appears automatically in the VINR hosted checkout for every eligible browser and device. You do not write any Google Pay-specific code — VINR renders the button, handles the payment sheet interaction, processes the token, and runs 3D Secure where needed.
+
+## How it works
+
+1. A customer opens your hosted checkout session.
+2. VINR calls `isReadyToPay` against the Google Pay API using your merchant account configuration.
+3. If the customer's browser and device support Google Pay, the button appears alongside your other enabled payment methods.
+4. The customer taps the button, authenticates in the Google Pay sheet, and the payment is submitted.
+5. VINR decrypts the token, applies risk and 3DS controls, and completes the payment.
+6. The customer is redirected to your `returnUrl`. You receive a `payment.completed` webhook.
+
+All authentication method handling — including the unconditional 3DS step-up for PAN_ONLY credentials — runs automatically. See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) for background.
+
+## Enable Google Pay
+
+1. Go to **Settings → Payment methods** in the VINR Dashboard.
+2. Toggle **Google Pay** to enabled.
+
+That's all that's required for hosted checkout. Google Pay will appear at checkout for eligible customers immediately.
+
+<Callout type="warn">
+For production payments you must complete Google merchant registration or Google Pay tokens will be rejected. See [Register with Google](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup#register-with-google) — allow 1–2 business days for approval. Sandbox testing works without registration.
+</Callout>
+
+## Authentication methods in hosted checkout
+
+Which Google Pay credential types are offered to customers — `CRYPTOGRAM_3DS`, `PAN_ONLY`, or both — is controlled by your merchant account configuration, not by checkout session parameters. VINR applies your account's `allowedAuthMethods` setting automatically.
+
+To check or change your configuration, contact your VINR account manager. See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods#per-merchant-configuration) for details on each option.
+
+## Verifying the payment
+
+The payment object produced by a Google Pay hosted checkout session is identical in structure to any other card payment. Identify it by:
+
+```json
+{
+  "payment_method": {
+    "type": "card",
+    "card": {
+      "wallet": {
+        "type": "google_pay"
+      }
+    }
+  }
+}
+```
+
+Listen for the `payment.completed` webhook to fulfil the order. Do not rely on the redirect alone — the browser may close before it fires.
+
+## See also
+
+<Cards>
+  <Card title="Authentication methods" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods" description="CRYPTOGRAM_3DS vs PAN_ONLY: security, SCA, and per-merchant configuration." />
+  <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live" description="Test Google Pay in the sandbox and complete production approval." />
+  <Card title="How Checkout works" href="/docs/payments/payment-page/how-checkout-works" description="Sessions, states, and the payment lifecycle through VINR hosted checkout." />
+</Cards>

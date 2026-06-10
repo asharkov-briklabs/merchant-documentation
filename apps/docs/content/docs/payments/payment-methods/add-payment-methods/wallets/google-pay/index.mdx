@@ -2,7 +2,7 @@
 title: Google Pay
 description: Accept Google Pay across Android, Chrome, and the web with VINR.
 priority: P0
-lastUpdated: "2026-06-04"
+lastUpdated: "2026-06-09"
 ---
 
 Google Pay lets customers pay using a card stored in their Google account — on Android devices, in Chrome on any platform, and within native Android apps. VINR acts as the payment gateway, handling the token exchange with the Google Pay API so you never touch raw card data.
@@ -19,10 +19,27 @@ When a customer chooses Google Pay at checkout:
 2. The Google Pay payment sheet appears with the customer's saved card.
 3. The customer confirms — with a biometric, PIN, or Google account authentication.
 4. Google encrypts a one-time payment token and passes it to VINR.
-5. VINR decrypts the token and authorizes the payment through the card network.
+5. VINR decrypts the token, applies risk and authentication controls, and authorizes the payment through the card network.
 6. You receive a `payment.completed` webhook identical in structure to a standard card payment.
 
 The `payment_method.card.wallet.type` field on the resulting payment is set to `google_pay`.
+
+## Authentication methods
+
+Google Pay can return two types of credential: **CRYPTOGRAM_3DS** (a device token with a one-time cryptogram, already strongly authenticated) and **PAN_ONLY** (the raw card number from the customer's Google account, not authenticated on its own).
+
+The credential type affects SCA compliance and liability. VINR handles both automatically — CRYPTOGRAM_3DS flows through directly, while PAN_ONLY is unconditionally routed through VINR's 3D Secure step-up engine. Which methods are offered is configured per merchant account. See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) for the full breakdown.
+
+## Integration paths
+
+Google Pay works across all VINR checkout surfaces. Choose the path that matches how your checkout is built:
+
+| Path | Google Pay support | Code required |
+|---|---|---|
+| [Hosted checkout](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/hosted-checkout) | Automatic when enabled | None |
+| [Payment links](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/payment-links) | Automatic when enabled | None |
+| [Elements](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/elements) | Mount the `GooglePayElement` | Minimal |
+| [Direct API](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup) | Full Google Pay JS API integration | Yes |
 
 ## Environments
 
@@ -37,18 +54,26 @@ The VINR sandbox maps to the Google Pay `TEST` environment automatically. When y
 
 ## 3D Secure and SCA
 
-Google Pay payments typically satisfy SCA without triggering a 3D Secure challenge — the device authentication (biometric/PIN) combined with the cryptographic token is accepted as strong authentication by most European issuers. In the rare case where the issuer requires an additional challenge, VINR handles it automatically.
+**CRYPTOGRAM_3DS** transactions already satisfy Strong Customer Authentication — the device authentication (biometric or PIN) combined with the one-time cryptogram is accepted as strong authentication by European issuers. No further 3DS challenge is triggered.
+
+**PAN_ONLY** transactions do not satisfy SCA on their own. VINR unconditionally routes them through its 3D Secure step-up engine, exactly as it would a manually entered card. When the step-up passes, the transaction becomes SCA-compliant and liability shifts to the issuer. You do not implement this logic — it runs automatically on the VINR platform regardless of which integration path you use.
+
+See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) for the full SCA and liability breakdown.
 
 ## In this section
 
 <Cards>
-  <Card title="Set up Google Pay" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup" description="Dashboard configuration, merchant verification, and the Google Pay API integration." />
-  <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live" description="Test your integration and complete Google's production approval." />
+  <Card title="Authentication methods" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods" description="CRYPTOGRAM_3DS vs PAN_ONLY: security profiles, SCA, liability, and per-merchant configuration." />
+  <Card title="Hosted checkout" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/hosted-checkout" description="Google Pay in VINR's hosted checkout — automatic, no extra code." />
+  <Card title="Payment links" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/payment-links" description="Google Pay in payment links — appears automatically when enabled." />
+  <Card title="Elements" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/elements" description="Add a Google Pay button to your custom Elements-based checkout." />
+  <Card title="Set up Google Pay (API)" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup" description="Direct API integration: Dashboard configuration, Google registration, and token submission." />
+  <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live" description="Test both credential types and complete Google's production approval." />
 </Cards>
 
 ## See also
 
 <Cards>
-  <Card title="Wallets" href="/docs/payments/payment-methods/add-payment-methods/wallets" description="Apple Pay, Samsung Pay, and other digital wallets." />
+  <Card title="Wallets" href="/docs/payments/payment-methods/add-payment-methods/wallets" description="Apple Pay, Revolut Pay, and other digital wallets." />
   <Card title="Cards" href="/docs/payments/payment-methods/add-payment-methods/cards" description="The card rail behind most Google Pay payments." />
 </Cards>

@@ -1,0 +1,144 @@
+---
+title: "Button guidelines"
+description: "HIG-compliant Apple Pay button styles, call-to-action types, localization, and sizing."
+priority: P1
+lastUpdated: "2026-06-10"
+---
+
+Apple enforces strict guidelines for the Apple Pay button. Using an unofficial button style or label is grounds for App Store rejection or Apple Pay program termination. VINR's built-in button components (Express Checkout Element, iOS SDK) are compliant by default. If you build a custom button or override styles, follow this guide.
+
+## Button styles
+
+Three official styles are available. Choose based on your checkout background color.
+
+| Style | Class / constant | Use when |
+|---|---|---|
+| Black | `apple-pay-button-black` / `.black` | Light backgrounds |
+| White | `apple-pay-button-white` / `.white` | Dark backgrounds |
+| White with outline | `apple-pay-button-white-with-line` / `.whiteOutline` | White or near-white backgrounds where contrast would otherwise be lost |
+
+<Tabs items={["Web (CSS API)", "Native iOS"]}>
+<Tab value="Web (CSS API)">
+
+Use the `-apple-pay-button` CSS custom property and the official `apple-pay-button` web component. Do **not** recreate the button with custom HTML — Apple requires the official element.
+
+```html
+<apple-pay-button
+  buttonstyle="black"
+  type="buy"
+  locale="en-US"
+></apple-pay-button>
+
+<style>
+  apple-pay-button {
+    --apple-pay-button-width: 200px;
+    --apple-pay-button-height: 44px;
+    --apple-pay-button-border-radius: 8px;
+    --apple-pay-button-padding: 0px 0px;
+    --apple-pay-button-box-sizing: border-box;
+  }
+</style>
+```
+
+Load the Apple Pay JS API before using the element:
+
+```html
+<script src="https://applepay.cdn-apple.com/jsapi/1.latest/apple-pay-sdk.js"></script>
+```
+
+</Tab>
+<Tab value="Native iOS">
+
+```swift
+import PassKit
+
+let button = PKPaymentButton(paymentButtonType: .buy, paymentButtonStyle: .black)
+button.cornerRadius = 8
+button.addTarget(self, action: #selector(paymentButtonTapped), for: .touchUpInside)
+```
+
+</Tab>
+</Tabs>
+
+## Call-to-action types
+
+Use the CTA that best matches the context of the purchase. Using the wrong verb (for example, "Buy" on a donation page) violates Apple HIG and reduces conversion.
+
+| Type | Constant / attribute value | When to use |
+|---|---|---|
+| Buy | `buy` | One-time purchase of physical or digital goods |
+| Check Out | `check-out` | General checkout flow |
+| Pay | `pay` | Bill payment, invoices, balance top-up |
+| Subscribe | `subscribe` | Recurring subscriptions (Revex billing) |
+| Book | `book` | Travel, hospitality, event reservations |
+| Donate | `donate` | Non-profits, fundraising |
+| Reload | `reload` | Reloading a gift card or transit card |
+| Top Up | `top-up` | Stored value, wallet funding |
+| Order | `order` | Food delivery, marketplace order placement |
+| Rent | `rent` | Car rentals, short-term property rentals |
+| Set Up | `set-up` | Storing a card on file without an immediate charge |
+| Add Money | `add-money` | Adding funds to a balance (different from top-up: implies first-time) |
+| Contribute | `contribute` | Crowdfunding, shared expenses |
+| Tip | `tip` | Gratuities, creator support |
+| Support | `support` | Charitable support, pledges |
+| Continue | `continue` | Multi-step flows where Apple Pay is one step |
+| Plain | `plain` | When no verb label is appropriate (shows only the Apple Pay logo) |
+
+## Localization
+
+The `locale` attribute on the web button, or the `locale` parameter on the iOS button, controls the displayed language. Setting the correct locale matters for EU and Balkans markets.
+
+<Callout type="info">
+If you omit `locale`, the button uses the browser or device language. Always set it explicitly in multi-language storefronts to avoid mismatched UX.
+</Callout>
+
+Selected locales relevant to VINR's markets:
+
+| Region | Locale code |
+|---|---|
+| English (US) | `en-US` |
+| English (UK) | `en-GB` |
+| German | `de-DE` |
+| French | `fr-FR` |
+| Spanish | `es-ES` |
+| Italian | `it-IT` |
+| Dutch | `nl-NL` |
+| Polish | `pl-PL` |
+| Romanian | `ro-RO` |
+| Bulgarian | `bg-BG` |
+| Croatian | `hr-HR` |
+| Serbian (Latin) | `sr-Latn` |
+| Greek | `el-GR` |
+| Czech | `cs-CZ` |
+| Hungarian | `hu-HU` |
+| Slovak | `sk-SK` |
+| Slovenian | `sl-SI` |
+
+For the full list of 40+ supported locales, see [Apple's localisation reference](https://developer.apple.com/documentation/apple_pay_on_the_web/applepaybuttonlocale).
+
+## Sizing and layout
+
+| CSS property | Minimum | Recommended | Notes |
+|---|---|---|---|
+| `--apple-pay-button-width` | 100px | 200px+ | Scales to fill available width |
+| `--apple-pay-button-height` | 30px | 44px | 44px matches iOS tap target guidelines |
+| `--apple-pay-button-border-radius` | 0px | 8px | Match your checkout button radius |
+| `--apple-pay-button-padding` | — | `0px 0px` | Internal padding is controlled by the element |
+| `--apple-pay-button-box-sizing` | — | `border-box` | Prevents width overflow |
+
+The button must be at least 100×30 px and may not exceed the width of your page or container. Do not add external borders, drop shadows, or decorative containers around the button.
+
+## What you must not do
+
+- Do not recreate the button using a custom image, HTML `<button>`, or non-Apple assets.
+- Do not modify the Apple logo, wordmark, or lockup proportions.
+- Do not show the button in a disabled or grayed-out state — hide it instead if the action is unavailable.
+- Do not display the button if `canMakePayment()` returns `null` or the device is not eligible.
+- Do not use the Apple Pay mark (the logo alone) as a button — use the full button element.
+
+## See also
+
+<Cards>
+  <Card title="Apple Pay overview" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay" description="Prerequisites, domain registration, and integration methods." />
+  <Card title="Best practices" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/best-practices" description="Placement, defaulting, and conversion guidance." />
+</Cards>

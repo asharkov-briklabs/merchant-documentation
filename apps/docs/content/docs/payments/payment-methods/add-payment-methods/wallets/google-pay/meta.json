@@ -1,6 +1,10 @@
 {
   "title": "Google Pay",
   "pages": [
+    "authentication-methods",
+    "hosted-checkout",
+    "payment-links",
+    "elements",
     "setup",
     "test-and-go-live"
   ]

@@ -1,0 +1,219 @@
+---
+title: "Dynamic sheet updates"
+description: "Recalculate totals, shipping costs, and taxes in real time while the Apple Pay payment sheet is open."
+priority: P1
+lastUpdated: "2026-06-10"
+---
+
+When a customer is interacting with the Apple Pay payment sheet, you can listen for changes to their selected shipping address, shipping option, or payment method and update the order total in real time. These handlers run while the sheet is visible — the customer sees the updated total before they authenticate.
+
+Dynamic updates apply to direct API and Elements integrations. If you use [Hosted Checkout](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/hosted-checkout) or [Payment Links](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/payment-links), VINR handles supported recalculations automatically.
+
+<Callout type="warn">
+**Timeout contract.** Every event handler must call its update function within **30 seconds** or the transaction times out and the sheet closes with an error. Make your backend calls fast, and handle errors by returning the current totals unchanged rather than letting the handler hang.
+</Callout>
+
+## Shipping address change
+
+Apple provides a **redacted** shipping address before the customer authenticates — city, region, postal code, and country only. Use this to compute shipping cost and tax without requiring full address data upfront.
+
+<Tabs items={["Express Checkout Element", "Apple Pay JS API"]}>
+<Tab value="Express Checkout Element">
+
+```javascript
+const expressCheckoutElement = elements.create('expressCheckout');
+
+expressCheckoutElement.on('shippingaddresschange', async (event) => {
+  const { address } = event; // { city, state, postal_code, country }
+
+  // Compute shipping options for this address
+  const shippingOptions = await fetchShippingOptions(address);
+
+  if (shippingOptions.length === 0) {
+    // Reject the address — merchant doesn't ship here
+    event.resolve({
+      shippingAddressErrors: {
+        addressLine: "We don't deliver to this address.",
+      },
+    });
+    return;
+  }
+
+  event.resolve({
+    lineItems: buildLineItems(shippingOptions[0]),
+    shippingOptions,
+  });
+});
+```
+
+</Tab>
+<Tab value="Apple Pay JS API">
+
+```javascript
+session.onshippingaddresschange = async (event) => {
+  const address = event.shippingAddress; // redacted: city, postalCode, countryCode, administrativeArea
+
+  try {
+    const { shippingMethods, lineItems, total } = await recalculate(address);
+    event.updateWith({
+      newShippingMethods: shippingMethods,
+      newLineItems: lineItems,
+      newTotal: total,
+    });
+  } catch {
+    // Return current state on error — all previously-set fields must be re-supplied
+    // or Apple Pay will clear them. Do not let the handler time out.
+    event.updateWith({
+      newShippingMethods: currentShippingMethods,
+      newLineItems: currentLineItems,
+      newTotal: currentTotal,
+    });
+  }
+};
+```
+
+</Tab>
+</Tabs>
+
+## Shipping option change
+
+When the customer switches between shipping tiers (for example, ground vs. express), recalculate the order total to reflect the new shipping cost.
+
+<Tabs items={["Express Checkout Element", "Apple Pay JS API"]}>
+<Tab value="Express Checkout Element">
+
+```javascript
+expressCheckoutElement.on('shippingoptionchange', async (event) => {
+  const { shippingOption } = event; // { id, label, detail, amount }
+
+  const updatedLineItems = buildLineItems(shippingOption);
+
+  event.resolve({
+    lineItems: updatedLineItems,
+  });
+});
+```
+
+</Tab>
+<Tab value="Apple Pay JS API">
+
+```javascript
+session.onshippingmethodchange = (event) => {
+  const method = event.shippingMethod;
+  const newTotal = computeTotal(method);
+
+  event.updateWith({
+    newTotal,
+    newLineItems: buildLineItems(method),
+  });
+};
+```
+
+</Tab>
+</Tabs>
+
+## Payment method change (card-type modifiers)
+
+Apple Pay notifies you when the customer switches between cards in Wallet, providing the card brand and funding type (`credit`, `debit`, `prepaid`). Use this to apply surcharges or discounts by card type.
+
+<Callout type="info">
+Apple only provides the card brand and funding type, not the full card number or BIN, before authentication. Factor this into any surcharge logic — you may want to confirm the actual BIN post-authorization before applying fees.
+</Callout>
+
+<Tabs items={["Express Checkout Element", "Apple Pay JS API"]}>
+<Tab value="Express Checkout Element">
+
+```javascript
+expressCheckoutElement.on('paymentmethodchange', async (event) => {
+  const { paymentMethod } = event;
+  // paymentMethod.type: 'card'
+  // paymentMethod.card.brand: 'visa', 'mastercard', etc.
+  // paymentMethod.card.funding: 'credit', 'debit', 'prepaid'
+
+  const surcharge = computeSurcharge(paymentMethod.card);
+  // Include the surcharge as a line item; the ECE derives the total from line items
+  event.resolve({
+    lineItems: [...baseLineItems, surcharge],
+  });
+});
+```
+
+</Tab>
+<Tab value="Apple Pay JS API">
+
+```javascript
+session.onpaymentmethodchange = (event) => {
+  const { paymentMethod } = event;
+  // paymentMethod.type: 'credit', 'debit', 'prepaid', 'store'
+  // paymentMethod.network: 'Visa', 'MasterCard', etc.
+
+  const modifier = getModifier(paymentMethod);
+
+  event.updateWith({
+    newTotal: applyModifier(currentTotal, modifier),
+    newLineItems: buildLineItems(modifier),
+  });
+};
+```
+
+</Tab>
+</Tabs>
+
+## Returning errors to the sheet
+
+If the customer selects a shipping address you cannot service, return an address error instead of completing the handler. The sheet displays the error inline and prompts the customer to select a different address.
+
+```javascript
+// Express Checkout Element
+event.resolve({
+  shippingAddressErrors: {
+    country: "We don't ship to this country.",
+  },
+});
+
+// Apple Pay JS API
+event.updateWith({
+  errors: [
+    new ApplePayError(
+      'shippingContactInvalid',
+      'country',
+      "We don't ship to this country."
+    ),
+  ],
+  newTotal: currentTotal,
+});
+```
+
+Supported error fields: `addressLine`, `administrativeArea`, `city`, `country`, `postalCode`, `subAdministrativeArea`, `subLocality`.
+
+## Line item format reference
+
+Line items appear in the Apple Pay payment sheet as an itemized breakdown above the total.
+
+```javascript
+// Express Checkout Element format
+const lineItems = [
+  { name: 'Subtotal', amount: 1800 },        // amounts in smallest currency unit
+  { name: 'Shipping', amount: 500 },
+  { name: 'Tax', amount: 180 },
+  { name: 'Promo — SAVE10', amount: -180 },  // negative for discounts
+];
+
+// Apple Pay JS API format
+const lineItems = [
+  { label: 'Subtotal', amount: '18.00', type: 'final' },
+  { label: 'Shipping', amount: '5.00', type: 'final' },
+  { label: 'Tax', amount: '1.80', type: 'final' },
+  { label: 'Promo — SAVE10', amount: '-1.80', type: 'final' },
+];
+```
+
+Use `type: 'pending'` when the amount is not yet known (for example, tax before the address is confirmed). Always replace pending items with `final` items before calling `complete()`.
+
+## See also
+
+<Cards>
+  <Card title="Hosted Checkout" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/hosted-checkout" description="Dynamic shipping recalculation handled automatically." />
+  <Card title="Merchant tokens" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/merchant-tokens" description="MPANs for recurring and deferred flows." />
+  <Card title="Apple Pay overview" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay" description="Prerequisites, domain registration, and integration methods." />
+</Cards>

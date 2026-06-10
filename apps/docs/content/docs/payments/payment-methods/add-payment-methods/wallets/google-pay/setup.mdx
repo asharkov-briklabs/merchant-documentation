@@ -1,19 +1,23 @@
 ---
-title: Set up Google Pay
-description: Configure Google Pay on your VINR account and integrate the Google Pay API.
+title: Set up Google Pay (API)
+description: Configure Google Pay on your VINR account and integrate directly with the Google Pay JavaScript API.
 priority: P0
-lastUpdated: "2026-06-04"
+lastUpdated: "2026-06-09"
 ---
 
-Google Pay requires two steps before you can accept payments: enabling it in the VINR Dashboard and registering as a merchant with Google.
+This page covers the direct API integration — using the Google Pay JavaScript API in your own checkout UI. If you use a different integration path, you may not need any of this code:
+
+| Integration path | What to read instead |
+|---|---|
+| VINR hosted checkout | [Google Pay in hosted checkout](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/hosted-checkout) — no code required |
+| Payment links | [Google Pay in payment links](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/payment-links) — no code required |
+| VINR Elements | [Google Pay with Elements](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/elements) — minimal setup |
 
 ## Enable Google Pay in the Dashboard
 
 1. Go to **Settings → Payment methods** in the VINR Dashboard.
 2. Toggle **Google Pay** to enabled.
 3. Copy your **VINR merchant ID** — you'll need it when configuring the Google Pay API.
-
-Once enabled, Google Pay appears automatically in the VINR hosted checkout for eligible browsers and devices. If you use the hosted checkout exclusively, no further integration is required.
 
 ## Register with Google
 
@@ -26,15 +30,15 @@ For production payments, Google requires merchants to register through the Googl
 
 You do not need to complete registration to test in the `TEST` environment. See [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live).
 
-## Custom integration
+## Integration
 
-If you render your own checkout UI (not the VINR hosted checkout), use the Google Pay JavaScript API to present the payment button and collect the token, then pass it to VINR.
+### 1. Configure the payment request
 
-### Configure the payment request
+Set `allowedAuthMethods` to the methods enabled on your VINR merchant account. Most accounts support both — see [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) for what each method means and how to request a configuration change.
 
 ```javascript
 const googlePayClient = new google.payments.api.PaymentsClient({
-  environment: 'PRODUCTION', // or 'TEST' in sandbox
+  environment: 'PRODUCTION', // use 'TEST' in sandbox
 });
 
 const paymentDataRequest = {
@@ -43,8 +47,8 @@ const paymentDataRequest = {
   allowedPaymentMethods: [{
     type: 'CARD',
     parameters: {
-      allowedAuthMethods: ['PAN_ONLY', 'CRYPTOGRAM_3DS'],
-      allowedCardNetworks: ['MASTERCARD', 'VISA'],
+      allowedAuthMethods: ['CRYPTOGRAM_3DS', 'PAN_ONLY'], // match your merchant account config
+      allowedCardNetworks: ['MASTERCARD', 'VISA'],         // match your enabled networks
     },
     tokenizationSpecification: {
       type: 'PAYMENT_GATEWAY',
@@ -67,7 +71,9 @@ const paymentDataRequest = {
 };
 ```
 
-### Check readiness and render the button
+### 2. Check readiness and render the button
+
+Only render the button after `isReadyToPay` returns `true`. Call `loadPaymentData` synchronously in the click handler so the browser does not block the payment sheet as a pop-up.
 
 ```javascript
 googlePayClient.isReadyToPay({
@@ -78,37 +84,59 @@ googlePayClient.isReadyToPay({
   if (response.result) {
     const button = googlePayClient.createButton({
       onClick: () => googlePayClient.loadPaymentData(paymentDataRequest)
-        .then(paymentData => submitToVinr(paymentData)),
+        .then(paymentData => sendTokenToServer(paymentData))
+        .catch(err => {
+          if (err.statusCode !== 'CANCELED') {
+            document.getElementById('error-message').textContent = err.message || 'Payment failed';
+          }
+        }),
     });
     document.getElementById('google-pay-button').appendChild(button);
   }
 });
 ```
 
-### Submit the token to VINR
+### 3. Send the token to your server
 
-Pass the payment token from Google to your server, then create the payment with the token as the payment method:
+Extract the encrypted token from the Google Pay response and POST it to your backend:
+
+```javascript
+async function sendTokenToServer(paymentData) {
+  const token = paymentData.paymentMethodData.tokenizationData.token;
+
+  const response = await fetch('/your-checkout-endpoint', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ googlePayToken: token, amount: 4500, currency: 'EUR' }),
+  });
+
+  if (!response.ok) {
+    const { message } = await response.json();
+    throw new Error(message || 'Payment failed');
+  }
+
+  return response.json();
+}
+```
+
+### 4. Create the payment server-side
+
+Pass the encrypted token to the VINR API. VINR decrypts it, identifies the credential type, and applies the appropriate risk and 3DS handling automatically.
 
 ```typescript
-// Server-side: create the payment with the Google Pay token
 import { Vinr } from '@vinr/sdk';
 
 const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-async function submitToVinr(
-  paymentData: google.payments.api.PaymentData,
-  amount: number,
-  currency: string,
-) {
-  const token = paymentData.paymentMethodData.tokenizationData.token;
-
-  // TODO: confirm exact parameter names with engineering for Google Pay token submission
+async function createPayment(googlePayToken: string, amount: number, currency: string) {
   const payment = await vinr.payments.create({
     amount,
     currency,
-    paymentMethod: {
+    payment_method: {
       type: 'google_pay',
-      token,
+      google_pay: {
+        token: googlePayToken,
+      },
     },
   });
 
@@ -116,17 +144,20 @@ async function submitToVinr(
 }
 ```
 
+If the payment returns `status: 'requires_action'`, a 3D Secure challenge was triggered. For PAN_ONLY transactions this is expected — VINR unconditionally routes them through the 3DS step-up engine. Handle it the same way as any 3DS-challenged card payment — see [Strong Customer Authentication](/docs/payments/strong-customer-authentication).
+
 <Callout type="info">
-Always confirm the final payment state from the `payment.completed` webhook on your server, not from the client-side response. The customer's browser may close before the redirect returns.
+Always confirm the final payment state from the `payment.completed` webhook on your server, not the client-side response. The customer's browser may close before the redirect returns.
 </Callout>
 
-## Google Pay button guidelines
+## Button guidelines
 
-Google enforces brand guidelines for the payment button. Use only the approved button styles and do not modify the Google Pay logo. The `createButton` API returns a pre-styled button that meets guidelines automatically.
+Google enforces brand guidelines for the payment button. Use only the approved button styles and do not modify the Google Pay logo. The `createButton` API returns a pre-styled, compliant button automatically.
 
 ## See also
 
 <Cards>
+  <Card title="Authentication methods" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods" description="CRYPTOGRAM_3DS vs PAN_ONLY: how VINR handles each and per-merchant configuration." />
   <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live" description="Test your integration and submit for production approval." />
   <Card title="Google Pay overview" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay" description="How Google Pay works with VINR." />
 </Cards>

@@ -1,0 +1,168 @@
+---
+title: "Order tracking"
+description: "Show live order status in the customer's Apple Wallet after an Apple Pay purchase."
+priority: P1
+lastUpdated: "2026-06-10"
+---
+
+<Callout type="warn">
+**Capability required — Advanced tier.** Order tracking in Apple Wallet requires the `apple_pay_order_tracking` capability on your VINR account. Contact your VINR account manager to enable it. The feature is supported on iOS 16+ and macOS 13+. Sending tracking data on older OS versions is safe — it is silently ignored.
+</Callout>
+
+After an Apple Pay payment completes, you can push order details to the customer's Apple Wallet so they can track their order status without opening your app or website. The order appears directly in the Wallet app under the payment transaction.
+
+## How it works
+
+1. The customer completes an Apple Pay payment.
+2. You pass order details to VINR as part of completing the payment.
+3. VINR delivers the details to Apple via `ApplePayPaymentCompleteDetails`.
+4. Apple displays the order card in Wallet with your logo, order number, and fulfillment status.
+5. As the order progresses, you call VINR's order tracking update endpoint to push status changes — the Wallet card updates in real time.
+
+## Pass order details on payment completion
+
+### API integration
+
+After your server receives and confirms the Apple Pay token, include `apple_pay_order_details` in the payment confirmation:
+
+```bash
+curl https://api.vinr.com/v1/payment_intents/pi_123/confirm \
+  -u YOUR_SECRET_KEY: \
+  -d "payment_method=pm_apple_pay_token" \
+  -d "apple_pay_order_details[order_type_identifier]=com.example.order" \
+  -d "apple_pay_order_details[order_identifier]=ORDER-20240101-001" \
+  -d "apple_pay_order_details[web_service_url]=https://api.example.com/orders" \
+  -d "apple_pay_order_details[authentication_token]=tok_abc123"
+```
+
+| Parameter | Description |
+|---|---|
+| `order_type_identifier` | Your reverse-domain order type, registered with Apple (e.g. `com.example.order`) |
+| `order_identifier` | Your internal order ID — shown to the customer and used in tracking updates |
+| `web_service_url` | The base URL Apple calls for order status updates |
+| `authentication_token` | A secret token your web service uses to validate Apple's requests |
+
+### Express Checkout Element
+
+Pass the order details in the `confirmParams` when confirming payment:
+
+```javascript
+const { error } = await vinr.confirmPayment({
+  elements,
+  confirmParams: {
+    return_url: 'https://example.com/order/complete',
+    payment_method_data: {
+      billing_details: { ... },
+    },
+    apple_pay_order_details: {
+      order_type_identifier: 'com.example.order',
+      order_identifier: orderId,
+      web_service_url: 'https://api.example.com/orders',
+      authentication_token: authToken,
+    },
+  },
+});
+```
+
+## Implement the order status web service
+
+Apple calls your `web_service_url` to fetch current order status. You must implement two endpoints:
+
+### GET `/v1/packages/{orderTypeIdentifier}/{orderIdentifier}`
+
+Returns the current order package, which Apple renders in Wallet.
+
+```json
+{
+  "order": {
+    "orderIdentifier": "ORDER-20240101-001",
+    "orderTypeIdentifier": "com.example.order",
+    "updatedAt": "2024-01-01T12:00:00Z",
+    "status": "open",
+    "statusDescription": "Your order has been received.",
+    "merchant": {
+      "merchantIdentifier": "merchant.com.example",
+      "displayName": "Example Store",
+      "url": "https://example.com"
+    },
+    "lineItems": [
+      {
+        "label": "Blue T-Shirt (M)",
+        "sku": "TSHIRT-BLUE-M",
+        "quantity": 2,
+        "price": "29.99",
+        "currencyCode": "USD"
+      }
+    ],
+    "total": {
+      "label": "Total",
+      "price": "59.98",
+      "currencyCode": "USD"
+    },
+    "fulfillments": [
+      {
+        "fulfillmentIdentifier": "SHIP-001",
+        "status": "open",
+        "statusDescription": "Preparing your order.",
+        "trackingNumber": "",
+        "trackingUrl": ""
+      }
+    ]
+  }
+}
+```
+
+Authenticate requests using the `authentication_token` you passed at payment time. Reject requests with invalid tokens with `401 Unauthorized`.
+
+### POST `/v1/push`
+
+Apple calls this endpoint to register a device push token for the order. Store the token associated with the order identifier. When the order status changes, your server uses this token to call Apple APNs, which prompts the device to fetch the updated order package from your GET endpoint.
+
+```json
+{
+  "pushToken": "abc123devicepushtoken"
+}
+```
+
+## Push order status updates
+
+When the order status changes (for example, order shipped, out for delivery, delivered), send a push notification to Apple and update the package returned by your GET endpoint:
+
+```bash
+curl https://api.vinr.com/v1/apple_pay/order_tracking/notify \
+  -u YOUR_SECRET_KEY: \
+  -d "order_identifier=ORDER-20240101-001" \
+  -d "order_type_identifier=com.example.order"
+```
+
+VINR forwards the notification to Apple, which prompts the device to fetch the updated order package from your web service. Update your package endpoint to return the new status before calling this endpoint.
+
+Useful `status` values: `open`, `in_progress`, `fulfilled`, `cancelled`.
+
+## Track-in-Wallet button
+
+After payment, display a **Track in Wallet** button to prompt the customer to add the order to Wallet explicitly. This is recommended for retail merchants with fulfillment tracking.
+
+```swift
+// iOS — present a signed order package using PKAddOrdersViewController
+@objc func addOrderToWallet() {
+    // Fetch a signed PKOrder from your server (contains the order package and a merchant signature)
+    fetchSignedOrderPackage(orderIdentifier: orderId) { signedOrder in
+        guard let order = try? PKOrder(data: signedOrder) else { return }
+        let vc = PKAddOrdersViewController(orders: [order], delegate: self)
+        self.present(vc, animated: true)
+    }
+}
+```
+
+`PKAddOrdersViewController` (iOS 16+) is the API for adding order tracking to Wallet. `PKAddPassButton` is for Wallet passes (boarding passes, loyalty cards) and must not be used here.
+
+For web, call `vinr.applePayOrderTracking.addToWallet({ orderIdentifier })` after checkout completes — VINR handles constructing the signed order redirect.
+
+## See also
+
+<Cards>
+  <Card title="Apple Pay overview" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay" description="Prerequisites and integration methods." />
+  <Card title="Hosted Checkout" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/hosted-checkout" description="Order tracking in Hosted Checkout." />
+  <Card title="Disputes and refunds" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/disputes-and-refunds" description="Manage post-purchase disputes and refunds." />
+</Cards>

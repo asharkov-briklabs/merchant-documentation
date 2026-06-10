@@ -1,0 +1,141 @@
+---
+title: "Apple Pay in Hosted Checkout"
+description: "Accept Apple Pay with zero integration code using VINR Hosted Checkout."
+priority: P0
+lastUpdated: "2026-06-10"
+---
+
+VINR Hosted Checkout is the fastest way to accept Apple Pay. The button appears automatically for eligible Safari sessions — no JavaScript, no domain registration steps on your end, and no button rendering code. VINR handles merchant validation, session eligibility, and token decryption entirely server-side.
+
+## How it works
+
+1. You create a Checkout Session via the VINR API or Dashboard.
+2. The customer is redirected to `checkout.vinr.com` (or your custom domain if configured).
+3. VINR detects device and browser eligibility. On Safari with an active Wallet card, the Apple Pay button is shown above the card form.
+4. The customer authenticates with Face ID, Touch ID, or passcode.
+5. VINR decrypts the Apple Pay token and processes the payment with the acquiring network.
+6. On success, the customer is redirected to your `success_url`. You receive a `checkout.session.completed` webhook.
+
+## Enable Apple Pay on your account
+
+Apple Pay is available in Hosted Checkout for all standard VINR accounts. No per-session configuration is required. Ensure your VINR account has Apple Pay enabled in the Dashboard under **Settings → Payment methods**.
+
+If Apple Pay is not visible in that list, contact your VINR account manager.
+
+## Create a Checkout Session
+
+```bash
+curl https://api.vinr.com/v1/checkout/sessions \
+  -u YOUR_SECRET_KEY: \
+  -d "mode=payment" \
+  -d "payment_method_types[]=card" \
+  -d "line_items[0][price]=price_123" \
+  -d "line_items[0][quantity]=1" \
+  -d "success_url=https://example.com/success" \
+  -d "cancel_url=https://example.com/cancel"
+```
+
+Apple Pay is included automatically alongside the card form. You do not need to add it to `payment_method_types`.
+
+## Display line items in the Apple Pay sheet
+
+Pass `line_items` to the session and VINR surfaces them as display items on the native Apple Pay payment sheet, including subtotal, tax, and shipping.
+
+```bash
+curl https://api.vinr.com/v1/checkout/sessions \
+  -u YOUR_SECRET_KEY: \
+  -d "mode=payment" \
+  -d "line_items[0][price]=price_shirt" \
+  -d "line_items[0][quantity]=2" \
+  -d "line_items[1][price]=price_shipping" \
+  -d "line_items[1][quantity]=1" \
+  -d "success_url=https://example.com/success" \
+  -d "cancel_url=https://example.com/cancel"
+```
+
+## Collect shipping address and contact information
+
+Set `shipping_address_collection` to request a shipping address from the customer's Wallet. VINR presents the address selector on the Apple Pay sheet and validates it against your allowed countries.
+
+```bash
+curl https://api.vinr.com/v1/checkout/sessions \
+  -u YOUR_SECRET_KEY: \
+  -d "mode=payment" \
+  -d "shipping_address_collection[allowed_countries][]=US" \
+  -d "shipping_address_collection[allowed_countries][]=GB" \
+  -d "shipping_address_collection[allowed_countries][]=DE" \
+  -d "phone_number_collection[enabled]=true" \
+  -d "line_items[0][price]=price_123" \
+  -d "line_items[0][quantity]=1" \
+  -d "success_url=https://example.com/success" \
+  -d "cancel_url=https://example.com/cancel"
+```
+
+The collected address and contact details are returned in the `checkout.session.completed` webhook under `shipping_details` and `customer_details`.
+
+For digital goods, omit `shipping_address_collection` entirely — the Apple Pay sheet shows only the payment method and total, enabling a true one-tap flow.
+
+## Shipping options
+
+Pass `shipping_options` to let customers choose a shipping tier on the Apple Pay sheet. VINR recalculates the order total automatically when the customer switches options.
+
+```bash
+-d "shipping_options[0][shipping_rate]=shr_standard" \
+-d "shipping_options[1][shipping_rate]=shr_express"
+```
+
+Create Shipping Rates in the Dashboard under **Products → Shipping rates** or via the [Shipping Rates API](/docs/api-reference).
+
+## Configure the button style and locale
+
+The button style and locale are set at the account level in the Dashboard under **Settings → Payment methods → Apple Pay → Button settings**. You can override them per Checkout Session:
+
+```bash
+-d "payment_method_options[apple_pay][button_style]=black" \
+-d "payment_method_options[apple_pay][button_type]=check-out" \
+-d "payment_method_options[apple_pay][locale]=fr-FR"
+```
+
+See [Button guidelines](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/button-guidelines) for all available styles, CTA types, and locale codes.
+
+## Recurring payments and merchant tokens
+
+<Callout type="warn">
+**Capability required — Recurring tier.** Subscription-mode Checkout Sessions that issue merchant tokens (MPANs) require the `apple_pay_recurring` capability. Contact your VINR account manager to enable it.
+</Callout>
+
+For subscription-mode sessions (`mode=subscription`), VINR automatically requests an MPAN when the merchant has the recurring capability. No additional parameters are needed.
+
+For one-time sessions where you intend to save the payment method for later use, set `setup_future_usage`:
+
+```bash
+-d "payment_intent_data[setup_future_usage]=off_session"
+```
+
+See [Merchant tokens](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/merchant-tokens) for MPAN lifecycle details.
+
+## Order tracking
+
+<Callout type="warn">
+**Capability required — Advanced tier.** Order tracking in Apple Wallet requires the `apple_pay_order_tracking` capability. Contact your VINR account manager to enable it.
+</Callout>
+
+When the feature is enabled, pass order details in `payment_intent_data.apple_pay.order_tracking_number` and related fields. VINR sends them via `ApplePayPaymentCompleteDetails` so the order appears in the customer's Apple Wallet. See [Order tracking](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/order-tracking).
+
+## Test Apple Pay in Hosted Checkout
+
+1. Open the Checkout Session URL in Safari on an iPhone or Mac running Safari.
+2. Use real test API keys — VINR intercepts the Apple Pay token in test mode and returns a successful test result without charging the card.
+3. Complete the payment with Face ID, Touch ID, or passcode.
+4. Verify you receive the `checkout.session.completed` webhook with `payment_status: "paid"`.
+
+You can also use the [Apple Pay demo sandbox](https://applepaydemo.apple.com/) to see the payment sheet behavior before building.
+
+## See also
+
+<Cards>
+  <Card title="Apple Pay overview" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay" description="Domain registration, eligibility, and integration methods." />
+  <Card title="Payment Links" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/payment-links" description="Apple Pay on no-code shareable payment links." />
+  <Card title="Merchant tokens" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/merchant-tokens" description="MPANs for recurring and deferred payments." />
+  <Card title="Go-live checklist" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/go-live-checklist" description="Verify your integration before accepting live payments." />
+</Cards>
