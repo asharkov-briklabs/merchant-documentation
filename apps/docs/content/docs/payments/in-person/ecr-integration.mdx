@@ -1,0 +1,538 @@
+---
+title: "ECR Integration"
+description: "Connect an existing ECR or POS system to a VINR terminal using the VINR Cashless API."
+priority: "P1"
+lastUpdated: "2026-06-11"
+---
+
+The VINR Cashless API lets existing ECR (Electronic Cash Register) and POS systems drive a VINR terminal as a payment peripheral — without building a full custom integration. Your ECR calls a simple HTTP API on the terminal over your local network. The terminal handles all card interactions and returns the result inline. Your ECR software never touches card data.
+
+**This is the right integration if:**
+- You already run a third-party POS, hospitality, retail management, or service desk system
+- Your existing software can make outbound HTTP requests to an IP address on the local network
+- You want the terminal to act as a self-contained payment peripheral rather than something your server code drives end-to-end
+
+| | Cloud API | Local API | Cashless API (this page) |
+|---|---|---|---|
+| Who drives the terminal | Your server, via VINR cloud | Your custom POS app, direct LAN | Your existing ECR/POS, direct LAN |
+| Requires VINR SDK | No (optional) | Recommended | No |
+| Custom integration code | Required | Required | Minimal — call HTTP endpoints |
+| Best for | Cloud POS, backend-driven | Custom POS, kiosk | Third-party POS/ECR, hospitality, retail |
+
+## How it works
+
+The terminal runs a local HTTP server — the Cashless API — on port 8443. Your ECR calls it over the LAN. All calls are synchronous: the connection stays open while the cardholder interacts with the terminal, and the outcome (approved, declined, cancelled) is returned inline.
+
+```
+ECR/POS system ──HTTPS──▶ Terminal (LAN, port 8443)
+                                  │
+                            Card interaction
+                                  │
+                          ──▶ Card network (authorization)
+                                  │
+ECR/POS system ◀────────── Terminal (synchronous response)
+```
+
+## Setup
+
+### 1. Enable Cashless API mode
+
+Go to **Dashboard → Hardware → Terminals → [device] → Integrations → Cashless API** and toggle it on. The terminal restarts into Cashless API mode.
+
+### 2. Assign a static IP
+
+The Cashless API requires a stable address. On your network router, create a DHCP reservation for the terminal's MAC address (printed on the device label and visible in the Dashboard under **Hardware → Terminals → [device] → Network**).
+
+### 3. Generate a shared key
+
+In the same **Integrations → Cashless API** panel, click **Generate shared key**. Copy it — it will not be shown again. Store it in your ECR configuration. To rotate the key, click **Regenerate**; the previous key is invalidated immediately.
+
+## Base URL and authentication
+
+```
+https://{terminal-ip}:8443/cashless/v1
+```
+
+Include the shared key on every request:
+
+```http
+POST /cashless/v1/sale HTTP/1.1
+Host: 192.168.1.51:8443
+Content-Type: application/json
+X-VINR-Cashless-Key: ck_live_xxxxxxxxxxxx
+```
+
+The terminal presents a VINR-issued TLS certificate. Your ECR must trust VINR's root CA — download the CA bundle from **Dashboard → Developers → Certificates** and install it in your ECR's trust store. Requests over plain HTTP are rejected.
+
+<Callout type="info">
+All Cashless API requests are `POST` with a JSON body. A successful response always contains `"status": "approved"`. Error responses contain an `"error"` object with a `"code"` and `"message"`.
+</Callout>
+
+## Request timeout
+
+Set your ECR's HTTP client timeout to **120 seconds**. Card interactions can take up to 90 seconds (chip+PIN entry plus network authorization). A shorter timeout closes the connection before the transaction finishes, leaving the terminal in an indeterminate state. If your ECR times out, call [/cashless/v1/status](#status) before retrying to confirm whether the previous transaction completed.
+
+---
+
+## Status
+
+Check whether the terminal is ready to accept a new payment request.
+
+```
+POST /cashless/v1/status
+```
+
+Request body: `{}`
+
+**Response — ready:**
+
+```json
+{
+  "status": "ready",
+  "terminalId": "term_CT20_0042",
+  "model": "nexgo_ct20",
+  "softwareVersion": "3.14.2",
+  "lastTransaction": {
+    "reference": "POS-ORDER-0820",
+    "status": "approved",
+    "completedAt": "2026-06-11T10:14:00Z"
+  }
+}
+```
+
+**Response — busy:**
+
+```json
+{
+  "status": "busy",
+  "activeTransaction": {
+    "reference": "POS-ORDER-0821",
+    "startedAt": "2026-06-11T10:15:03Z"
+  }
+}
+```
+
+Call this before starting a transaction if your ECR needs to confirm the terminal is idle. If `status` is `busy` and your ECR has no record of the active transaction, use [/cashless/v1/cancel](#cancel) to abort it before starting a new one.
+
+---
+
+## Sale
+
+Initiate a card-present payment. The terminal presents the amount to the customer, handles card entry and authorization, and returns the result synchronously.
+
+```
+POST /cashless/v1/sale
+```
+
+**Request:**
+
+```json
+{
+  "amount": 2500,
+  "currency": "USD",
+  "reference": "POS-ORDER-0821",
+  "tipAmount": 300,
+  "printReceipt": true
+}
+```
+
+<TypeTable
+  type={{
+    amount: {
+      type: "integer",
+      description: "Transaction amount in the smallest currency unit (e.g. cents for USD). Must be a positive integer.",
+      required: true,
+    },
+    currency: {
+      type: "string",
+      description: "ISO 4217 three-letter currency code.",
+      required: true,
+    },
+    reference: {
+      type: "string",
+      description: "Your order reference. Must be unique per transaction. Returned in the response and on VINR webhook events.",
+      required: true,
+    },
+    tipAmount: {
+      type: "integer",
+      description: "Pre-set tip amount in the smallest currency unit. Omit to suppress tip entirely.",
+    },
+    tip: {
+      type: "object",
+      description: "Set mode: 'on_screen' to show a tip selection prompt on the terminal display before card presentation.",
+    },
+    cashbackAmount: {
+      type: "integer",
+      description: "Cashback amount in the smallest currency unit. Only supported on debit transactions where the issuer permits cashback.",
+    },
+    printReceipt: {
+      type: "boolean",
+      description: "Whether the terminal prints a merchant receipt after approval. Requires a model with a built-in printer (N92, CT20, CT20P).",
+      default: "false",
+    },
+  }}
+/>
+
+**Response — approved:**
+
+```json
+{
+  "status": "approved",
+  "reference": "POS-ORDER-0821",
+  "transactionId": "tpay_01HZ5QA7BK",
+  "amount": 2500,
+  "tipAmount": 300,
+  "totalAmount": 2800,
+  "currency": "USD",
+  "authCode": "A12345",
+  "entryMethod": "contactless",
+  "cardScheme": "visa",
+  "maskedPan": "************4242",
+  "cardholderName": "J SMITH",
+  "receiptData": {
+    "merchantReceipt": "VINR PAYMENTS\n...",
+    "customerReceipt": "VINR PAYMENTS\n..."
+  },
+  "completedAt": "2026-06-11T10:15:11Z"
+}
+```
+
+**Response — declined:**
+
+```json
+{
+  "status": "declined",
+  "reference": "POS-ORDER-0821",
+  "declineCode": "card_declined",
+  "declineMessage": "Transaction not approved",
+  "completedAt": "2026-06-11T10:15:14Z"
+}
+```
+
+---
+
+## Pre-authorisation
+
+Reserve funds on the customer's card without capturing them immediately. Use this for hotel check-in, car rental, tab authorizations, and any scenario where the final amount is not known at card presentation.
+
+### Initiate a pre-auth
+
+```
+POST /cashless/v1/preauth
+```
+
+**Request:**
+
+```json
+{
+  "amount": 10000,
+  "currency": "USD",
+  "reference": "HOTEL-STAY-1193"
+}
+```
+
+**Response:**
+
+```json
+{
+  "status": "approved",
+  "reference": "HOTEL-STAY-1193",
+  "transactionId": "tpay_01HZ5QB3GH",
+  "amount": 10000,
+  "currency": "USD",
+  "authCode": "PA9821",
+  "entryMethod": "chip",
+  "cardScheme": "mastercard",
+  "maskedPan": "************5678",
+  "expiresAt": "2026-06-18T10:15:00Z",
+  "completedAt": "2026-06-11T10:15:22Z"
+}
+```
+
+Authorizations expire after **7 days**. The `expiresAt` field shows the exact expiry. Complete or cancel the pre-auth before it expires — expired authorizations cannot be captured and the held funds are released back to the cardholder.
+
+### Complete a pre-auth
+
+Capture the reserved funds when the final amount is known. The capture amount must be less than or equal to the original authorized amount.
+
+```
+POST /cashless/v1/preauth/complete
+```
+
+**Request:**
+
+```json
+{
+  "originalReference": "HOTEL-STAY-1193",
+  "captureAmount": 8750,
+  "currency": "USD",
+  "reference": "HOTEL-STAY-1193-FINAL"
+}
+```
+
+**Response:**
+
+```json
+{
+  "status": "approved",
+  "reference": "HOTEL-STAY-1193-FINAL",
+  "transactionId": "tpay_01HZ5QB4JK",
+  "captureAmount": 8750,
+  "currency": "USD",
+  "authCode": "CP4456",
+  "completedAt": "2026-06-15T11:45:00Z"
+}
+```
+
+---
+
+## Cancel
+
+Abort the currently active transaction on the terminal. Use this when the cashier presses a cancel button on the ECR before the customer presents a card.
+
+```
+POST /cashless/v1/cancel
+```
+
+**Request:**
+
+```json
+{
+  "reference": "POS-ORDER-0821"
+}
+```
+
+`reference` is optional. If omitted, the terminal cancels whatever transaction is currently active.
+
+**Response:**
+
+```json
+{
+  "status": "cancelled",
+  "reference": "POS-ORDER-0821",
+  "cancelledAt": "2026-06-11T10:16:00Z"
+}
+```
+
+<Callout type="warn">
+Cancel only works while the terminal is displaying the payment prompt — before the customer presents a card. Once a card has been presented and authorization is in flight, the cancel request returns `cancel_not_allowed`. Wait for the transaction result and issue a [refund](#refund) if needed.
+</Callout>
+
+---
+
+## Refund
+
+Refund a previously completed sale. The refund routes back to the original card automatically — no card re-presentation required.
+
+```
+POST /cashless/v1/refund
+```
+
+**Request:**
+
+```json
+{
+  "originalReference": "POS-ORDER-0821",
+  "amount": 2500,
+  "currency": "USD",
+  "reference": "POS-REFUND-0821",
+  "printReceipt": false
+}
+```
+
+<TypeTable
+  type={{
+    originalReference: {
+      type: "string",
+      description: "The reference from the original sale or pre-auth/complete transaction.",
+      required: true,
+    },
+    amount: {
+      type: "integer",
+      description: "Amount to refund in the smallest currency unit. Must be ≤ the original captured amount.",
+      required: true,
+    },
+    currency: {
+      type: "string",
+      description: "Must match the currency of the original transaction.",
+      required: true,
+    },
+    reference: {
+      type: "string",
+      description: "A unique reference for this refund transaction.",
+      required: true,
+    },
+    printReceipt: {
+      type: "boolean",
+      description: "Whether the terminal prints a refund receipt.",
+      default: "false",
+    },
+  }}
+/>
+
+**Response:**
+
+```json
+{
+  "status": "approved",
+  "reference": "POS-REFUND-0821",
+  "transactionId": "tpay_01HZ5QB5LM",
+  "amount": 2500,
+  "currency": "USD",
+  "originalTransactionId": "tpay_01HZ5QA7BK",
+  "completedAt": "2026-06-11T10:30:00Z"
+}
+```
+
+Partial refunds are supported — submit multiple refund requests against the same `originalReference` until the total refunded amount equals the original captured amount.
+
+---
+
+## Batch management
+
+Under normal operation, VINR settles your batch automatically at the end of each business day. If your ECR system manages its own end-of-day procedure and needs to trigger settlement explicitly, use the batch close endpoint.
+
+```
+POST /cashless/v1/batch/close
+```
+
+**Request:**
+
+```json
+{
+  "reference": "EOD-BATCH-20260611"
+}
+```
+
+**Response:**
+
+```json
+{
+  "status": "closed",
+  "batchId": "batch_01HZ5QC6NO",
+  "reference": "EOD-BATCH-20260611",
+  "transactionCount": 47,
+  "totalAmount": 128450,
+  "currency": "USD",
+  "closedAt": "2026-06-11T23:59:00Z"
+}
+```
+
+<Callout type="info">
+Calling `batch/close` while automatic daily settlement is enabled is safe — VINR will not double-settle. A manual close mid-day settles all transactions up to that point; subsequent transactions open a new batch.
+</Callout>
+
+---
+
+## Receipts
+
+### Get last receipt
+
+Retrieve receipt data for the most recent transaction — useful if `receiptData` was not captured from the original sale response, or if you need to reformat it for printing through your ECR system.
+
+```
+POST /cashless/v1/receipt/last
+```
+
+Request body: `{}`
+
+**Response:**
+
+```json
+{
+  "transactionId": "tpay_01HZ5QA7BK",
+  "reference": "POS-ORDER-0821",
+  "status": "approved",
+  "receiptData": {
+    "merchantReceipt": "VINR PAYMENTS\nDate: 11/06/2026\nAmount: $25.00\n...",
+    "customerReceipt": "VINR PAYMENTS\nDate: 11/06/2026\nAmount: $25.00\n...",
+    "signatureRequired": false
+  },
+  "completedAt": "2026-06-11T10:15:11Z"
+}
+```
+
+### Reprint on terminal
+
+Trigger the terminal's built-in printer to reprint the last receipt. Only available on models with a built-in printer: Nexgo N92, Nexgo CT20, Nexgo CT20P.
+
+```
+POST /cashless/v1/receipt/reprint
+```
+
+**Request:**
+
+```json
+{
+  "type": "customer"
+}
+```
+
+`type` accepts `"merchant"`, `"customer"`, or `"both"`. Defaults to `"customer"`.
+
+**Response:**
+
+```json
+{
+  "status": "printed",
+  "type": "customer"
+}
+```
+
+---
+
+## Error codes
+
+All error responses use this shape:
+
+```json
+{
+  "error": {
+    "code": "terminal_busy",
+    "message": "Another transaction is currently active on this terminal."
+  }
+}
+```
+
+| Code | HTTP status | Cause | Action |
+|---|---|---|---|
+| `invalid_key` | 401 | Shared key missing or incorrect | Check the key in Dashboard → Integrations → Cashless API |
+| `terminal_busy` | 409 | Another transaction is active | Wait for it to complete, or call /cancel |
+| `transaction_not_found` | 404 | `originalReference` does not match a known transaction | Verify the reference value |
+| `cancel_not_allowed` | 422 | Card already presented; authorization in flight | Wait for the result, then refund if needed |
+| `amount_exceeds_original` | 422 | Refund amount exceeds the original captured amount | Reduce the refund amount |
+| `preauth_expired` | 422 | Pre-auth authorization has expired | Cannot capture; the held funds have been released |
+| `printer_unavailable` | 422 | Reprint requested on a model without a built-in printer | Use `receipt/last` to retrieve data and print via your ECR |
+| `card_declined` | 402 | Issuer declined the transaction | Ask the customer to try a different card |
+| `communication_error` | 503 | Terminal lost connectivity during processing | Retrieve status, then retry if still pending |
+| `internal_error` | 500 | Unexpected error | Retry once; contact support if it persists |
+
+---
+
+## Testing
+
+A Cashless API simulator is available in every sandbox account:
+
+```
+https://cashless-simulator.sandbox.vinr.com/cashless/v1
+X-VINR-Cashless-Key: ck_test_simulator
+```
+
+The simulator supports all endpoints including batch close and receipt reprint. Use the same test card outcomes as the Cloud API:
+
+| Card number | Outcome |
+|---|---|
+| `4242 4242 4242 4242` | Approved |
+| `4000 0000 0000 0002` | `card_declined` |
+| `4000 0000 0000 9995` | `insufficient_funds` |
+| `4000 0000 0000 0069` | `expired_card` |
+
+To test against a physical terminal in sandbox mode, provision it from **Dashboard → Hardware → Add test terminal** and generate a `ck_test_...` shared key.
+
+## Next steps
+
+<Cards>
+  <Card title="Cloud API" href="/docs/payments/in-person/cloud-api" description="Drive terminals from your server through VINR's cloud — no local networking required." />
+  <Card title="Local API" href="/docs/payments/in-person/local-api" description="Build a custom POS app with direct LAN communication and offline resilience." />
+  <Card title="Terminal management" href="/docs/payments/in-person/terminal-management" description="Activate, assign, and monitor your terminal fleet." />
+</Cards>

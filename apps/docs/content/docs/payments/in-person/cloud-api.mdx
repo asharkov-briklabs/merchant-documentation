@@ -1,0 +1,394 @@
+---
+title: "Cloud API"
+description: "Drive VINR terminals from your server through VINR's cloud — synchronous and asynchronous modes."
+priority: "P1"
+lastUpdated: "2026-06-11"
+---
+
+Use the Cloud API when your backend needs to instruct a terminal without direct network access to the device. Your server calls the VINR API, which routes commands to the terminal in real time over a persistent TLS connection. No local networking or certificate management required.
+
+**Choose Cloud API when:**
+- Your POS logic runs on a server or in the cloud rather than on-site
+- You want the simplest integration path — one POST from any language
+- You need centralized fleet control: cancel or redirect any terminal from a single API call
+
+For sub-50 ms screen activation or offline resilience, see [Local API](/docs/payments/in-person/local-api). To attach an existing ECR or POS system, see [ECR Integration](/docs/payments/in-person/ecr-integration).
+
+## How it works
+
+```
+Your server ──POST──▶ VINR API ──▶ Terminal (persistent TLS)
+                                         │
+                                   Cardholder interaction
+                                         │
+                      VINR API ◀──────── Terminal
+                          │
+           webhook event ─┘
+                          ▼
+                     Your server
+```
+
+1. Your backend creates a terminal payment via the VINR API, specifying the target terminal ID.
+2. VINR routes the command to the terminal. The terminal screen activates within 200–400 ms.
+3. The cardholder presents their card. The terminal handles the interaction and routes authorization to the card network.
+4. VINR updates the payment object and delivers the result either inline (synchronous mode) or as a webhook event (asynchronous mode).
+
+## Prerequisites
+
+- A VINR secret key (`sk_live_...` for production, `sk_test_...` for sandbox).
+- At least one terminal registered and activated in your account.
+- Outbound HTTPS from your server to `*.vinr.com` on port 443.
+
+## Authentication
+
+Every Cloud API request uses your secret key as a Bearer token:
+
+```http
+Authorization: Bearer sk_live_xxxxxxxxxxxx
+Content-Type: application/json
+```
+
+Never include your secret key in client-side code, mobile apps, or browser JavaScript.
+
+## Create a payment
+
+```
+POST https://api.vinr.com/v1/terminal/payments
+```
+
+<Tabs items={["TypeScript", "Python", "cURL"]}>
+<Tab value="TypeScript">
+
+```typescript
+import { Vinr } from '@vinr/sdk';
+
+const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
+
+const payment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 2500,
+  currency: 'USD',
+  reference: 'order_8821',
+});
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+import vinr, os
+
+client = vinr.Client(secret_key=os.environ['VINR_SECRET_KEY'])
+
+payment = client.terminal.payments.create(
+    terminal_id='term_01HZ5QXYZ',
+    amount=2500,
+    currency='USD',
+    reference='order_8821',
+)
+```
+
+</Tab>
+<Tab value="cURL">
+
+```bash
+curl https://api.vinr.com/v1/terminal/payments \
+  -H "Authorization: Bearer $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "terminalId": "term_01HZ5QXYZ",
+    "amount": 2500,
+    "currency": "USD",
+    "reference": "order_8821"
+  }'
+```
+
+</Tab>
+</Tabs>
+
+<TypeTable
+  type={{
+    terminalId: {
+      type: "string",
+      description: "ID of the target terminal. Find terminal IDs in the Dashboard under Hardware → Terminals, or via the Terminals API.",
+      required: true,
+    },
+    amount: {
+      type: "integer",
+      description: "Amount in the smallest currency unit (e.g. cents for USD, pence for GBP). Must be a positive integer.",
+      required: true,
+    },
+    currency: {
+      type: "string",
+      description: "ISO 4217 three-letter currency code, e.g. 'USD' or 'EUR'.",
+      required: true,
+    },
+    reference: {
+      type: "string",
+      description: "Your order or transaction reference. Returned on every event and in the payment object. Max 200 characters.",
+      required: true,
+    },
+    captureMethod: {
+      type: "'automatic' | 'manual'",
+      description: "Whether to capture funds immediately on completion or hold an authorization for manual capture later.",
+      default: "'automatic'",
+    },
+    responseMode: {
+      type: "'sync' | 'async'",
+      description: "Whether to wait for the transaction result inline (sync) or return immediately and receive the result via webhook (async).",
+      default: "'async'",
+    },
+    tip: {
+      type: "object",
+      description: "Tip configuration. Set mode: 'on_screen' to show a tip prompt on the terminal display before card presentation.",
+    },
+    metadata: {
+      type: "Record<string, string>",
+      description: "Up to 50 key-value pairs stored on the payment object. Visible in the Dashboard and returned on webhook events.",
+    },
+  }}
+/>
+
+## Response modes
+
+### Synchronous
+
+Pass `responseMode: 'sync'` (or call `.createSync()`). Your server holds the HTTPS connection open while the cardholder interacts with the terminal. The final payment object — including card brand, last4, and auth code — is returned inline when the transaction finishes.
+
+<Tabs items={["TypeScript", "cURL"]}>
+<Tab value="TypeScript">
+
+```typescript
+const payment = await vinr.terminal.payments.createSync({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 2500,
+  currency: 'USD',
+  reference: 'order_8821',
+});
+
+// status is 'completed' or 'failed' — no webhook needed for the result
+console.log(payment.status, payment.last4);
+```
+
+</Tab>
+<Tab value="cURL">
+
+```bash
+curl https://api.vinr.com/v1/terminal/payments \
+  -H "Authorization: Bearer $VINR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  --max-time 150 \
+  -d '{
+    "terminalId": "term_01HZ5QXYZ",
+    "amount": 2500,
+    "currency": "USD",
+    "reference": "order_8821",
+    "responseMode": "sync"
+  }'
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="warn">
+Set your HTTP client timeout to at least **150 seconds** in sync mode. Card interactions typically complete in 10–30 seconds but can take up to 90 seconds if the customer takes time entering a PIN. A premature client-side timeout leaves the terminal in a pending state — call [Retrieve a payment](#retrieve-a-payment) immediately to find the outcome before retrying.
+</Callout>
+
+**Approved response:**
+
+```json
+{
+  "id": "tpay_01HZ5QA7BK",
+  "terminalId": "term_01HZ5QXYZ",
+  "amount": 2500,
+  "amountCaptured": 2500,
+  "currency": "USD",
+  "reference": "order_8821",
+  "status": "completed",
+  "captureMethod": "automatic",
+  "responseMode": "sync",
+  "entryMethod": "contactless",
+  "last4": "4242",
+  "brand": "visa",
+  "authCode": "A12345",
+  "createdAt": "2026-06-11T09:00:00Z",
+  "completedAt": "2026-06-11T09:00:12Z"
+}
+```
+
+**Declined response:**
+
+```json
+{
+  "id": "tpay_01HZ5QA8EF",
+  "terminalId": "term_01HZ5QXYZ",
+  "amount": 2500,
+  "currency": "USD",
+  "reference": "order_8821",
+  "status": "failed",
+  "responseMode": "sync",
+  "declineCode": "card_declined",
+  "createdAt": "2026-06-11T09:01:00Z",
+  "failedAt": "2026-06-11T09:01:09Z"
+}
+```
+
+**Best for:** attended POS counters and kiosks where the UI must advance only after a confirmed outcome.
+
+### Asynchronous
+
+The default mode. The API returns `202 Accepted` immediately with the payment object at `status: 'pending'`. The terminal result arrives as a webhook event.
+
+```json
+{
+  "id": "tpay_01HZ5QA7BK",
+  "terminalId": "term_01HZ5QXYZ",
+  "amount": 2500,
+  "currency": "USD",
+  "reference": "order_8821",
+  "status": "pending",
+  "responseMode": "async",
+  "createdAt": "2026-06-11T09:00:00Z"
+}
+```
+
+Your webhook handler receives `terminal_payment.completed` or `terminal_payment.failed` when the card interaction finishes. See [Webhooks](/docs/payments/in-person/webhooks) for event shapes and signature verification.
+
+**Best for:** unattended kiosks, background queues, and server-side flows that process results out of band.
+
+## Payment status lifecycle
+
+```
+pending → processing → completed
+                    ↘ failed
+                    ↘ cancelled
+```
+
+| Status | Meaning |
+|---|---|
+| `pending` | Terminal received the session and is displaying the payment prompt |
+| `processing` | Card presented; authorization request in flight to the issuer |
+| `completed` | Approved; funds captured (or authorized, for manual-capture payments) |
+| `failed` | Declined or error — check `declineCode` |
+| `cancelled` | Cancelled before card presentation, or terminal prompt timed out |
+
+## Cancel a payment
+
+Cancel an active session before the cardholder presents a card. Only possible while `status` is `pending`.
+
+<Tabs items={["TypeScript", "cURL"]}>
+<Tab value="TypeScript">
+
+```typescript
+await vinr.terminal.payments.cancel('tpay_01HZ5QA7BK');
+```
+
+</Tab>
+<Tab value="cURL">
+
+```bash
+curl -X POST https://api.vinr.com/v1/terminal/payments/tpay_01HZ5QA7BK/cancel \
+  -H "Authorization: Bearer $VINR_SECRET_KEY"
+```
+
+</Tab>
+</Tabs>
+
+Once the payment reaches `processing` (card has been presented), cancellation is rejected — the authorization is already in flight. Wait for the result and issue a refund if needed.
+
+## Retrieve a payment
+
+Fetch the current state of a payment. Use this as the recovery step after a sync-mode HTTP timeout, or when a webhook event was not received.
+
+<Tabs items={["TypeScript", "cURL"]}>
+<Tab value="TypeScript">
+
+```typescript
+const payment = await vinr.terminal.payments.retrieve('tpay_01HZ5QA7BK');
+console.log(payment.status);
+```
+
+</Tab>
+<Tab value="cURL">
+
+```bash
+curl https://api.vinr.com/v1/terminal/payments/tpay_01HZ5QA7BK \
+  -H "Authorization: Bearer $VINR_SECRET_KEY"
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="warn">
+Do not poll this endpoint in a tight loop as a substitute for webhooks. Use it only as a one-time fallback after a missed event. Sustained polling is rate-limited.
+</Callout>
+
+## Manual capture
+
+Use `captureMethod: 'manual'` when the final amount is not known at card presentation — for example, a restaurant table that adds a tip after the meal.
+
+```typescript
+// Step 1 — authorize at the table
+const payment = await vinr.terminal.payments.create({
+  terminalId: 'term_01HZ5QXYZ',
+  amount: 2500,
+  currency: 'USD',
+  reference: 'table_12',
+  captureMethod: 'manual',
+});
+
+// Step 2 — capture with final amount after tip is added
+await vinr.terminal.payments.capture(payment.id, {
+  amount: 2875, // original + tip
+});
+```
+
+After card interaction the payment sits at `status: 'authorized'`. Call `capture` to move funds, optionally adjusting the amount upward within your permitted tolerance. Uncaptured authorizations expire after 7 days.
+
+## Error handling
+
+| `declineCode` | Cause | Recommended action |
+|---|---|---|
+| `terminal_not_found` | Terminal ID not registered in your account | Verify the ID in the Dashboard |
+| `terminal_offline` | Terminal has not checked in for ≥ 60 s | Check device power and connectivity; retry after reconnection |
+| `terminal_busy` | Another session is active on this terminal | Wait for the active session to complete, or cancel it first |
+| `card_declined` | Generic issuer decline | Ask the customer to try a different card |
+| `insufficient_funds` | Card balance too low | Ask the customer to try a different card |
+| `expired_card` | Card past its expiry date | Ask the customer for a current card |
+| `lost_or_stolen` | Card flagged by the card network | Do not retry; follow your security policy |
+| `communication_error` | Terminal lost connectivity during processing | Retrieve the payment to confirm the outcome; cancel and retry if still `pending` |
+
+## Testing
+
+Use a `sk_test_...` key and the reserved sandbox terminal ID `term_test_simulator` to test without physical hardware.
+
+```typescript
+const vinr = new Vinr({ secretKey: 'sk_test_...' });
+
+const payment = await vinr.terminal.payments.create({
+  terminalId: 'term_test_simulator',
+  amount: 1000,
+  currency: 'USD',
+  reference: 'sandbox_order_001',
+});
+```
+
+Drive specific outcomes with test card numbers:
+
+| Card number | Outcome |
+|---|---|
+| `4242 4242 4242 4242` | Approved |
+| `4000 0000 0000 0002` | `card_declined` |
+| `4000 0000 0000 9995` | `insufficient_funds` |
+| `4000 0000 0000 0069` | `expired_card` |
+| `4100 0000 0000 0019` | `lost_or_stolen` |
+
+Append `?simulateDelay=30` to the create URL to simulate a 30-second interaction, useful for testing sync-mode timeout handling.
+
+## Next steps
+
+<Cards>
+  <Card title="Local API" href="/docs/payments/in-person/local-api" description="Drive the terminal directly over your LAN for sub-50 ms activation and offline resilience." />
+  <Card title="Webhooks" href="/docs/payments/in-person/webhooks" description="Subscribe to terminal events, verify signatures, and handle retries." />
+  <Card title="Handle responses" href="/docs/payments/in-person/handle-responses" description="Decline codes, partial authorizations, and timeout recovery." />
+</Cards>
