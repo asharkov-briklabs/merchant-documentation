@@ -6,6 +6,12 @@
     "payment-links",
     "elements",
     "setup",
+    "dynamic-updates",
+    "recurring-payments",
+    "disputes-and-refunds",
+    "button-guidelines",
+    "go-live-checklist",
+    "best-practices",
     "test-and-go-live"
   ]
 }

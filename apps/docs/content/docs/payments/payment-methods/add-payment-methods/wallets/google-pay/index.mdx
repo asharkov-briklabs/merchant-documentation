@@ -2,14 +2,57 @@
 title: Google Pay
 description: Accept Google Pay across Android, Chrome, and the web with VINR.
 priority: P0
-lastUpdated: "2026-06-09"
+lastUpdated: "2026-06-15"
 ---
 
-Google Pay lets customers pay using a card stored in their Google account — on Android devices, in Chrome on any platform, and within native Android apps. VINR acts as the payment gateway, handling the token exchange with the Google Pay API so you never touch raw card data.
+Google Pay lets customers pay using a card stored in their Google account — on Android devices, in Chrome on any platform, and within native Android apps. VINR acts as the payment gateway, handling the token exchange with the Google Pay API so the plain-text card number never touches your environment.
+
+There are no additional fees to process Google Pay payments — pricing is the same as for other card transactions.
 
 <Callout type="info">
 In Bulgaria, Google Pay works for all cardholders regardless of their issuing bank. VINR manages the gateway connection at the network level — no per-bank setup is required.
 </Callout>
+
+<Tabs items={["Payment method properties", "Business locations", "Product support"]}>
+<Tab value="Payment method properties">
+
+| Property | Value |
+|---|---|
+| Customer locations | Worldwide — Android and Chrome on any platform |
+| Presentment currency | See [supported presentment currencies](/docs/payments/currencies) |
+| Payment confirmation | Customer-initiated |
+| Payment method family | Wallet |
+| Recurring payments | Yes — via saved payment methods |
+| Payout timing | Standard payout timing applies |
+| Connect support | Yes |
+| Dispute support | Yes |
+| Manual capture support | Yes |
+| Refunds / Partial refunds | Yes / Yes |
+
+</Tab>
+<Tab value="Business locations">
+
+Google Pay is available to customers globally on Android devices and in Google Chrome on any platform. There are no geographic restrictions on which countries VINR merchants can accept Google Pay from, subject to the card networks and currencies enabled on your VINR account.
+
+Google Pay on the web requires Chrome. Customers on Safari, Firefox, or other browsers will not see the Google Pay button — VINR's hosted products (Checkout, Payment Links, Elements) handle this automatically and show Apple Pay or other eligible wallet options instead.
+
+Contact your VINR account manager to confirm the card networks and currencies available for your region.
+
+</Tab>
+<Tab value="Product support">
+
+| VINR product | Supported |
+|---|---|
+| Hosted Checkout | Yes — appears automatically for eligible browsers |
+| Payment Element | Yes |
+| Express Checkout Element | Yes |
+| Payment Links | Yes — appears automatically when enabled |
+| Direct API | Yes |
+| Terminal (in-person) | No — Google Pay in-person uses NFC at the device level |
+| Invoicing | No |
+
+</Tab>
+</Tabs>
 
 ## How Google Pay works
 
@@ -26,9 +69,12 @@ The `payment_method.card.wallet.type` field on the resulting payment is set to `
 
 ## Authentication methods
 
-Google Pay can return two types of credential: **CRYPTOGRAM_3DS** (a device token with a one-time cryptogram, already strongly authenticated) and **PAN_ONLY** (the raw card number from the customer's Google account, not authenticated on its own).
+Google Pay can return two types of credential depending on how the card was saved:
 
-The credential type affects SCA compliance and liability. VINR handles both automatically — CRYPTOGRAM_3DS flows through directly, while PAN_ONLY is unconditionally routed through VINR's 3D Secure step-up engine. Which methods are offered is configured per merchant account. See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) for the full breakdown.
+- **CRYPTOGRAM_3DS** — the card was tokenised onto the customer's device (DPAN). A one-time cryptogram proves device possession. Already satisfies SCA; no 3DS step-up needed. Carries inherent liability shift.
+- **PAN_ONLY** — the card was saved to the customer's Google account (e.g. via Chrome autofill) but never tokenised onto a device. Functionally equivalent to a manually entered card. VINR unconditionally routes these through its 3D Secure step-up engine.
+
+Which methods are offered is configured per merchant account. See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) for the full SCA and liability breakdown.
 
 ## Integration paths
 
@@ -41,6 +87,29 @@ Google Pay works across all VINR checkout surfaces. Choose the path that matches
 | [Elements](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/elements) | Mount the `GooglePayElement` | Minimal |
 | [Direct API](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup) | Full Google Pay JS API integration | Yes |
 
+## Check eligibility before rendering the button
+
+Always call `isReadyToPay()` before showing the Google Pay button. The button must only appear when the customer's browser and device support Google Pay and they have an eligible card enrolled.
+
+```javascript
+const googlePayClient = new google.payments.api.PaymentsClient({
+  environment: 'PRODUCTION',
+});
+
+googlePayClient.isReadyToPay({
+  apiVersion: 2,
+  apiVersionMinor: 0,
+  allowedPaymentMethods: [{ type: 'CARD', parameters: { allowedAuthMethods, allowedCardNetworks } }],
+}).then(response => {
+  if (response.result) {
+    // Show the Google Pay button
+  }
+  // Otherwise: keep the button hidden — do not disable it
+});
+```
+
+Elements and hosted checkout handle this check automatically — the button only renders when eligible.
+
 ## Environments
 
 Google Pay operates in two environments:
@@ -50,7 +119,7 @@ Google Pay operates in two environments:
 | `TEST` | Development and QA — no real cards, no real charges |
 | `PRODUCTION` | Live payments — requires Google's production approval |
 
-The VINR sandbox maps to the Google Pay `TEST` environment automatically. When you go live, VINR switches to `PRODUCTION` after you complete Google's approval checklist. See [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live).
+The VINR sandbox maps to the Google Pay `TEST` environment automatically. In `TEST` mode, `isReadyToPay` returns `true` regardless of enrolled cards, making it easy to test without a real device. When you go live, switch to your production publishable key — VINR handles the environment transition automatically. See [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live).
 
 ## 3D Secure and SCA
 
@@ -68,6 +137,12 @@ See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/
   <Card title="Payment links" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/payment-links" description="Google Pay in payment links — appears automatically when enabled." />
   <Card title="Elements" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/elements" description="Add a Google Pay button to your custom Elements-based checkout." />
   <Card title="Set up Google Pay (API)" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup" description="Direct API integration: Dashboard configuration, Google registration, and token submission." />
+  <Card title="Dynamic checkout updates" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/dynamic-updates" description="Update totals, shipping options, and offers in real time while the payment sheet is open." />
+  <Card title="Recurring payments" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/recurring-payments" description="Save a Google Pay payment method and charge it off-session." />
+  <Card title="Disputes and refunds" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/disputes-and-refunds" description="Liability shift, chargeback handling, and refunds for Google Pay payments." />
+  <Card title="Button guidelines" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/button-guidelines" description="Google-compliant button styles, types, sizing, and what not to do." />
+  <Card title="Go-live checklist" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/go-live-checklist" description="Verify your integration before accepting live payments." />
+  <Card title="Best practices" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/best-practices" description="Improve conversion and maintain your Google Pay integration." />
   <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live" description="Test both credential types and complete Google's production approval." />
 </Cards>
 
@@ -76,4 +151,5 @@ See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/
 <Cards>
   <Card title="Wallets" href="/docs/payments/payment-methods/add-payment-methods/wallets" description="Apple Pay, Revolut Pay, and other digital wallets." />
   <Card title="Cards" href="/docs/payments/payment-methods/add-payment-methods/cards" description="The card rail behind most Google Pay payments." />
+  <Card title="Strong Customer Authentication" href="/docs/payments/strong-customer-authentication" description="How SCA and 3D Secure interact with Google Pay credentials." />
 </Cards>

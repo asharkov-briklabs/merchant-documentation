@@ -53,30 +53,7 @@ You do not need any separate VINR Dashboard configuration for sandbox testing. T
 
 ## Going live
 
-Before switching to `PRODUCTION`, complete the following checklist:
-
-<Accordions>
-  <Accordion title="Google merchant registration">
-    Register in the [Google Pay & Wallet Console](https://pay.google.com/business/console) with `gateway: vinr` and your VINR merchant ID. Wait for Google's approval email (typically 1–2 business days).
-  </Accordion>
-  <Accordion title="Confirm enabled auth methods with VINR">
-    Verify with your VINR account manager which authentication methods — `CRYPTOGRAM_3DS`, `PAN_ONLY`, or both — are configured for your merchant account. Ensure your integration's `allowedAuthMethods` array matches exactly. See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods).
-  </Accordion>
-  <Accordion title="Confirm allowed card networks">
-    Verify that `allowedCardNetworks` in your `paymentDataRequest` matches the networks your VINR account supports. Remove any networks your account is not configured for.
-  </Accordion>
-  <Accordion title="Button and brand guidelines">
-    Confirm your implementation uses only Google-approved button styles. The `createButton` API and the VINR `GooglePayElement` produce compliant buttons automatically — do not restyle or replace the Google Pay logo.
-  </Accordion>
-  <Accordion title="Error handling">
-    Ensure declined payments and cancelled sheets surface a clear message to the customer and allow them to retry with a different payment method.
-  </Accordion>
-  <Accordion title="Webhook confirmation">
-    Fulfillment must be triggered by the `payment.completed` webhook, not by the client-side redirect. Confirm your webhook handler is live and reachable before going live.
-  </Accordion>
-</Accordions>
-
-Once Google approves your registration, update the `PaymentsClient` constructor to `environment: 'PRODUCTION'` and deploy. For Elements and hosted checkout, switch to your production publishable key — no other changes are needed. VINR switches to the production token flow automatically.
+Once you've finished testing, work through the [Go-live checklist](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/go-live-checklist) before switching to `PRODUCTION`. It covers account registration, auth method confirmation, environment switch, button compliance, checkout experience requirements, error handling, and webhook setup.
 
 ## Common issues
 
@@ -91,7 +68,7 @@ Once Google approves your registration, update the `PaymentsClient` constructor 
 ## See also
 
 <Cards>
+  <Card title="Go-live checklist" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/go-live-checklist" description="Step-by-step checklist before switching to the PRODUCTION environment." />
   <Card title="Authentication methods" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods" description="CRYPTOGRAM_3DS vs PAN_ONLY: what each type means and how VINR handles it." />
   <Card title="Set up Google Pay (API)" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup" description="Dashboard configuration and direct API integration." />
-  <Card title="Google Pay overview" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay" description="How Google Pay works with VINR." />
 </Cards>

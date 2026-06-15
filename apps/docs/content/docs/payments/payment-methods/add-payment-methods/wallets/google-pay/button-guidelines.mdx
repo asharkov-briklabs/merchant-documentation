@@ -1,0 +1,130 @@
+---
+title: Button guidelines
+description: Google-compliant button styles, call-to-action types, localization, and sizing.
+priority: P1
+lastUpdated: "2026-06-15"
+---
+
+Google enforces button compliance through its merchant registration review. Using an unofficial button style, adding custom labels, or modifying the Google Pay logo are grounds for registration rejection. VINR's `createButton` API and `GooglePayElement` produce compliant buttons by default — this guide applies to custom implementations and explains what Google's review checks for.
+
+## Button colors
+
+Two official colors are available. Choose based on the background the button sits on.
+
+| Color | `buttonColor` value | Use when |
+|---|---|---|
+| Black | `'black'` | Light and neutral backgrounds |
+| White | `'white'` | Dark backgrounds — requires a visible border |
+| System default | `'default'` | Adapts to OS light/dark mode preference |
+
+```javascript
+// createButton API
+const button = googlePayClient.createButton({
+  buttonColor: 'black',  // 'black' | 'white' | 'default'
+  buttonType: 'buy',
+  onClick: handleClick,
+});
+```
+
+```javascript
+// GooglePayElement
+const googlePayElement = elements.create('googlePay', {
+  style: {
+    theme: 'black',  // 'black' | 'white'
+  },
+});
+```
+
+The white button must have a visible border when displayed on a white or near-white background. Do not render it without a border — insufficient contrast is a brand guideline violation.
+
+## Call-to-action types
+
+Use the CTA that best matches the context of the purchase. Mismatched verbs (for example, "Buy" on a donation page) violate Google's brand guidelines.
+
+| Type | `buttonType` value | When to use |
+|---|---|---|
+| Buy | `'buy'` | One-time purchase of goods |
+| Pay | `'pay'` | Bill payment, invoices, balance top-up |
+| Checkout | `'checkout'` | General checkout flow |
+| Subscribe | `'subscribe'` | Recurring subscriptions |
+| Donate | `'donate'` | Non-profits, fundraising |
+| Book | `'book'` | Travel, hospitality, event reservations |
+| Order | `'order'` | Food delivery, marketplace order placement |
+| Plain | `'plain'` | Logo-only — when context makes the action obvious |
+
+```javascript
+// createButton API
+const button = googlePayClient.createButton({
+  buttonType: 'checkout',
+  onClick: handleClick,
+});
+
+// GooglePayElement
+const googlePayElement = elements.create('googlePay', {
+  style: {
+    type: 'checkout',
+  },
+});
+```
+
+## Localization
+
+Set `buttonLocale` to match the language of your checkout. If omitted, the button uses the browser's language. Always set it explicitly in multi-language storefronts to avoid mismatched UX.
+
+```javascript
+const button = googlePayClient.createButton({
+  buttonLocale: 'de',  // BCP 47 language tag
+  onClick: handleClick,
+});
+```
+
+Selected locales relevant to VINR's markets:
+
+| Region | Locale code |
+|---|---|
+| English | `en` |
+| German | `de` |
+| French | `fr` |
+| Spanish | `es` |
+| Italian | `it` |
+| Dutch | `nl` |
+| Polish | `pl` |
+| Romanian | `ro` |
+| Bulgarian | `bg` |
+| Croatian | `hr` |
+| Greek | `el` |
+| Czech | `cs` |
+| Hungarian | `hu` |
+| Slovak | `sk` |
+| Slovenian | `sl` |
+
+For the full list see [Google's `ButtonOptions` reference](https://developers.google.com/pay/api/web/reference/request-objects#ButtonOptions).
+
+## Sizing and layout
+
+| Dimension | Minimum | Notes |
+|---|---|---|
+| Width | 90px | Scale to fill available container width |
+| Height | 40px | Do not constrain below 40px |
+| Border radius | Any | Match your checkout button radius |
+
+The button must receive equal visual prominence with other third-party payment methods — not smaller, not hidden below the fold, not styled to appear secondary to other wallet buttons.
+
+Do not add external borders, drop shadows, or decorative containers around the button beyond what `createButton` renders by default.
+
+## What you must not do
+
+- Do not recreate the button with a custom image, HTML element, or non-Google assets.
+- Do not modify the Google Pay logo, wordmark, or lockup proportions.
+- Do not display the button when `isReadyToPay()` returns `false` — hide it, do not disable it.
+- Do not render the white button without a visible border on a light background.
+- Do not display Google Pay at a smaller size or lower prominence than other wallet buttons on the same page.
+- Do not use the Google Pay mark as a standalone logo button — always use the full button component.
+
+## See also
+
+<Cards>
+  <Card title="Google Pay overview" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay" description="Prerequisites and integration paths." />
+  <Card title="Best practices" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/best-practices" description="Button placement, conversion guidance, and keeping your integration current." />
+  <Card title="Go-live checklist" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/go-live-checklist" description="Button compliance is a required go-live checklist item." />
+</Cards>
