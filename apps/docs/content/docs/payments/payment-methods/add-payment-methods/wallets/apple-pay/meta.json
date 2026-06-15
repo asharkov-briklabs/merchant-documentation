@@ -4,6 +4,7 @@
     "button-guidelines",
     "hosted-checkout",
     "payment-links",
+    "elements",
     "dynamic-updates",
     "merchant-tokens",
     "recurring-payments",
@@ -12,6 +13,7 @@
     "cartes-bancaires",
     "disputes-and-refunds",
     "go-live-checklist",
-    "best-practices"
+    "best-practices",
+    "test-and-go-live"
   ]
 }

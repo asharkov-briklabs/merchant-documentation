@@ -287,24 +287,32 @@ Deactivated payment methods cannot be used for new charges. Existing subscriptio
 
 ## Merchant token auth rate monitoring
 
-The `charges` table contains a `card_token_type` enum field to indicate whether a charge is using an `mpan` or `dpan` card. The following query example calculates the MPAN auth rate:
+You can track MPAN authorization rates in two ways:
+
+**VINR Dashboard** — Go to **Analytics → Payment methods** and filter by `wallet: apple_pay`. The auth rate metric there breaks down by token type when MPAN capability is enabled on your account.
+
+**Data warehouse** — If you export VINR data to your own analytics environment, the `charges` table contains a `card_token_type` enum field (`mpan` or `dpan`) and a `card_tokenization_method` field. Use these to calculate MPAN-specific auth rates in your data warehouse (Redshift, BigQuery, Snowflake, etc.):
+
+<Callout type="info">
+The query below runs against exported VINR data in a data warehouse — it does not run in the VINR Dashboard or via the VINR API. Column names and table structure match the VINR data export schema.
+</Callout>
 
 ```sql
--- deduplicated MPAN auth rate
-select
-  100.0 * count(
-    case
-      when charge_outcome in ('authorized', 'manual_review') then 1
-    end
-  ) / count(*) as deduplicated_auth_rate_pct,
-  count(*) as n_attempts
-from
+-- Deduplicated MPAN auth rate (data warehouse query)
+SELECT
+  100.0 * COUNT(
+    CASE
+      WHEN charge_outcome IN ('authorized', 'manual_review') THEN 1
+    END
+  ) / COUNT(*) AS deduplicated_auth_rate_pct,
+  COUNT(*) AS n_attempts
+FROM
   authentication_report_attempts a
-  join charges c on c.id = a.charge_id
-where
-  c.created >= date('2021-01-01')
-  and c.card_tokenization_method = 'apple_pay'
-  and c.card_token_type = 'mpan'
-  -- deduplicate multiple manual retries to a single representative charge
-  and is_final_attempt
+  JOIN charges c ON c.id = a.charge_id
+WHERE
+  c.created >= DATE('2021-01-01')
+  AND c.card_tokenization_method = 'apple_pay'
+  AND c.card_token_type = 'mpan'
+  -- Deduplicate multiple manual retries to a single representative attempt
+  AND is_final_attempt
 ```

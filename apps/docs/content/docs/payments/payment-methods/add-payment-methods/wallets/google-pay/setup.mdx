@@ -127,12 +127,12 @@ async function sendTokenToServer(paymentData) {
 
 Pass the encrypted token to the VINR API. VINR decrypts it, identifies the credential type, and applies the appropriate risk and 3DS handling automatically.
 
-```typescript
+```javascript
 import { Vinr } from '@vinr/sdk';
 
 const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-async function createPayment(googlePayToken: string, amount: number, currency: string) {
+async function createPayment(googlePayToken, amount, currency) {
   const payment = await vinr.payments.create({
     amount,
     currency,

@@ -19,7 +19,7 @@ In Bulgaria, Google Pay works for all cardholders regardless of their issuing ba
 | Property | Value |
 |---|---|
 | Customer locations | Worldwide — Android and Chrome on any platform |
-| Presentment currency | See [supported presentment currencies](/docs/payments/currencies) |
+| Presentment currency | See [supported presentment currencies](/docs/payments/payment-operations/currencies) |
 | Payment confirmation | Customer-initiated |
 | Payment method family | Wallet |
 | Recurring payments | Yes — via saved payment methods |
@@ -48,8 +48,11 @@ Contact your VINR account manager to confirm the card networks and currencies av
 | Express Checkout Element | Yes |
 | Payment Links | Yes — appears automatically when enabled |
 | Direct API | Yes |
+| Native Android SDK | Yes — see [Android native SDK](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/android) |
 | Terminal (in-person) | No — Google Pay in-person uses NFC at the device level |
 | Invoicing | No |
+| Disbursements (push to card) | No — not supported by the Google Pay API |
+| Order tracking in wallet | No — this feature is specific to Apple Wallet |
 
 </Tab>
 </Tabs>
@@ -93,7 +96,7 @@ Always call `isReadyToPay()` before showing the Google Pay button. The button mu
 
 ```javascript
 const googlePayClient = new google.payments.api.PaymentsClient({
-  environment: 'PRODUCTION',
+  environment: 'PRODUCTION', // use 'TEST' in development and QA
 });
 
 googlePayClient.isReadyToPay({
@@ -136,6 +139,7 @@ See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/
   <Card title="Hosted checkout" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/hosted-checkout" description="Google Pay in VINR's hosted checkout — automatic, no extra code." />
   <Card title="Payment links" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/payment-links" description="Google Pay in payment links — appears automatically when enabled." />
   <Card title="Elements" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/elements" description="Add a Google Pay button to your custom Elements-based checkout." />
+  <Card title="Android native SDK" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/android" description="Integrate Google Pay into a native Android app using the VINR Android SDK." />
   <Card title="Set up Google Pay (API)" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup" description="Direct API integration: Dashboard configuration, Google registration, and token submission." />
   <Card title="Dynamic checkout updates" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/dynamic-updates" description="Update totals, shipping options, and offers in real time while the payment sheet is open." />
   <Card title="Recurring payments" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/recurring-payments" description="Save a Google Pay payment method and charge it off-session." />
