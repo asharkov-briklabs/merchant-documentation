@@ -1,0 +1,136 @@
+---
+title: Dynamic checkout updates
+description: Update totals, shipping options, and offers in real time while the Google Pay payment sheet is open.
+priority: P1
+lastUpdated: "2026-06-15"
+---
+
+Google Pay's `paymentDataCallbacks` let you recalculate the order total, shipping options, and line items while the payment sheet is open — before the customer authenticates. This applies to direct API integrations. Elements and hosted checkout handle supported recalculations automatically.
+
+<Callout type="warn">
+**Callback contract.** Every callback must resolve — return a result or throw — before the customer can proceed. A callback that never returns freezes the payment sheet indefinitely. Add timeouts to any network calls inside callbacks and always return a result, even on error.
+</Callout>
+
+## Set up callbacks
+
+Declare `paymentDataCallbacks` in the `PaymentsClient` constructor and add `callbackIntents` to your `paymentDataRequest`. Every intent you declare must have a corresponding handler — declaring an intent without a handler causes the sheet to stall.
+
+```javascript
+const googlePayClient = new google.payments.api.PaymentsClient({
+  environment: 'PRODUCTION',
+  paymentDataCallbacks: {
+    onPaymentDataChanged: onPaymentDataChanged,
+  },
+});
+
+const paymentDataRequest = {
+  apiVersion: 2,
+  apiVersionMinor: 0,
+  callbackIntents: ['SHIPPING_ADDRESS', 'SHIPPING_OPTION'],
+  shippingAddressRequired: true,
+  shippingAddressParameters: {
+    phoneNumberRequired: false,
+  },
+  shippingOptionRequired: true,
+  // ...allowedPaymentMethods, merchantInfo, transactionInfo
+};
+```
+
+## Shipping address change
+
+`onPaymentDataChanged` fires with `callbackTrigger: 'SHIPPING_ADDRESS'` when the customer selects or changes their address. Google provides a **redacted** address — postal code, administrative area, locality, and country only. Use this to compute shipping cost and tax without the full address.
+
+```javascript
+async function onPaymentDataChanged(intermediatePaymentData) {
+  const { callbackTrigger, shippingAddress } = intermediatePaymentData;
+
+  if (callbackTrigger === 'INITIALIZE' || callbackTrigger === 'SHIPPING_ADDRESS') {
+    const shippingOptions = await fetchShippingOptions(shippingAddress);
+
+    if (shippingOptions.length === 0) {
+      return {
+        error: {
+          reason: 'SHIPPING_ADDRESS_UNSERVICEABLE',
+          message: "We don't deliver to this address.",
+          intent: 'SHIPPING_ADDRESS',
+        },
+      };
+    }
+
+    return {
+      newShippingOptionParameters: {
+        defaultSelectedOptionId: shippingOptions[0].id,
+        shippingOptions,
+      },
+      newTransactionInfo: calculateTotal(shippingOptions[0]),
+    };
+  }
+
+  return {};
+}
+```
+
+The `INITIALIZE` trigger fires when the sheet first opens. Handle it the same as `SHIPPING_ADDRESS` to pre-populate shipping options immediately.
+
+## Shipping option change
+
+`callbackTrigger: 'SHIPPING_OPTION'` fires when the customer switches between shipping tiers. Return an updated `transactionInfo` reflecting the new cost.
+
+```javascript
+if (callbackTrigger === 'SHIPPING_OPTION') {
+  const { shippingOptionData } = intermediatePaymentData;
+
+  return {
+    newTransactionInfo: calculateTotal(shippingOptionData),
+  };
+}
+```
+
+## Returning errors to the sheet
+
+Return an `error` object to display an inline message and block the customer from proceeding with an unserviceable selection.
+
+```javascript
+return {
+  error: {
+    reason: 'SHIPPING_ADDRESS_UNSERVICEABLE',
+    message: "We don't deliver to this country.",
+    intent: 'SHIPPING_ADDRESS',
+  },
+};
+```
+
+| Error reason | When to use |
+|---|---|
+| `SHIPPING_ADDRESS_UNSERVICEABLE` | Address is outside your delivery area |
+| `SHIPPING_OPTION_INVALID` | Selected shipping option is no longer available |
+| `OFFER_INVALID` | Applied offer code is invalid or expired |
+| `PAYMENT_DATA_INVALID` | Generic — use only when no more specific reason applies |
+
+## transactionInfo format reference
+
+Return updated `transactionInfo` in any callback that changes the total. `displayItems` are optional but recommended — they appear as an itemized breakdown in the sheet.
+
+```javascript
+const transactionInfo = {
+  totalPriceStatus: 'FINAL',      // 'FINAL' | 'ESTIMATED'
+  totalPrice: '45.00',            // string, decimal format
+  currencyCode: 'EUR',
+  countryCode: 'BG',
+  displayItems: [
+    { label: 'Subtotal', type: 'SUBTOTAL', price: '38.00' },
+    { label: 'Shipping', type: 'LINE_ITEM', price: '5.00'  },
+    { label: 'Tax',      type: 'TAX',       price: '2.00'  },
+  ],
+};
+```
+
+Use `totalPriceStatus: 'ESTIMATED'` while shipping or tax is not yet resolved — for example, before the customer selects an address. Switch to `'FINAL'` once all amounts are confirmed. The `totalPriceStatus` at the time the customer authenticates determines what is charged.
+
+## See also
+
+<Cards>
+  <Card title="Set up Google Pay (API)" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup" description="The base integration that dynamic updates build on." />
+  <Card title="Go-live checklist" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/go-live-checklist" description="Callback compliance is a go-live checklist item." />
+  <Card title="Google Pay overview" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay" description="Integration paths and credential type overview." />
+</Cards>

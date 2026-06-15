@@ -13,6 +13,10 @@ This page covers the direct API integration — using the Google Pay JavaScript 
 | Payment links | [Google Pay in payment links](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/payment-links) — no code required |
 | VINR Elements | [Google Pay with Elements](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/elements) — minimal setup |
 
+<Callout type="info">
+Using Google Pay requires acceptance of the [Google Pay API Terms of Service](https://payments.developers.google.com/terms/sellertos) and compliance with the [Google Pay API Acceptable Use Policy](https://payments.developers.google.com/terms/aup). See also the [Google Pay Web developer documentation](https://developers.google.com/pay/api/web/overview), [Web integration checklist](https://developers.google.com/pay/api/web/guides/test-and-deploy/integration-checklist), and [Web Brand Guidelines](https://developers.google.com/pay/api/web/guides/brand-guidelines).
+</Callout>
+
 ## Enable Google Pay in the Dashboard
 
 1. Go to **Settings → Payment methods** in the VINR Dashboard.
@@ -123,12 +127,12 @@ async function sendTokenToServer(paymentData) {
 
 Pass the encrypted token to the VINR API. VINR decrypts it, identifies the credential type, and applies the appropriate risk and 3DS handling automatically.
 
-```typescript
+```javascript
 import { Vinr } from '@vinr/sdk';
 
 const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-async function createPayment(googlePayToken: string, amount: number, currency: string) {
+async function createPayment(googlePayToken, amount, currency) {
   const payment = await vinr.payments.create({
     amount,
     currency,
@@ -150,9 +154,27 @@ If the payment returns `status: 'requires_action'`, a 3D Secure challenge was tr
 Always confirm the final payment state from the `payment.completed` webhook on your server, not the client-side response. The customer's browser may close before the redirect returns.
 </Callout>
 
+## Billing address
+
+By default, Google Pay does not return a billing address. If your payment processor or fraud tooling requires one, add `billingAddressRequired: true` to the card parameters:
+
+```javascript
+parameters: {
+  allowedAuthMethods: ['CRYPTOGRAM_3DS', 'PAN_ONLY'],
+  allowedCardNetworks: ['MASTERCARD', 'VISA'],
+  billingAddressRequired: true,
+  billingAddressParameters: {
+    format: 'MIN',           // 'MIN' (name, country, postal code) or 'FULL' (full address)
+    phoneNumberRequired: false,
+  },
+},
+```
+
+VINR does not require a billing address for authorization — only enable this if your integration needs it, as the additional data request adds a small amount of friction.
+
 ## Button guidelines
 
-Google enforces brand guidelines for the payment button. Use only the approved button styles and do not modify the Google Pay logo. The `createButton` API returns a pre-styled, compliant button automatically.
+Google enforces brand guidelines for the payment button. Use only the approved button styles and do not modify the Google Pay logo. The `createButton` API returns a pre-styled, compliant button automatically. See [Button guidelines](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/button-guidelines) and the [Google Pay Web Brand Guidelines](https://developers.google.com/pay/api/web/guides/brand-guidelines).
 
 ## See also
 

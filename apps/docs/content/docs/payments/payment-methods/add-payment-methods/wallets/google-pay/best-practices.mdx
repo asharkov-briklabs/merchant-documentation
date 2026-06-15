@@ -1,0 +1,63 @@
+---
+title: Best practices
+description: Improve conversion and maintain your Google Pay integration.
+priority: P1
+lastUpdated: "2026-06-15"
+---
+
+## Show the button where it has impact
+
+Add the Google Pay button to product detail pages, cart pages, and search results — not just the final checkout step. Getting customers to the payment sheet earlier reduces cart abandonment.
+
+- Show the button only after the customer has selected all required product options (size, colour, quantity). Never show it in a disabled state — hide it until the action is ready.
+- If you already show an express checkout button, replace or accompany it with Google Pay rather than adding a confusingly similar control next to it.
+- Do not gate the Google Pay button behind a sign-in wall or require account creation before checkout.
+
+## Give Google Pay visual parity
+
+Google's brand guidelines require the Google Pay button to receive equal visual prominence with other third-party payment methods — not smaller, not positioned below the fold relative to Apple Pay or other wallet buttons.
+
+VINR's Express Checkout Element renders all available wallet buttons at equal size automatically. If you build a custom layout, apply the same dimensions and vertical positioning to each wallet button. See [Button guidelines](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/button-guidelines) for sizing minimums.
+
+## Default to Google Pay for eligible sessions
+
+If `isReadyToPay()` returns `true`, pre-select or surface Google Pay prominently. Customers who have a Google Pay-eligible card enrolled convert at a higher rate when Google Pay is the default option.
+
+For returning customers who previously completed a Google Pay payment, default to Google Pay in the payment method selector on their next checkout. The Express Checkout Element does this automatically across wallets — no explicit defaulting logic is needed when using VINR's hosted products.
+
+## Remove pre-checkout friction
+
+- Do not request information Google Pay already provides. Name, billing address, email, and phone number can be returned from the payment sheet — collecting them in form fields before the sheet opens adds unnecessary friction.
+- Defer account creation to the post-purchase confirmation page. Customers are more likely to complete a purchase when registration is not a prerequisite.
+- Only request a shipping address if the order requires physical delivery. Do not request it for digital goods or services.
+
+## Handle both credential types gracefully
+
+PAN_ONLY transactions trigger VINR's 3DS step-up, which briefly moves the payment into `requires_action`. Your integration must handle this state smoothly:
+
+- **Elements and hosted checkout** — handled automatically; no code needed.
+- **Direct API integration** — handle `requires_action` as you would for any 3DS-challenged card payment.
+
+Test both `CRYPTOGRAM_3DS` and `PAN_ONLY` scenarios before going live. See [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live) for the test card reference covering both types.
+
+## Keep your Google merchant registration current
+
+Google registration is per account, not per domain. If any of the following change, verify your registration in the [Google Pay & Wallet Console](https://pay.google.com/business/console) and confirm the update with your VINR account manager:
+
+- Your VINR merchant ID changes
+- The card networks or authentication methods enabled on your account change
+- Your business name or legal entity changes
+
+After any account configuration change, re-test in the sandbox before going live.
+
+## Always test after integration updates
+
+Run through both credential type scenarios after any update to your checkout, VINR SDK version, or Google Pay JS API version. A library update can silently change `isReadyToPay` behavior or button rendering in ways that aren't obvious in a code diff.
+
+## See also
+
+<Cards>
+  <Card title="Button guidelines" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/button-guidelines" description="Compliant button styles, types, sizing, and what not to do." />
+  <Card title="Authentication methods" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods" description="CRYPTOGRAM_3DS vs PAN_ONLY: when each applies and how VINR handles it." />
+  <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live" description="Test card reference for both credential types." />
+</Cards>

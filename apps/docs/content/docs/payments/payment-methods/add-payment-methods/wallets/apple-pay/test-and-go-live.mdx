@@ -1,0 +1,164 @@
+---
+title: "Test & go live"
+description: "Test Apple Pay in the sandbox and complete the steps to accept live payments."
+priority: P1
+lastUpdated: "2026-06-15"
+---
+
+Apple Pay works across two modes: test mode (sandbox) and live mode (production). This page covers how to test each integration surface and what to do before switching to production.
+
+## Testing Apple Pay
+
+### How test mode works
+
+VINR's test mode intercepts the Apple Pay token before it reaches the card network and returns a successful result without charging the real card. This means you can use a **real credit card** saved to Apple Wallet — VINR recognises your test API key and treats the payment as a test automatically.
+
+You cannot add VINR test card numbers (e.g. `4242 4242 4242 4242`) to Apple Wallet. Use your own real card for testing.
+
+### Test on a real device
+
+Apple Pay requires a real device or a Mac running Safari — it does not work in browser DevTools emulation or on a simulator.
+
+| Surface | How to test |
+|---|---|
+| Safari on iOS | iPhone or iPad running iOS 10+, real card in Wallet, test API keys |
+| Safari on macOS | Mac running macOS Sierra+, real card in Wallet or Apple Watch paired, test API keys |
+| Native iOS app | Physical iPhone or iPad — simulator does not support Apple Pay |
+| React Native | Physical device only |
+
+<Callout type="info">
+You can preview the Apple Pay payment sheet without a real card using the [Apple Pay demo sandbox](https://applepaydemo.apple.com/) — this is useful for checking sheet layout and button behavior, but cannot complete a payment.
+</Callout>
+
+### Test by integration path
+
+<Tabs items={["Hosted Checkout", "Payment Links", "Elements", "Native iOS", "React Native"]}>
+<Tab value="Hosted Checkout">
+
+1. Create a Checkout Session using your **test secret key**.
+2. Open the `url` from the response in Safari on an eligible device.
+3. Confirm the Apple Pay button appears above the card form.
+4. Complete the payment with Face ID, Touch ID, or passcode.
+5. Verify `checkout.session.completed` fires on your webhook endpoint with `payment_status: "paid"`.
+6. Confirm the payment appears in the VINR Dashboard under **Test mode → Payments**.
+
+</Tab>
+<Tab value="Payment Links">
+
+1. Create a Payment Link using your **test secret key**.
+2. Open the link URL in Safari on an eligible device.
+3. Confirm the Apple Pay button appears automatically.
+4. Complete the payment with Face ID, Touch ID, or passcode.
+5. Verify `checkout.session.completed` fires with `payment_status: "paid"`.
+
+No domain registration is needed when testing Payment Links — VINR's domain is already registered with Apple.
+
+</Tab>
+<Tab value="Elements">
+
+1. Load your checkout page using your **test publishable key**.
+2. Confirm the Express Checkout Element or Payment Element renders an Apple Pay button in Safari.
+3. The button must not appear on Chrome, Firefox, or Edge — verify the fallback (card form) renders instead.
+4. Complete a payment and verify `payment.completed` fires on your webhook.
+
+For the raw `paymentRequest` API, verify `canMakePayment()` returns `{ applePay: true }` in Safari before mounting the button.
+
+</Tab>
+<Tab value="Native iOS">
+
+1. Build and run your app on a **physical device** with your test publishable key set.
+2. Confirm `PKPaymentAuthorizationViewController.canMakePayments()` returns `true`.
+3. Present the Apple Pay sheet — it shows your real card but VINR will not charge it.
+4. Authenticate with Face ID, Touch ID, or passcode.
+5. Verify your server receives the token and the payment completes successfully (no real charge).
+
+</Tab>
+<Tab value="React Native">
+
+1. Build and run on a **physical device** with your test publishable key.
+2. Confirm `isApplePaySupported` is `true`.
+3. Call `presentApplePay` — the sheet appears with your real card.
+4. Authenticate and verify the payment completes in test mode.
+
+</Tab>
+</Tabs>
+
+### Test scenarios
+
+| Scenario | How to trigger | Expected outcome |
+|---|---|---|
+| Successful payment | Complete authentication normally | `payment.completed` webhook fires; payment appears in Dashboard |
+| Customer cancels | Dismiss the payment sheet | No charge; checkout should recover gracefully and allow retry |
+| Ineligible device | Open in Chrome or Firefox | Apple Pay button must not appear; card form should show instead |
+| Unserviceable address | Return a shipping address error in your dynamic update handler | Inline error shows on sheet; customer prompted to change address |
+| Recurring — MPAN requested | Use a recurring or subscription Checkout Session with `apple_pay_recurring` capability | Token returned has `token_type: "mpan"` |
+
+### Domain registration in test mode
+
+You must register your test domains — including `localhost` if you develop locally — under **Settings → Payment method domains** in the VINR Dashboard. Apple Pay will not load on unregistered domains even in test mode.
+
+To test on `localhost`, register `localhost` as a domain. This is a one-time step.
+
+---
+
+## Going live
+
+Before switching to production API keys, work through the [Go-live checklist](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/go-live-checklist). The checklist covers all the steps below in more detail.
+
+### Step 1 — Register all production domains
+
+Register every domain and subdomain that shows an Apple Pay button in the VINR Dashboard under **Settings → Payment method domains**, or via the API:
+
+```bash
+curl https://api.vinr.com/v1/payment_method_domains \
+  -u YOUR_LIVE_SECRET_KEY: \
+  -d "domain_name=yourstore.com"
+```
+
+Remember: `www.yourstore.com` and `yourstore.com` are different domains — register both. Do not register the same domain more than once per account.
+
+### Step 2 — Switch to live API keys
+
+Replace your test publishable and secret keys with your live keys. VINR automatically switches from Apple Pay test mode to production at this point. No other configuration change is needed.
+
+### Step 3 — Verify button compliance
+
+Ensure the Apple Pay button uses the official `<apple-pay-button>` web component (web) or `PKPaymentButton` (iOS). Custom buttons are grounds for Apple Pay program termination. See [Button guidelines](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/button-guidelines).
+
+### Step 4 — Run an end-to-end live test
+
+After going live, complete a real payment using a real card on a production device. Confirm:
+
+- The Apple Pay sheet loads and shows your merchant name.
+- Authentication completes and the payment processes.
+- The `payment.completed` webhook arrives on your server.
+- The charge appears in the VINR Dashboard under **Live mode → Payments**.
+
+Refund the test charge from the Dashboard immediately after confirming.
+
+### Step 5 — Monitor certificate expiry
+
+Apple Pay certificates are valid for **25 months**. VINR will notify you in the Dashboard before expiry, and Apple sends email reminders to your Apple Developer Account team agent at 30, 15, and 7 days before the certificate expires. Set a calendar reminder and follow the certificate renewal steps in [Best practices](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/best-practices#apple-pay-certificate-renewal).
+
+---
+
+## Common issues
+
+| Symptom | Likely cause |
+|---|---|
+| Apple Pay button does not appear | Domain not registered; non-Safari browser; no card in Wallet |
+| Sheet loads but payment fails | Merchant validation blocked by CSP or firewall; contact VINR support |
+| `canMakePayment()` returns `null` | Non-Safari browser, or device/OS below minimum requirements |
+| Works in test but fails in production | Live domain not registered; certificate not active; live key not set |
+| iOS app — button not shown | `PKPaymentAuthorizationViewController.canMakePayments()` returned `false`; no eligible card provisioned |
+
+---
+
+## See also
+
+<Cards>
+  <Card title="Go-live checklist" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/go-live-checklist" description="Detailed checklist for every integration surface before going live." />
+  <Card title="Button guidelines" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/button-guidelines" description="Official button styles, CTA types, and what not to do." />
+  <Card title="Best practices" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/best-practices" description="Conversion tips and certificate maintenance." />
+  <Card title="Apple Pay overview" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay" description="Domain registration, eligibility, and integration methods." />
+</Cards>

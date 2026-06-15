@@ -8,7 +8,7 @@ lastUpdated: "2026-06-10"
 Allow customers to securely make payments using Apple Pay on their iPhone, iPad, or Apple Watch.
 
 <Callout type="info">
-**Apple Pay is SCA-ready.** As of September 2019, a regulation called Strong Customer Authentication (SCA) requires businesses in Europe to request additional authentication for online payments. Apple Pay fully supports SCA as it already handles payment flows with a built-in layer of authentication (biometric or password). [Learn more about SCA](/docs/payments/3d-secure).
+**Apple Pay is SCA-ready.** As of September 2019, a regulation called Strong Customer Authentication (SCA) requires businesses in Europe to request additional authentication for online payments. Apple Pay fully supports SCA as it already handles payment flows with a built-in layer of authentication (biometric or password). [Learn more about SCA](/docs/payments/strong-customer-authentication).
 </Callout>
 
 Refer to [Apple's compatibility documentation](https://support.apple.com/en-us/105107) to learn which devices support Apple Pay.
@@ -35,7 +35,7 @@ Throughout this documentation, features that require a non-standard capability a
 | Property | Value |
 |---|---|
 | Customer locations | Worldwide except India |
-| Presentment currency | See [supported presentment currencies](/docs/payments/currencies) |
+| Presentment currency | See [supported presentment currencies](/docs/payments/payment-operations/currencies) |
 | Payment confirmation | Customer-initiated |
 | Payment method family | Wallet |
 | Recurring payments | Yes |
@@ -300,13 +300,16 @@ If Apple Pay does not appear as a payment option, check that your device and int
 
 <Cards>
   <Card title="Button guidelines" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/button-guidelines" description="HIG-compliant button styles, CTA types, localization, and sizing." />
+  <Card title="Cartes Bancaires" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/cartes-bancaires" description="Accept Apple Pay with Cartes Bancaires for French customers." />
   <Card title="Hosted Checkout" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/hosted-checkout" description="Apple Pay in VINR Hosted Checkout — setup and configuration." />
   <Card title="Payment Links" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/payment-links" description="Apple Pay on VINR Payment Links." />
+  <Card title="Elements" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/elements" description="Apple Pay with Express Checkout Element and Payment Element." />
   <Card title="Dynamic updates" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/dynamic-updates" description="Recalculate totals, shipping, and taxes in real time during checkout." />
   <Card title="Merchant tokens" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/merchant-tokens" description="Use MPANs for recurring, deferred, and automatic reload payments." />
   <Card title="Order tracking" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/order-tracking" description="Show live order status in Apple Wallet after purchase." />
   <Card title="Disbursements" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/disbursements" description="Send payouts to a card in the shopper's Wallet." />
   <Card title="Go-live checklist" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/go-live-checklist" description="Verify your integration before accepting live payments." />
   <Card title="Best practices" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/best-practices" description="Improve conversion and maintain your Apple Pay integration." />
-  <Card title="3D Secure" href="/docs/payments/3d-secure" description="How wallet authentication interacts with SCA." />
+  <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/test-and-go-live" description="Test Apple Pay in the sandbox and go live." />
+  <Card title="Strong Customer Authentication" href="/docs/payments/strong-customer-authentication" description="How wallet authentication interacts with SCA." />
 </Cards>

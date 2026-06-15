@@ -1,20 +1,82 @@
 ---
-title: "Liability shift, disputes, and refunds"
-description: "Learn how to manage disputed or refunded Apple Pay payments."
+title: "Disputes and refunds"
+description: "Liability shift, chargeback handling, and refunds for Apple Pay payments."
 priority: P1
-lastUpdated: "2026-06-04"
+lastUpdated: "2026-06-15"
 ---
 
-Post payment activities can include disputes and refunds. When these use cases happen, learn how to address disputed payments, understand the nuances of liability shifts for Apple Pay charges, and manage refunds effectively.
+## Liability shift and fraud protection
+
+Apple Pay transactions are always device-authenticated — the customer authenticates with Face ID, Touch ID, or passcode, and Apple generates a one-time cryptogram tied to that specific transaction. This is equivalent to a strongly authenticated card transaction and carries inherent liability shift on fraud chargebacks across all major networks globally.
+
+| Network | Liability shift | Notes |
+|---|---|---|
+| Mastercard | Yes — all regions | All devices |
+| Visa | Yes — all regions | Devices running iOS 16.2 and above; for iOS below 16.2, liability shift applies only if the card was issued in Europe |
+| Amex | Yes — all regions | All devices |
+| Cartes Bancaires | Yes — EEA | All devices |
+
+<Callout type="info">
+Liability shift covers fraud chargebacks. It does not remove a dispute from card scheme monitoring programs such as Visa VAMP. All disputes — including liability-shifted ones — count toward scheme dispute activity that VINR monitors on your behalf.
+</Callout>
 
 ## Disputes
 
-Users must authenticate payments with their Apple Pay accounts, helping to reduce the risk of fraud or unrecognized payments. However, users can still dispute transactions after they complete payment. You can submit evidence to contest a dispute directly. The dispute process is the same as that for card payments. Learn about how to [manage disputes](/docs/payments/disputes).
+Apple Pay users must authenticate every payment with their device, significantly reducing the risk of unauthorized transactions. However, customers can still dispute a charge after it completes — for reasons including non-delivery, a duplicate charge, or a subscription they didn't intend to renew.
 
-## Liability shift for Apple Pay charges
+When a dispute is opened, VINR creates a `dispute` object and the standard dispute lifecycle applies — evidence submission, deadlines, outcomes, and fees all work the same as for any card payment. See [Disputes](/docs/payments/payment-operations/disputes) for the full lifecycle, how to submit evidence, and how to keep your dispute rate low.
 
-Apple Pay supports liability shift globally for all the major networks. For Visa, liability shift is limited to devices running iOS 16.2 and above. Devices running on iOS versions below 16.2 only receive liability shift on Visa if the card was issued in Europe.
+To identify an Apple Pay payment in a dispute:
+
+```json
+{
+  "payment_method": {
+    "type": "card",
+    "card": {
+      "wallet": {
+        "type": "apple_pay"
+      }
+    }
+  }
+}
+```
+
+### Evidence strategy
+
+Apple Pay's device authentication is strong counter-evidence for "fraudulent" and "unrecognized" disputes. When submitting evidence:
+
+- Include the fact that the transaction was authenticated via Apple Pay — the customer actively confirmed with biometrics or passcode on their registered device.
+- For "product not received" or "subscription canceled" disputes, provide shipping/delivery confirmation or cancellation records — the dispute reason is unrelated to the authentication method.
+
+### Common dispute reasons for Apple Pay
+
+| Reason | Notes |
+|---|---|
+| `unrecognized` | Most preventable — set a clear billing descriptor so customers recognize the charge |
+| `fraudulent` | Rare with Apple Pay due to device authentication; the cryptogram is strong counter-evidence |
+| `product_not_received` | Fulfillment issue — unrelated to Apple Pay; provide shipping proof |
+| `subscription_canceled` | Customer expected cancellation to prevent the charge; make cancellation self-serve |
+| `duplicate` | Check for double-submission on your server |
 
 ## Refunds
 
-You can partially or fully refund any successful Apple Pay payment. The refund process is the same as that for card payments. See [Refund and cancel payments](/docs/payments/refunds) for instructions on initiating or managing refunds.
+You can partially or fully refund any successful Apple Pay payment. The refund goes to the underlying card associated with the customer's Apple Wallet entry — not to an Apple Wallet balance — and the customer does not need to take any action. The refund process is identical to a standard card refund. See [Refund and cancel payments](/docs/payments/payment-operations/refund) for instructions.
+
+<Callout type="warn">
+Refunding a payment that is already disputed does not resolve the dispute and can result in the customer being paid twice. Respond to the dispute instead; only issue a refund if you intend to concede.
+</Callout>
+
+## Preventing disputes
+
+- **Clear billing descriptors** — set a recognizable statement descriptor in your VINR account settings. "Unrecognized" disputes are the most common and most preventable.
+- **Prompt fulfillment and tracking** — keep shipping and delivery confirmation on hand to rebut "product not received" claims quickly.
+- **Easy cancellation for subscriptions** — cancellation friction is the primary driver of `subscription_canceled` disputes. Make cancellation self-serve and confirm it immediately to the customer.
+- **Respond to early fraud warnings** — if you receive a `warning_needs_response` dispute event, refunding proactively avoids a formal chargeback, the associated fee, and the dispute-rate impact.
+
+## See also
+
+<Cards>
+  <Card title="Disputes" href="/docs/payments/payment-operations/disputes" description="Full lifecycle, evidence submission, and fees for any payment dispute." />
+  <Card title="Refund and cancel payments" href="/docs/payments/payment-operations/refund" description="Partially or fully refund a completed payment." />
+  <Card title="Apple Pay overview" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay" description="Prerequisites, domain registration, and integration methods." />
+</Cards>

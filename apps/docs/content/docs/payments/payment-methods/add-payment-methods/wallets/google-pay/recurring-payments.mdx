@@ -1,0 +1,94 @@
+---
+title: Recurring payments
+description: Save a Google Pay payment method for future use and charge it off-session.
+priority: P1
+lastUpdated: "2026-06-15"
+---
+
+<Callout type="info">
+Google Pay does not have a merchant token (MPAN) equivalent. Recurring Google Pay charges use VINR's standard saved payment method mechanism — the same as any saved card. There is no Google-specific recurring API to implement.
+</Callout>
+
+## How recurring Google Pay payments work
+
+On the first customer-present transaction, you save the underlying card via `setup_future_usage` or a SetupIntent. VINR saves the decrypted card details as a `PaymentMethod` (`pm_...`). Subsequent charges are initiated server-side against that saved `pm_` — the Google Pay payment sheet is not re-presented to the customer for merchant-initiated transactions (MITs).
+
+This is card-on-file, not wallet-on-file. The customer's Google Wallet is not involved in off-session charges.
+
+## One-time cryptogram limitation
+
+CRYPTOGRAM_3DS generates a device-bound one-time cryptogram per transaction. The cryptogram cannot be reused — when you save the payment method, VINR stores the underlying card reference, not the cryptogram itself. Subsequent off-session charges use the stored card reference via the standard MIT network flow.
+
+## Save the payment method for future use
+
+### Elements
+
+Pass `save_payment_method: true` in `confirmPayment` to save the card during the initial Google Pay checkout:
+
+```javascript
+const { error } = await vinr.confirmPayment({
+  elements,
+  confirmParams: {
+    return_url: 'https://yoursite.com/order/complete',
+    save_payment_method: true,
+  },
+});
+```
+
+### API — PaymentIntent
+
+Set `setup_future_usage` when creating the PaymentIntent:
+
+```bash
+curl https://api.vinr.com/v1/payment_intents \
+  -u YOUR_SECRET_KEY: \
+  -d "amount=2000" \
+  -d "currency=eur" \
+  -d "payment_method_types[]=card" \
+  -d "customer=cus_123" \
+  -d "setup_future_usage=off_session"
+```
+
+### API — SetupIntent (save without charging)
+
+To save a Google Pay payment method without an immediate charge — for example, during a free trial sign-up:
+
+```bash
+curl https://api.vinr.com/v1/setup_intents \
+  -u YOUR_SECRET_KEY: \
+  -d "payment_method_types[]=card" \
+  -d "customer=cus_123"
+```
+
+Confirm the SetupIntent through Elements or the Google Pay JS API. VINR saves the card and returns a `pm_` ID attached to the customer.
+
+## Charge the saved payment method off-session
+
+Use the saved `pm_` ID for subsequent MITs. Set `off_session: true` to indicate the customer is not present in the checkout flow:
+
+```bash
+curl https://api.vinr.com/v1/payment_intents \
+  -u YOUR_SECRET_KEY: \
+  -d "amount=2000" \
+  -d "currency=eur" \
+  -d "customer=cus_123" \
+  -d "payment_method=pm_saved_id" \
+  -d "off_session=true" \
+  -d "confirm=true"
+```
+
+If the MIT requires additional authentication (for example, the issuer mandates 3DS on subsequent charges), the PaymentIntent enters `requires_action`. Handle this by bringing the customer back on-session to complete the challenge, then retry the charge.
+
+## Subscriptions
+
+VINR Subscriptions support Google Pay-sourced payment methods the same as any saved card. Attach the saved `pm_` to a Customer and create a Subscription — no Google-specific API is needed.
+
+See [Recurring payments](/docs/payments/recurring-payments) for the full Subscriptions integration.
+
+## See also
+
+<Cards>
+  <Card title="Authentication methods" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods" description="How CRYPTOGRAM_3DS and PAN_ONLY affect the card reference saved for future use." />
+  <Card title="Set up Google Pay (API)" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup" description="The initial Google Pay integration and token submission." />
+  <Card title="Recurring payments" href="/docs/payments/recurring-payments" description="VINR Subscriptions and off-session payment patterns." />
+</Cards>
