@@ -48,6 +48,23 @@ The 3DS step-up on PAN_ONLY is platform-enforced and cannot be disabled, regardl
 
 ² VINR's platform unconditionally routes every PAN_ONLY transaction through the 3DS step-up engine. A merchant cannot bypass or disable this. "PAN_ONLY without step-up" is shown for completeness but is not a reachable state in production.
 
+## Supported card networks and availability
+
+VINR supports the following card networks with Google Pay:
+
+| Network | CRYPTOGRAM_3DS | PAN_ONLY |
+|---|---|---|
+| Visa | Yes | Yes |
+| Mastercard | Yes | Yes |
+
+Both authentication methods are available globally — there are no country-of-settlement restrictions for Visa or Mastercard on either credential type.
+
+Set `allowedCardNetworks` in your `paymentDataRequest` to only the networks above:
+
+```json
+"allowedCardNetworks": ["MASTERCARD", "VISA"]
+```
+
 ## Per-merchant configuration
 
 Your VINR merchant account controls which authentication methods are offered to customers. There are two configurations:
