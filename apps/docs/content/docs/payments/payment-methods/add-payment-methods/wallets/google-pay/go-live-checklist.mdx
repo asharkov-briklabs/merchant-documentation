@@ -5,153 +5,76 @@ priority: P1
 lastUpdated: "2026-06-15"
 ---
 
-Work through this checklist before switching your integration to the `PRODUCTION` environment. Each section covers a distinct failure mode — missing any item is a common reason for Google to reject a merchant registration or for live payments to silently fail.
+Use this checklist before switching your integration to the `PRODUCTION` environment. Walk through each section — missing any item is a common reason for Google to reject a merchant registration or for live payments to silently fail.
+
+---
 
 ## 1. Account and registration
 
-<Accordions>
-  <Accordion title="Google Pay enabled in Dashboard">
-    In **Settings → Payment methods**, confirm Google Pay is toggled on for your VINR account. This must be done before Google Pay tokens will be accepted in production.
-  </Accordion>
-  <Accordion title="Google merchant registration complete">
-    Register your integration in the [Google Pay & Wallet Console](https://pay.google.com/business/console):
+- [ ] **Google Pay enabled in Dashboard.** In **Settings → Payment methods**, confirm Google Pay is toggled on for your VINR account. Required before Google Pay tokens are accepted in production.
+- [ ] **Google merchant registration complete.** Register your integration in the [Google Pay & Wallet Console](https://pay.google.com/business/console) with integration type **Gateway**, gateway `vinr`, and your VINR merchant ID. Wait for Google's approval email — typically 1–2 business days. You cannot accept live payments until registration is approved.
+- [ ] **Production domains allowlisted.** Add every domain that will display the Google Pay button in the [Google Pay & Wallet Console](https://pay.google.com/business/console) under **Domain allowlist**. An unregistered domain causes `isReadyToPay()` to return `false` silently in production — the button will not appear. See [Test & go live — troubleshooting](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live#troubleshooting).
+- [ ] **Merchant IDs populated in your integration.** Confirm both IDs are set correctly in your `paymentDataRequest`: `merchantInfo.merchantId` (your Google merchant ID from the Console) and `tokenizationSpecification.parameters.gatewayMerchantId` (your VINR merchant ID). Mixing these up is the most common cause of `invalid_token` errors in production.
 
-    - Integration type: **Gateway**
-    - Gateway: `vinr`
-    - Gateway merchant ID: your VINR merchant ID (from **Settings → Account**)
-
-    Wait for Google's approval email — typically 1–2 business days. You cannot accept live payments until this is approved.
-  </Accordion>
-  <Accordion title="Merchant IDs populated in your integration">
-    Confirm both IDs are set correctly in your `paymentDataRequest`:
-
-    - `merchantInfo.merchantId` — your **Google merchant ID** from the Google Pay & Wallet Console
-    - `tokenizationSpecification.parameters.gatewayMerchantId` — your **VINR merchant ID**
-
-    Mixing these up is the most common cause of `invalid_token` errors in production.
-  </Accordion>
-</Accordions>
+---
 
 ## 2. Authentication methods and card networks
 
-<Accordions>
-  <Accordion title="allowedAuthMethods confirmed with VINR">
-    Check with your VINR account manager which authentication methods are enabled for your account — `CRYPTOGRAM_3DS`, `PAN_ONLY`, or both. Your integration's `allowedAuthMethods` array must match exactly. A mismatch causes a runtime error when the payment sheet loads.
+- [ ] **`allowedAuthMethods` confirmed with VINR.** Check with your VINR account manager which methods are enabled — `CRYPTOGRAM_3DS`, `PAN_ONLY`, or both. Your `allowedAuthMethods` array must match exactly. A mismatch causes a runtime error when the payment sheet loads. See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods).
+- [ ] **`allowedCardNetworks` confirmed with VINR.** Set `allowedCardNetworks` to only the networks enabled on your VINR account (`MASTERCARD` and/or `VISA`). Specifying an unsupported network — for example Amex or Discover — causes token decryption failures.
 
-    See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) for what each method means and the implications of each configuration.
-  </Accordion>
-  <Accordion title="allowedCardNetworks confirmed with VINR">
-    Verify that `allowedCardNetworks` in your `paymentDataRequest` lists only the networks enabled on your VINR account. Remove any network your account does not support — specifying an unsupported network can cause token decryption failures.
-  </Accordion>
-</Accordions>
+---
 
 ## 3. Environment switch
 
-<Accordions>
-  <Accordion title="PaymentsClient set to PRODUCTION">
-    For direct API integrations, update the `PaymentsClient` constructor:
+- [ ] **`PaymentsClient` set to `PRODUCTION`.** For direct API integrations, update the `PaymentsClient` constructor to `environment: 'PRODUCTION'`. For Elements and hosted checkout, no code change is needed — switch to your production publishable key and VINR handles the environment automatically.
 
-    ```javascript
-    const googlePayClient = new google.payments.api.PaymentsClient({
-      environment: 'PRODUCTION',
-    });
-    ```
-
-    For Elements and hosted checkout, no code change is needed — switch to your production publishable key and VINR handles the environment automatically.
-  </Accordion>
-</Accordions>
+---
 
 ## 4. Button and brand compliance
 
-<Accordions>
-  <Accordion title="Button rendered via approved API or element">
-    The Google Pay button must be rendered using `googlePayClient.createButton()` or the VINR `GooglePayElement`. Do not create a custom button, image, or HTML substitute — this will fail Google's integration review.
-  </Accordion>
-  <Accordion title="Button only shown when isReadyToPay returns true">
-    The button must be hidden (not disabled) when `isReadyToPay()` returns false. Displaying the button unconditionally and letting it fail silently is a brand guideline violation.
-  </Accordion>
-  <Accordion title="Button receives visual parity with other payment methods">
-    Google's guidelines require the Google Pay button to receive equal or greater visual prominence compared to other third-party payment methods. It must not be smaller, positioned below the fold, or styled to appear secondary. See [Button guidelines](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/button-guidelines).
-  </Accordion>
-  <Accordion title="Button color matches the background">
-    Use the black button on light backgrounds and the white button on dark backgrounds. The white button requires a visible border — do not render it without a border on a white background.
-  </Accordion>
-</Accordions>
+- [ ] **Button rendered via approved API or element.** The Google Pay button must be rendered using `googlePayClient.createButton()` or the VINR `GooglePayElement`. Do not create a custom button, image, or HTML substitute — this will fail Google's integration review.
+- [ ] **Button only shown when `isReadyToPay` returns `true`.** The button must be hidden (not disabled) when `isReadyToPay()` returns `false`. Displaying it unconditionally is a brand guideline violation.
+- [ ] **Button receives visual parity with other payment methods.** The Google Pay button must receive equal or greater prominence compared to other third-party payment methods — not smaller, below the fold, or styled to appear secondary. See [Button guidelines](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/button-guidelines).
+- [ ] **Button color matches the background.** Use the black button on light backgrounds and the white button on dark backgrounds. The white button requires a visible border — do not render it without a border on a white background.
+
+---
 
 ## 5. Checkout experience
 
-<Accordions>
-  <Accordion title="loadPaymentData called synchronously in the click handler">
-    Call `loadPaymentData()` directly inside the button's click handler — not after an `await` or inside a `.then()`. Deferring the call breaks user-activation and causes pop-up blockers to intercept the payment sheet in most browsers.
+- [ ] **`loadPaymentData()` called synchronously in the click handler.** Call `loadPaymentData()` directly inside the button's click handler — not after an `await` or inside a `.then()`. Deferring the call breaks user-activation and causes pop-up blockers to intercept the payment sheet in most browsers. See [Set up Google Pay](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup).
+- [ ] **Final price confirmed before processing.** The customer must see the final order total before the payment is submitted. If the amount changes based on data returned from the Google Pay sheet (for example, shipping cost derived from the shipping address), show a confirmation step with the final price before calling your server-side payment creation endpoint.
+- [ ] **`PAN_ONLY` `requires_action` handled.** PAN_ONLY transactions enter `requires_action` when VINR's 3DS step-up triggers. Elements and hosted checkout handle this automatically. For direct API integrations, confirm your server handles `requires_action` identically to any 3DS card payment. See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) and [Strong Customer Authentication](/docs/payments/strong-customer-authentication).
 
-    ```javascript
-    // Correct — synchronous call in click handler
-    onClick: () => googlePayClient.loadPaymentData(paymentDataRequest)
-      .then(handlePayment)
-      .catch(handleError)
-
-    // Wrong — deferred call after an await breaks user-activation
-    onClick: async () => {
-      const price = await fetchLatestPrice();
-      googlePayClient.loadPaymentData(...); // blocked by pop-up blocker
-    }
-    ```
-  </Accordion>
-  <Accordion title="Final price confirmed before processing">
-    The customer must see the final order total before the payment is submitted. If the amount changes based on data returned from the Google Pay sheet (for example, shipping cost derived from the shipping address), show a confirmation step with the final price before calling your server-side payment creation endpoint.
-  </Accordion>
-  <Accordion title="PAN_ONLY requires_action handled">
-    PAN_ONLY transactions will enter `requires_action` when VINR's 3DS step-up triggers. Confirm your integration handles this state:
-
-    - **Elements and hosted checkout** — handled automatically; no code needed.
-    - **Direct API integration** — handle `requires_action` exactly as you would for any 3DS-challenged card payment. See [Strong Customer Authentication](/docs/payments/strong-customer-authentication).
-  </Accordion>
-</Accordions>
+---
 
 ## 6. Error handling
 
-<Accordions>
-  <Accordion title="Customer cancellation handled silently">
-    When the customer dismisses the sheet, the Promise rejects with `statusCode: 'CANCELED'`. Catch this and handle it silently — do not show an error message for a cancellation.
+- [ ] **Customer cancellation handled silently.** When the customer dismisses the payment sheet, the Promise rejects with `statusCode: 'CANCELED'`. Catch this and do not show an error message — let the customer retry or choose another payment method.
+- [ ] **Declines surface a clear message with retry option.** On a decline, display the reason clearly and offer the customer a way to retry or choose a different payment method. Do not leave the checkout in a broken or unresponsive state.
 
-    ```javascript
-    googlePayClient.loadPaymentData(paymentDataRequest)
-      .then(handlePayment)
-      .catch(err => {
-        if (err.statusCode !== 'CANCELED') {
-          showError(err.message || 'Payment failed');
-        }
-        // CANCELED: do nothing — let the customer retry or choose another method
-      });
-    ```
-  </Accordion>
-  <Accordion title="Declines surface a clear message with retry option">
-    When a payment is declined, display the decline reason clearly and offer the customer a way to retry or choose a different payment method. Do not leave the checkout in a broken or unresponsive state after a decline.
-  </Accordion>
-</Accordions>
+---
 
 ## 7. Webhook confirmation
 
-<Accordions>
-  <Accordion title="Fulfillment triggered by webhook, not client-side redirect">
-    Order fulfillment — sending a confirmation email, provisioning access, shipping goods — must be triggered by the `payment.completed` webhook received on your server, not by the client-side redirect. The customer's browser may close before the redirect fires.
+- [ ] **Fulfillment triggered by webhook, not client-side redirect.** Order fulfillment — confirmation email, access provisioning, shipping — must be triggered by the `payment.completed` webhook received on your server, not by the client-side redirect. The customer's browser may close before the redirect fires. Confirm your webhook endpoint is live, reachable from the internet, and correctly verifying the VINR signature before going live.
 
-    Confirm your webhook endpoint is live, reachable from the internet, and correctly verifying the VINR signature before going live.
-  </Accordion>
-</Accordions>
+---
 
 ## 8. Dynamic checkout updates (if applicable)
 
-If your integration uses `paymentDataCallbacks` to update the order total or shipping options in real time:
+- [ ] **`callbackIntents` matches your callback implementations.** Every intent listed in `callbackIntents` must have a corresponding handler in `paymentDataCallbacks`. Declaring an intent without a handler causes the payment sheet to stall indefinitely.
+- [ ] **All callbacks resolve promptly.** Add timeouts to any network calls made inside callbacks — a callback that hangs will freeze the payment sheet for the customer. See [Dynamic updates](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/dynamic-updates).
 
-<Accordions>
-  <Accordion title="callbackIntents matches your callback implementations">
-    Every intent listed in `callbackIntents` must have a corresponding handler in `paymentDataCallbacks`. Declaring an intent without a handler causes the payment sheet to stall indefinitely.
-  </Accordion>
-  <Accordion title="All callbacks resolve promptly">
-    Google Pay waits for each callback to resolve before updating the sheet. A callback that never returns — due to an unhandled rejection or a hanging network request — will freeze the payment sheet for the customer. Add timeouts to any network calls made inside callbacks.
-  </Accordion>
-</Accordions>
+---
+
+## 9. Final sign-off
+
+- [ ] **End-to-end test completed in production.** Run a live transaction using a real card after switching to `PRODUCTION`. Confirm the payment appears in the VINR Dashboard and the fulfillment webhook fires correctly.
+- [ ] **Google merchant registration status confirmed active.** Verify your registration status is **Approved** in the [Google Pay & Wallet Console](https://pay.google.com/business/console). The Google Pay button will not appear for unregistered or pending merchant IDs.
+- [ ] **Google Pay mark added to checkout and marketing materials.** Inform customers you accept Google Pay using only the approved Google Pay mark. See [Button guidelines](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/button-guidelines).
+
+---
 
 ## See also
 
