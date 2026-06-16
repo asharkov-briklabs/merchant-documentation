@@ -23,17 +23,6 @@ Using Google Pay requires acceptance of the [Google Pay API Terms of Service](ht
 2. Toggle **Google Pay** to enabled.
 3. Copy your **VINR merchant ID** — you'll need it when configuring the Google Pay API.
 
-## Register with Google
-
-For production payments, Google requires merchants to register through the Google Pay Business Console:
-
-1. Sign in to the [Google Pay & Wallet Console](https://pay.google.com/business/console).
-2. Create a new integration and select **Gateway** as the integration type.
-3. Set the gateway to `vinr` and enter your VINR merchant ID.
-4. Submit for review — Google typically responds within 2 business days.
-
-You do not need to complete registration to test in the `TEST` environment. See [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live).
-
 ## Integration
 
 ### 1. Configure the payment request
@@ -63,7 +52,7 @@ const paymentDataRequest = {
     },
   }],
   merchantInfo: {
-    merchantId: 'YOUR_GOOGLE_MERCHANT_ID',
+    merchantId: 'YOUR_GOOGLE_MERCHANT_ID', // available in the VINR Dashboard under Settings → Payment methods → Google Pay
     merchantName: 'Your Business Name',
   },
   transactionInfo: {

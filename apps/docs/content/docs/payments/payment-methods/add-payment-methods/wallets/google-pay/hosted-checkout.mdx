@@ -29,15 +29,9 @@ That's all that's required for hosted checkout. Google Pay will appear at checko
 By using Google Pay through VINR's hosted checkout, you agree to the [Google Pay API Terms of Service](https://payments.developers.google.com/terms/sellertos) and must comply with the [Google Pay API Acceptable Use Policy](https://payments.developers.google.com/terms/aup). These apply to all merchants using Google Pay, regardless of integration path.
 </Callout>
 
-<Callout type="warn">
-For production payments you must complete Google merchant registration or Google Pay tokens will be rejected. See [Register with Google](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup#register-with-google) — allow 1–2 business days for approval. Sandbox testing works without registration.
+<Callout type="info">
+VINR handles Google merchant registration on your behalf. Contact your VINR account manager to confirm your account is approved for live payments before going live.
 </Callout>
-
-## Authentication methods in hosted checkout
-
-Which Google Pay credential types are offered to customers `CRYPTOGRAM_3DS` `PAN_ONLY` or both is controlled by your merchant account configuration not by checkout session parameters. VINR applies your account's `allowedAuthMethods` setting automatically.
-
-To check or change your configuration contact your VINR account manager. See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods#per-merchant-configuration) for details on each option.
 
 ## Verifying the payment
 
@@ -62,6 +56,6 @@ Listen for the `payment.completed` webhook to fulfil the order. Do not rely on t
 
 <Cards>
   <Card title="Authentication methods" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods" description="CRYPTOGRAM_3DS vs PAN_ONLY: security, SCA, and per-merchant configuration." />
-  <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live" description="Test Google Pay in the sandbox and complete production approval." />
+  <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live" description="Test Google Pay in the sandbox before switching to production." />
   <Card title="How Checkout works" href="/docs/payments/payment-page/how-checkout-works" description="Sessions, states, and the payment lifecycle through VINR hosted checkout." />
 </Cards>

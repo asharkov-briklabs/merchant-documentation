@@ -16,7 +16,6 @@ The VINR Android SDK wraps the Google Pay API, handling button rendering, eligib
 ## Prerequisites
 
 - Google Pay enabled on your VINR account (**Settings → Payment methods**).
-- For production: Google merchant registration complete. See [Register with Google](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup#register-with-google).
 - Android app targeting API level 19 (Android 4.4) or above.
 - Google Play Services installed on the target device (required for Google Pay).
 
@@ -166,14 +165,14 @@ Test both `CRYPTOGRAM_3DS` and `PAN_ONLY` scenarios before going live. See [Test
 Work through the [Go-live checklist](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/go-live-checklist) before releasing to production. Key Android-specific items:
 
 - Switch to `VinrGooglePayLauncher.Environment.Production` and your live publishable key.
-- Complete Google merchant registration in the [Google Pay & Wallet Console](https://pay.google.com/business/console).
+- Confirm with your VINR account manager that your account is approved for live payments.
 - Test an end-to-end live transaction on a real device before release.
 
 ## See also
 
 <Cards>
   <Card title="Authentication methods" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods" description="CRYPTOGRAM_3DS vs PAN_ONLY: security, SCA, and per-merchant configuration." />
-  <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live" description="Test both credential types and complete production approval." />
+  <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live" description="Test both credential types before switching to production." />
   <Card title="Go-live checklist" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/go-live-checklist" description="Step-by-step checklist before switching to production." />
   <Card title="Button guidelines" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/button-guidelines" description="Google-compliant button styles, types, and sizing." />
 </Cards>

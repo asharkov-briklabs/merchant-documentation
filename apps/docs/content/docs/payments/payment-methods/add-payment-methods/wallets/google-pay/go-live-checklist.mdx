@@ -5,16 +5,15 @@ priority: P1
 lastUpdated: "2026-06-15"
 ---
 
-Use this checklist before switching your integration to the `PRODUCTION` environment. Walk through each section — missing any item is a common reason for Google to reject a merchant registration or for live payments to silently fail.
+Use this checklist before switching your integration to the `PRODUCTION` environment. Walk through each section — missing any item is a common reason for live payments to silently fail.
 
 ---
 
 ## 1. Account and registration
 
 - [ ] **Google Pay enabled in Dashboard.** In **Settings → Payment methods**, confirm Google Pay is toggled on for your VINR account. Required before Google Pay tokens are accepted in production.
-- [ ] **Google merchant registration complete.** Register your integration in the [Google Pay & Wallet Console](https://pay.google.com/business/console) with integration type **Gateway**, gateway `vinr`, and your VINR merchant ID. Wait for Google's approval email — typically 1–2 business days. You cannot accept live payments until registration is approved.
-- [ ] **Production domains allowlisted.** Add every domain that will display the Google Pay button in the [Google Pay & Wallet Console](https://pay.google.com/business/console) under **Domain allowlist**. An unregistered domain causes `isReadyToPay()` to return `false` silently in production — the button will not appear. See [Test & go live — troubleshooting](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live#troubleshooting).
-- [ ] **Merchant IDs populated in your integration.** Confirm both IDs are set correctly in your `paymentDataRequest`: `merchantInfo.merchantId` (your Google merchant ID from the Console) and `tokenizationSpecification.parameters.gatewayMerchantId` (your VINR merchant ID). Mixing these up is the most common cause of `invalid_token` errors in production.
+- [ ] **Account approved for live payments.** Confirm with your VINR account manager that your account has been approved for production Google Pay payments. VINR handles Google merchant registration on your behalf.
+- [ ] **Merchant IDs populated in your integration.** Confirm both IDs are set correctly in your `paymentDataRequest`: `merchantInfo.merchantId` (your Google merchant ID, available in the VINR Dashboard under **Settings → Payment methods → Google Pay**) and `tokenizationSpecification.parameters.gatewayMerchantId` (your VINR merchant ID). Mixing these up is the most common cause of `invalid_token` errors in production.
 
 ---
 
@@ -71,7 +70,6 @@ Use this checklist before switching your integration to the `PRODUCTION` environ
 ## 9. Final sign-off
 
 - [ ] **End-to-end test completed in production.** Run a live transaction using a real card after switching to `PRODUCTION`. Confirm the payment appears in the VINR Dashboard and the fulfillment webhook fires correctly.
-- [ ] **Google merchant registration status confirmed active.** Verify your registration status is **Approved** in the [Google Pay & Wallet Console](https://pay.google.com/business/console). The Google Pay button will not appear for unregistered or pending merchant IDs.
 - [ ] **Google Pay mark added to checkout and marketing materials.** Inform customers you accept Google Pay using only the approved Google Pay mark. See [Button guidelines](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/button-guidelines).
 
 ---
