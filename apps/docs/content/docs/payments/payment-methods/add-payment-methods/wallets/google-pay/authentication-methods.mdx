@@ -64,25 +64,6 @@ Set `allowedCardNetworks` in your `paymentDataRequest` to only the networks abov
 "allowedCardNetworks": ["MASTERCARD", "VISA"]
 ```
 
-## Supported card networks and availability
-
-VINR supports the following card networks with Google Pay:
-
-| Network | CRYPTOGRAM_3DS | PAN_ONLY |
-|---|---|---|
-| Visa | Yes | Yes |
-| Mastercard | Yes | Yes |
-
-Both authentication methods are available globally there are no country of settlement restrictions for Visa or Mastercard on either credential type.
-
-American Express, Discover, and JCB are not supported via Google Pay on VINR. Do not include them in `allowedCardNetworks` — specifying an unsupported network causes token decryption failures at checkout.
-
-Set `allowedCardNetworks` in your `paymentDataRequest` to only the networks above:
-
-```json
-"allowedCardNetworks": ["MASTERCARD", "VISA"]
-```
-
 ## Per-merchant configuration
 
 Your VINR merchant account controls which authentication methods are offered to customers.

@@ -32,27 +32,19 @@ By integrating Google Pay, you agree to Google's [terms of service](https://paym
 </Tab>
 <Tab value="Business locations">
 
-Google Pay is available to customers globally on Android devices and in Google Chrome on any platform. There are no geographic restrictions on which countries VINR merchants can accept Google Pay from, subject to the card networks and currencies enabled on your VINR account.
+Google Pay is available to customers globally on Android devices and in Google Chrome on any platform. There are no geographic restrictions on which countries VINR merchants can accept Google Pay from subject to the card networks and currencies enabled on your VINR account.
 
-Google Pay on the web requires Chrome. Customers on Safari, Firefox, or other browsers will not see the Google Pay button — VINR's hosted products (Checkout, Payment Links, Elements) handle this automatically and show Apple Pay or other eligible wallet options instead.
+Google Pay on the web requires Chrome. Customers on Safari Firefox or other browsers will not see the Google Pay button VINR's hosted products (Checkout Payment Links Elements) handle this automatically and show Apple Pay or other eligible wallet options instead.
 
 Contact your VINR account manager to confirm the card networks and currencies available for your region.
 
 </Tab>
 <Tab value="Product support">
 
-| VINR product | Supported |
-|---|---|
-| Hosted Checkout | Yes — appears automatically for eligible browsers |
-| Payment Element | Yes |
-| Express Checkout Element | Yes |
-| Payment Links | Yes — appears automatically when enabled |
-| Direct API | Yes |
-| Native Android SDK | Yes — see [Android native SDK](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/android) |
-| Terminal (in-person) | No — Google Pay in-person uses NFC at the device level |
-| Invoicing | No |
-| Disbursements (push to card) | No — not supported by the Google Pay API |
-| Order tracking in wallet | No — this feature is specific to Apple Wallet |
+- Checkout
+- Payment Links
+- Elements
+- Subscriptions
 
 </Tab>
 </Tabs>
@@ -123,14 +115,6 @@ Google Pay operates in two environments:
 | `PRODUCTION` | Live payments — requires VINR account approval |
 
 The VINR sandbox maps to the Google Pay `TEST` environment automatically. In `TEST` mode, `isReadyToPay` returns `true` regardless of enrolled cards, making it easy to test without a real device. When you go live, switch to your production publishable key. VINR handles the environment transition automatically. See [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live).
-
-## 3D Secure and SCA
-
-**CRYPTOGRAM_3DS** transactions already satisfy Strong Customer Authentication the device authentication (biometric or PIN) combined with the one-time cryptogram is accepted as strong authentication by European issuers. No further 3DS challenge is triggered.
-
-**PAN_ONLY** transactions do not satisfy SCA on their own. VINR unconditionally routes them through its 3D Secure step-up engine exactly as it would a manually entered card. When the step-up passes the transaction becomes SCA-compliant and liability shifts to the issuer. You do not implement this logic it runs automatically on the VINR platform regardless of which integration path you use.
-
-See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) for the full SCA and liability breakdown.
 
 ## In this section
 
