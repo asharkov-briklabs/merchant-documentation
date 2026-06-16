@@ -1,17 +1,17 @@
 {
   "title": "Google Pay",
   "pages": [
+    "best-practices",
+    "authentication-methods",
     "hosted-checkout",
     "payment-links",
     "elements",
     "android",
     "setup",
-    "authentication-methods",
+    "button-guidelines",
     "dynamic-updates",
     "recurring-payments",
     "disputes-and-refunds",
-    "button-guidelines",
-    "best-practices",
     "test-and-go-live",
     "go-live-checklist"
   ]

@@ -5,7 +5,7 @@ priority: P0
 lastUpdated: "2026-06-09"
 ---
 
-VINR Elements is the component library for building a custom checkout UI inside your own page. You mount individual UI components — card fields, address collectors, wallet buttons — and VINR handles tokenization, 3DS, and submission. Adding Google Pay to an Elements checkout requires mounting a single `GooglePayElement`; you do not implement the Google Pay JavaScript API directly.
+VINR Elements is the component library for building a custom checkout UI inside your own page. You mount individual UI components card fields address collectors wallet buttons and VINR handles tokenization 3DS and submission. Adding Google Pay to an Elements checkout requires mounting a single `GooglePayElement`; you do not implement the Google Pay JavaScript API directly.
 
 ## Prerequisites
 
@@ -70,7 +70,7 @@ VINR handles all 3DS challenges and the PAN_ONLY step-up automatically. If a cha
 
 ## Authentication methods
 
-The `allowedAuthMethods` offered in the Google Pay sheet are determined by your merchant account configuration — you do not set them in the Elements call. To check or change your configuration, contact your VINR account manager.
+The `allowedAuthMethods` offered in the Google Pay sheet are determined by your merchant account configuration you do not set them in the Elements call. To check or change your configuration contact your VINR account manager.
 
 See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) for the difference between `CRYPTOGRAM_3DS` and `PAN_ONLY` and when to restrict to one.
 
@@ -93,7 +93,7 @@ Place the Google Pay button on visual parity with your card input — not smalle
 
 ## Testing
 
-Set the `environment` to `TEST` by using your VINR sandbox publishable key. In test mode, VINR passes `TEST` to the Google Pay client internally — no configuration change is needed.
+Set the `environment` to `TEST` by using your VINR sandbox publishable key. In test mode VINR passes `TEST` to the Google Pay client internally no configuration change is needed.
 
 See [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live) for the test card reference covering both `CRYPTOGRAM_3DS` and `PAN_ONLY` scenarios.
 

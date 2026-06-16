@@ -17,7 +17,7 @@ This is card-on-file, not wallet-on-file. The customer's Google Wallet is not in
 
 ## One-time cryptogram limitation
 
-CRYPTOGRAM_3DS generates a device-bound one-time cryptogram per transaction. The cryptogram cannot be reused — when you save the payment method, VINR stores the underlying card reference, not the cryptogram itself. Subsequent off-session charges use the stored card reference via the standard MIT network flow.
+CRYPTOGRAM_3DS generates a device bound one-time cryptogram per transaction. The cryptogram cannot be reused when you save the payment method VINR stores the underlying card reference not the cryptogram itself. Subsequent off-session charges use the stored card reference via the standard MIT network flow.
 
 ## Save the payment method for future use
 
@@ -51,7 +51,7 @@ curl https://api.vinr.com/v1/payment_intents \
 
 ### API — SetupIntent (save without charging)
 
-To save a Google Pay payment method without an immediate charge — for example, during a free trial sign-up:
+To save a Google Pay payment method without an immediate charge for example during a free trial sign-up:
 
 ```bash
 curl https://api.vinr.com/v1/setup_intents \

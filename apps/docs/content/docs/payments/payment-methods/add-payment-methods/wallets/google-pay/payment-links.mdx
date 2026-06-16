@@ -5,11 +5,11 @@ priority: P1
 lastUpdated: "2026-06-09"
 ---
 
-Payment links use the same VINR hosted checkout as a full checkout session. When Google Pay is enabled on your merchant account, it appears automatically in every payment link for eligible browsers and devices — no code changes are required.
+Payment links use the same VINR hosted checkout as a full checkout session. When Google Pay is enabled on your merchant account it appears automatically in every payment link for eligible browsers and devices no code changes are required.
 
 ## How it works
 
-A payment link opens a hosted checkout page. VINR checks `isReadyToPay` against your merchant account configuration and shows the Google Pay button if the customer's device is eligible. The entire token exchange, 3D Secure handling, and authorization run on the VINR platform — your link requires no Google Pay-specific configuration.
+A payment link opens a hosted checkout page. VINR checks `isReadyToPay` against your merchant account configuration and shows the Google Pay button if the customer's device is eligible. The entire token exchange 3D Secure handling and authorization run on the VINR platform your link requires no Google Pay specific configuration.
 
 ```
 customer opens link → VINR hosted checkout → Google Pay button (if eligible) → payment.completed webhook
@@ -28,13 +28,13 @@ For production payments you must complete Google merchant registration or Google
 
 ## Authentication methods
 
-Which credential types are offered — `CRYPTOGRAM_3DS`, `PAN_ONLY`, or both — comes from your merchant account configuration and applies to all payment links on that account. You cannot set auth methods per link.
+Which credential types are offered `CRYPTOGRAM_3DS` `PAN_ONLY` or both comes from your merchant account configuration and applies to all payment links on that account. You cannot set auth methods per link.
 
-To check or change your configuration, contact your VINR account manager. See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods#per-merchant-configuration) for details, including when to restrict to `CRYPTOGRAM_3DS`-only.
+To check or change your configuration contact your VINR account manager. See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods#per-merchant-configuration) for details including when to restrict to `CRYPTOGRAM_3DS` only.
 
 ## Reusable vs one-time links
 
-Google Pay works identically in both link types. Each time a customer pays via a reusable link, a fresh payment is created and the Google Pay flow runs from scratch. There is no stored token or recurring authorization — each payment is a new customer-present transaction.
+Google Pay works identically in both link types. Each time a customer pays via a reusable link a fresh payment is created and the Google Pay flow runs from scratch. There is no stored token or recurring authorization each payment is a new customer-present transaction.
 
 ## Testing
 
