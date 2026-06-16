@@ -126,9 +126,9 @@ The VINR sandbox maps to the Google Pay `TEST` environment automatically. In `TE
 
 ## 3D Secure and SCA
 
-**CRYPTOGRAM_3DS** transactions already satisfy Strong Customer Authentication — the device authentication (biometric or PIN) combined with the one-time cryptogram is accepted as strong authentication by European issuers. No further 3DS challenge is triggered.
+**CRYPTOGRAM_3DS** transactions already satisfy Strong Customer Authentication the device authentication (biometric or PIN) combined with the one-time cryptogram is accepted as strong authentication by European issuers. No further 3DS challenge is triggered.
 
-**PAN_ONLY** transactions do not satisfy SCA on their own. VINR unconditionally routes them through its 3D Secure step-up engine, exactly as it would a manually entered card. When the step-up passes, the transaction becomes SCA-compliant and liability shifts to the issuer. You do not implement this logic — it runs automatically on the VINR platform regardless of which integration path you use.
+**PAN_ONLY** transactions do not satisfy SCA on their own. VINR unconditionally routes them through its 3D Secure step-up engine exactly as it would a manually entered card. When the step-up passes the transaction becomes SCA-compliant and liability shifts to the issuer. You do not implement this logic it runs automatically on the VINR platform regardless of which integration path you use.
 
 See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) for the full SCA and liability breakdown.
 
