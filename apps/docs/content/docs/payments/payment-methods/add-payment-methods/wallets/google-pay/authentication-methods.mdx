@@ -5,7 +5,7 @@ priority: P0
 lastUpdated: "2026-06-09"
 ---
 
-Google Pay can return two types of payment credential depending on how the customer's card was saved. The type affects SCA compliance, liability, and whether a 3D Secure step-up is required. VINR handles both — the behaviour is automatic and controlled by your merchant account configuration.
+Google Pay can return two types of payment credential depending on how the customer's card was saved. The type affects SCA compliance liability and whether a 3D Secure step-up is required. VINR handles both the behaviour is automatic and controlled by your merchant account configuration.
 
 ## The two credential types
 
@@ -27,9 +27,9 @@ The customer saved their card to their Google Account (for example, via Chrome a
 - Functionally equivalent to the customer typing their card number into a form.
 - No cryptogram, no device-possession proof.
 - **Does not satisfy SCA on its own.**
-- **No inherent liability shift** — fraud liability stays with the merchant/acquirer unless the transaction is authenticated.
+- **No inherent liability shift** fraud liability stays with the merchant/acquirer unless the transaction is authenticated.
 
-VINR unconditionally routes PAN_ONLY transactions through its risk and 3D Secure step-up engine, exactly as it would a manually entered card. When 3DS passes, the transaction becomes SCA-compliant and liability-shift eligible. You do not implement this logic — it runs on the VINR platform automatically.
+VINR unconditionally routes PAN_ONLY transactions through its risk and 3D Secure step-up engine, exactly as it would a manually entered card. When 3DS passes, the transaction becomes SCA-compliant and liability-shift eligible. You do not implement this logic it runs on the VINR platform automatically.
 
 <Callout type="warn">
 The 3DS step-up on PAN_ONLY is platform-enforced and cannot be disabled, regardless of merchant configuration. A merchant can control which auth methods are offered — not whether VINR's risk checks run.
@@ -44,7 +44,7 @@ The 3DS step-up on PAN_ONLY is platform-enforced and cannot be disabled, regardl
 | PAN_ONLY (after VINR 3DS step-up passes) | Yes | Yes | Route through 3DS engine |
 | PAN_ONLY (3DS step-up fails) | No | No | Decline |
 
-¹ Liability shift moves fraud chargeback liability to the issuer. It does not remove the dispute from card scheme monitoring programmes such as Visa VAMP — even a liability-shifted dispute counts toward scheme activity that VINR monitors on your behalf.
+¹ Liability shift moves fraud chargeback liability to the issuer. It does not remove the dispute from card scheme monitoring programmes such as Visa VAMP even a liability shifted dispute counts toward scheme activity that VINR monitors on your behalf.
 
 ² VINR's platform unconditionally routes every PAN_ONLY transaction through the 3DS step-up engine. A merchant cannot bypass or disable this. "PAN_ONLY without step-up" is shown for completeness but is not a reachable state in production.
 
@@ -57,7 +57,7 @@ VINR supports the following card networks with Google Pay:
 | Visa | Yes | Yes |
 | Mastercard | Yes | Yes |
 
-Both authentication methods are available globally — there are no country-of-settlement restrictions for Visa or Mastercard on either credential type.
+Both authentication methods are available globally there are no country of settlement restrictions for Visa or Mastercard on either credential type.
 
 American Express, Discover, and JCB are not supported via Google Pay on VINR. Do not include them in `allowedCardNetworks` — specifying an unsupported network causes token decryption failures at checkout.
 
@@ -85,7 +85,7 @@ Maximises Google Pay availability. Customers whose card is not device-tokenised 
 "allowedAuthMethods": ["CRYPTOGRAM_3DS"]
 ```
 
-Every Google Pay transaction is device-authenticated and liability-shifted by definition. The Google Pay button will not appear for customers who only have a PAN_ONLY card saved — those checkouts are lost. Use this configuration for higher-risk merchant categories where the additional assurance outweighs the conversion cost.
+Every Google Pay transaction is device authenticated and liability shifted by definition. The Google Pay button will not appear for customers who only have a PAN_ONLY card saved those checkouts are lost. Use this configuration for higher-risk merchant categories where the additional assurance outweighs the conversion cost.
 
 <Callout type="info">
 To change your enabled authentication methods, contact your VINR account manager. You cannot change this setting from the Dashboard.

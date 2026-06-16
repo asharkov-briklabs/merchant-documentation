@@ -5,7 +5,7 @@ priority: P1
 lastUpdated: "2026-06-15"
 ---
 
-Google Pay's `paymentDataCallbacks` let you recalculate the order total, shipping options, and line items while the payment sheet is open — before the customer authenticates. This applies to direct API integrations. Elements and hosted checkout handle supported recalculations automatically.
+Google Pay's `paymentDataCallbacks` let you recalculate the order total shipping options and line items while the payment sheet is open before the customer authenticates. This applies to direct API integrations. Elements and hosted checkout handle supported recalculations automatically.
 
 <Callout type="warn">
 **Callback contract.** Every callback must resolve — return a result or throw — before the customer can proceed. A callback that never returns freezes the payment sheet indefinitely. Add timeouts to any network calls inside callbacks and always return a result, even on error.
@@ -13,7 +13,7 @@ Google Pay's `paymentDataCallbacks` let you recalculate the order total, shippin
 
 ## Set up callbacks
 
-Declare `paymentDataCallbacks` in the `PaymentsClient` constructor and add `callbackIntents` to your `paymentDataRequest`. Every intent you declare must have a corresponding handler — declaring an intent without a handler causes the sheet to stall.
+Declare `paymentDataCallbacks` in the `PaymentsClient` constructor and add `callbackIntents` to your `paymentDataRequest`. Every intent you declare must have a corresponding handler declaring an intent without a handler causes the sheet to stall.
 
 ```javascript
 const googlePayClient = new google.payments.api.PaymentsClient({
@@ -38,7 +38,7 @@ const paymentDataRequest = {
 
 ## Shipping address change
 
-`onPaymentDataChanged` fires with `callbackTrigger: 'SHIPPING_ADDRESS'` when the customer selects or changes their address. Google provides a **redacted** address — postal code, administrative area, locality, and country only. Use this to compute shipping cost and tax without the full address.
+`onPaymentDataChanged` fires with `callbackTrigger: 'SHIPPING_ADDRESS'` when the customer selects or changes their address. Google provides a **redacted** address postal code administrative area locality and country only. Use this to compute shipping cost and tax without the full address.
 
 ```javascript
 async function onPaymentDataChanged(intermediatePaymentData) {

@@ -5,9 +5,9 @@ priority: P0
 lastUpdated: "2026-06-15"
 ---
 
-Google Pay™ lets customers pay using a card stored in their Google account — on Android devices, in Chrome on any platform, and within native Android apps. VINR acts as the payment gateway, handling the token exchange with the Google Pay API so the plain-text card number never touches your environment.
+Google Pay™ lets customers pay using a card stored in their Google account on Android devices in Chrome on any platform and within native Android apps. VINR acts as the payment gateway handling the token exchange with the Google Pay API so the plaintext card number never touches your environment.
 
-There are no additional fees to process Google Pay payments — pricing is the same as for other card transactions.
+There are no additional fees to process Google Pay payments pricing is the same as for other card transactions.
 
 <Callout type="info">
 In Bulgaria, Google Pay works for all cardholders regardless of their issuing bank. VINR manages the gateway connection at the network level — no per-bank setup is required.
@@ -63,7 +63,7 @@ When a customer chooses Google Pay at checkout:
 
 1. The browser or device checks whether Google Pay is available (`isReadyToPay`).
 2. The Google Pay payment sheet appears with the customer's saved card.
-3. The customer confirms — with a biometric, PIN, or Google account authentication.
+3. The customer confirms with a biometric PIN or Google account authentication.
 4. Google encrypts a one-time payment token and passes it to VINR.
 5. VINR decrypts the token, applies risk and authentication controls, and authorizes the payment through the card network.
 6. You receive a `payment.completed` webhook identical in structure to a standard card payment.
@@ -74,8 +74,8 @@ The `payment_method.card.wallet.type` field on the resulting payment is set to `
 
 Google Pay can return two types of credential depending on how the card was saved:
 
-- **CRYPTOGRAM_3DS** — the card was tokenised onto the customer's device (DPAN). A one-time cryptogram proves device possession. Already satisfies SCA; no 3DS step-up needed. Carries inherent liability shift.
-- **PAN_ONLY** — the card was saved to the customer's Google account (e.g. via Chrome autofill) but never tokenised onto a device. Functionally equivalent to a manually entered card. VINR unconditionally routes these through its 3D Secure step-up engine.
+- **CRYPTOGRAM_3DS** the card was tokenised onto the customer's device (DPAN). A one-time cryptogram proves device possession. Already satisfies SCA; no 3DS step-up needed. Carries inherent liability shift.
+- **PAN_ONLY** the card was saved to the customer's Google account (e.g. via Chrome autofill) but never tokenised onto a device. Functionally equivalent to a manually entered card. VINR unconditionally routes these through its 3D Secure step-up engine.
 
 Which methods are offered is configured per merchant account. See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) for the full SCA and liability breakdown.
 
@@ -111,7 +111,7 @@ googlePayClient.isReadyToPay({
 });
 ```
 
-Elements and hosted checkout handle this check automatically — the button only renders when eligible.
+Elements and hosted checkout handle this check automatically the button only renders when eligible.
 
 ## Environments
 
@@ -122,13 +122,13 @@ Google Pay operates in two environments:
 | `TEST` | Development and QA — no real cards, no real charges |
 | `PRODUCTION` | Live payments — requires Google's production approval |
 
-The VINR sandbox maps to the Google Pay `TEST` environment automatically. In `TEST` mode, `isReadyToPay` returns `true` regardless of enrolled cards, making it easy to test without a real device. When you go live, switch to your production publishable key — VINR handles the environment transition automatically. See [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live).
+The VINR sandbox maps to the Google Pay `TEST` environment automatically. In `TEST` mode `isReadyToPay` returns `true` regardless of enrolled cards making it easy to test without a real device. When you go live switch to your production publishable key VINR handles the environment transition automatically. See [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live).
 
 ## 3D Secure and SCA
 
-**CRYPTOGRAM_3DS** transactions already satisfy Strong Customer Authentication — the device authentication (biometric or PIN) combined with the one-time cryptogram is accepted as strong authentication by European issuers. No further 3DS challenge is triggered.
+**CRYPTOGRAM_3DS** transactions already satisfy Strong Customer Authentication the device authentication (biometric or PIN) combined with the one-time cryptogram is accepted as strong authentication by European issuers. No further 3DS challenge is triggered.
 
-**PAN_ONLY** transactions do not satisfy SCA on their own. VINR unconditionally routes them through its 3D Secure step-up engine, exactly as it would a manually entered card. When the step-up passes, the transaction becomes SCA-compliant and liability shifts to the issuer. You do not implement this logic — it runs automatically on the VINR platform regardless of which integration path you use.
+**PAN_ONLY** transactions do not satisfy SCA on their own. VINR unconditionally routes them through its 3D Secure step-up engine exactly as it would a manually entered card. When the step-up passes the transaction becomes SCA-compliant and liability shifts to the issuer. You do not implement this logic it runs automatically on the VINR platform regardless of which integration path you use.
 
 See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) for the full SCA and liability breakdown.
 
