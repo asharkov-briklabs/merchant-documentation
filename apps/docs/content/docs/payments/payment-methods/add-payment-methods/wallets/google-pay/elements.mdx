@@ -5,13 +5,12 @@ priority: P0
 lastUpdated: "2026-06-09"
 ---
 
-VINR Elements is the component library for building a custom checkout UI inside your own page. You mount individual UI components — card fields, address collectors, wallet buttons — and VINR handles tokenization, 3DS, and submission. Adding Google Pay to an Elements checkout requires mounting a single `GooglePayElement`; you do not implement the Google Pay JavaScript API directly.
+VINR Elements is the component library for building a custom checkout UI inside your own page. You mount individual UI components card fields address collectors wallet buttons and VINR handles tokenization 3DS and submission. Adding Google Pay to an Elements checkout requires mounting a single `GooglePayElement`; you do not implement the Google Pay JavaScript API directly.
 
 ## Prerequisites
 
 - Google Pay enabled on your VINR merchant account (**Settings → Payment methods**).
 - VINR Elements loaded on your page.
-- For production: Google merchant registration complete. See [Set up Google Pay](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup#register-with-google).
 - Acceptance of Google's terms: using Google Pay requires agreement to the [Google Pay API Terms of Service](https://payments.developers.google.com/terms/sellertos) and compliance with the [Google Pay API Acceptable Use Policy](https://payments.developers.google.com/terms/aup).
 
 ## Integration
@@ -68,12 +67,6 @@ googlePayElement.on('completed', async (event) => {
 
 VINR handles all 3DS challenges and the PAN_ONLY step-up automatically. If a challenge is required, the customer completes it in a modal managed by VINR Elements before the redirect fires.
 
-## Authentication methods
-
-The `allowedAuthMethods` offered in the Google Pay sheet are determined by your merchant account configuration — you do not set them in the Elements call. To check or change your configuration, contact your VINR account manager.
-
-See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) for the difference between `CRYPTOGRAM_3DS` and `PAN_ONLY` and when to restrict to one.
-
 ## Showing Google Pay alongside card fields
 
 Mount the `GooglePayElement` and `CardElement` (or `PaymentElement`) in the same Elements instance. VINR renders the wallet button only when the device is eligible, so the layout degrades gracefully for customers who cannot use Google Pay.
@@ -93,7 +86,7 @@ Place the Google Pay button on visual parity with your card input — not smalle
 
 ## Testing
 
-Set the `environment` to `TEST` by using your VINR sandbox publishable key. In test mode, VINR passes `TEST` to the Google Pay client internally — no configuration change is needed.
+Set the `environment` to `TEST` by using your VINR sandbox publishable key. In test mode VINR passes `TEST` to the Google Pay client internally no configuration change is needed.
 
 See [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live) for the test card reference covering both `CRYPTOGRAM_3DS` and `PAN_ONLY` scenarios.
 
@@ -102,5 +95,5 @@ See [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/
 <Cards>
   <Card title="Authentication methods" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods" description="CRYPTOGRAM_3DS vs PAN_ONLY: security, SCA, and per-merchant configuration." />
   <Card title="Set up Google Pay (API)" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup" description="Direct Google Pay JS API integration without Elements." />
-  <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live" description="Test Google Pay and complete production approval." />
+  <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live" description="Test Google Pay before switching to production." />
 </Cards>

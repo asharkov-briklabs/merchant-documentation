@@ -5,11 +5,11 @@ priority: P1
 lastUpdated: "2026-06-09"
 ---
 
-Payment links use the same VINR hosted checkout as a full checkout session. When Google Pay is enabled on your merchant account, it appears automatically in every payment link for eligible browsers and devices — no code changes are required.
+Payment links use the same VINR hosted checkout as a full checkout session. When Google Pay is enabled on your merchant account it appears automatically in every payment link for eligible browsers and devices no code changes are required.
 
 ## How it works
 
-A payment link opens a hosted checkout page. VINR checks `isReadyToPay` against your merchant account configuration and shows the Google Pay button if the customer's device is eligible. The entire token exchange, 3D Secure handling, and authorization run on the VINR platform — your link requires no Google Pay-specific configuration.
+A payment link opens a hosted checkout page. VINR checks `isReadyToPay` against your merchant account configuration and shows the Google Pay button if the customer's device is eligible. The entire token exchange 3D Secure handling and authorization run on the VINR platform your link requires no Google Pay specific configuration. Credential types (`CRYPTOGRAM_3DS`, `PAN_ONLY`, or both) are set at the account level and apply to all payment links — you cannot configure auth methods per link.
 
 ```
 customer opens link → VINR hosted checkout → Google Pay button (if eligible) → payment.completed webhook
@@ -22,19 +22,13 @@ Enable Google Pay once in the Dashboard and it applies to all your payment links
 1. Go to **Settings → Payment methods** in the VINR Dashboard.
 2. Toggle **Google Pay** to enabled.
 
-<Callout type="warn">
-For production payments you must complete Google merchant registration or Google Pay tokens will be rejected. See [Register with Google](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup#register-with-google) — allow 1–2 business days for approval. Sandbox links work without registration.
+<Callout type="info">
+VINR handles Google merchant registration on your behalf. Contact your VINR account manager to confirm your account is approved for live payments before going live.
 </Callout>
-
-## Authentication methods
-
-Which credential types are offered — `CRYPTOGRAM_3DS`, `PAN_ONLY`, or both — comes from your merchant account configuration and applies to all payment links on that account. You cannot set auth methods per link.
-
-To check or change your configuration, contact your VINR account manager. See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods#per-merchant-configuration) for details, including when to restrict to `CRYPTOGRAM_3DS`-only.
 
 ## Reusable vs one-time links
 
-Google Pay works identically in both link types. Each time a customer pays via a reusable link, a fresh payment is created and the Google Pay flow runs from scratch. There is no stored token or recurring authorization — each payment is a new customer-present transaction.
+Google Pay works identically in both link types. Each time a customer pays via a reusable link a fresh payment is created and the Google Pay flow runs from scratch. There is no stored token or recurring authorization each payment is a new customer-present transaction.
 
 ## Testing
 
@@ -52,5 +46,5 @@ Test both credential scenarios if your account has both enabled — see [Test & 
 <Cards>
   <Card title="Authentication methods" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods" description="CRYPTOGRAM_3DS vs PAN_ONLY: security, SCA, and per-merchant configuration." />
   <Card title="Payment links" href="/docs/payments/payment-links" description="Create and share no-code payment links." />
-  <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live" description="Test Google Pay and complete production approval." />
+  <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live" description="Test Google Pay before switching to production." />
 </Cards>

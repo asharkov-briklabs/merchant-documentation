@@ -5,7 +5,7 @@ priority: P0
 lastUpdated: "2026-06-09"
 ---
 
-This page covers the direct API integration — using the Google Pay JavaScript API in your own checkout UI. If you use a different integration path, you may not need any of this code:
+This page covers the direct API integration using the Google Pay JavaScript API in your own checkout UI. If you use a different integration path you may not need any of this code:
 
 | Integration path | What to read instead |
 |---|---|
@@ -21,18 +21,8 @@ Using Google Pay requires acceptance of the [Google Pay API Terms of Service](ht
 
 1. Go to **Settings → Payment methods** in the VINR Dashboard.
 2. Toggle **Google Pay** to enabled.
-3. Copy your **VINR merchant ID** — you'll need it when configuring the Google Pay API.
 
-## Register with Google
-
-For production payments, Google requires merchants to register through the Google Pay Business Console:
-
-1. Sign in to the [Google Pay & Wallet Console](https://pay.google.com/business/console).
-2. Create a new integration and select **Gateway** as the integration type.
-3. Set the gateway to `vinr` and enter your VINR merchant ID.
-4. Submit for review — Google typically responds within 2 business days.
-
-You do not need to complete registration to test in the `TEST` environment. See [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live).
+Your VINR API key is the only credential needed for the integration below.
 
 ## Integration
 
@@ -58,12 +48,11 @@ const paymentDataRequest = {
       type: 'PAYMENT_GATEWAY',
       parameters: {
         gateway: 'vinr',
-        gatewayMerchantId: 'YOUR_VINR_MERCHANT_ID',
+        gatewayMerchantId: 'YOUR_VINR_API_KEY',
       },
     },
   }],
   merchantInfo: {
-    merchantId: 'YOUR_GOOGLE_MERCHANT_ID',
     merchantName: 'Your Business Name',
   },
   transactionInfo: {
@@ -127,12 +116,12 @@ async function sendTokenToServer(paymentData) {
 
 Pass the encrypted token to the VINR API. VINR decrypts it, identifies the credential type, and applies the appropriate risk and 3DS handling automatically.
 
-```typescript
+```javascript
 import { Vinr } from '@vinr/sdk';
 
 const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
 
-async function createPayment(googlePayToken: string, amount: number, currency: string) {
+async function createPayment(googlePayToken, amount, currency) {
   const payment = await vinr.payments.create({
     amount,
     currency,

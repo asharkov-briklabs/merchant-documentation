@@ -1,0 +1,178 @@
+---
+title: "Google Pay on Android"
+description: "Integrate Google Pay into a native Android app using the VINR Android SDK."
+priority: P0
+lastUpdated: "2026-06-15"
+---
+
+This page covers adding Google Pay to a native Android app. For web integrations, see [Google Pay with Elements](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/elements) or [Set up Google Pay (API)](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup).
+
+## How it works
+
+In a native Android app, Google Pay is presented through the [Google Pay API for Android](https://developers.google.com/pay/api/android/overview). The customer taps the button, authenticates with their device biometrics or PIN in the Google Pay sheet, and Google returns an encrypted payment token. VINR decrypts the token, runs the appropriate authentication handling, and processes the payment.
+
+The VINR Android SDK wraps the Google Pay API, handling button rendering, eligibility checks, and token submission so you work with a single SDK surface.
+
+## Prerequisites
+
+- Google Pay enabled on your VINR account (**Settings → Payment methods**).
+- Android app targeting API level 19 (Android 4.4) or above.
+- Google Play Services installed on the target device (required for Google Pay).
+
+## Installation
+
+Add the VINR Android SDK to your `build.gradle`:
+
+```groovy
+dependencies {
+    implementation 'com.vinr:vinr-android-sdk:1.0.0'
+}
+```
+
+Also add the Google Pay dependency if not already present:
+
+```groovy
+dependencies {
+    implementation 'com.google.android.gms:play-services-wallet:19.4.0'
+}
+```
+
+Enable Google Pay in your `AndroidManifest.xml`:
+
+```xml
+<meta-data
+    android:name="com.google.android.gms.wallet.api.enabled"
+    android:value="true" />
+```
+
+## Initialize the VINR SDK
+
+Initialize VINR in your `Application` class with your publishable key:
+
+```kotlin
+import com.vinr.android.VinrSDK
+
+class MyApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        VinrSDK.initialize(
+            context = this,
+            publishableKey = "pk_live_..."  // use pk_test_... for sandbox
+        )
+    }
+}
+```
+
+## Check eligibility
+
+Always check whether Google Pay is available on the device before showing the button. VINR provides a helper that calls `isReadyToPay` against the Google Pay API with your merchant account configuration.
+
+```kotlin
+import com.vinr.android.googlepay.VinrGooglePayLauncher
+
+val googlePayLauncher = VinrGooglePayLauncher(
+    activity = this,
+    config = VinrGooglePayLauncher.Config(
+        environment = VinrGooglePayLauncher.Environment.Production,  // .Test for sandbox
+        merchantCountryCode = "BG",
+        merchantName = "Your Business Name",
+    ),
+    readyCallback = { isReady ->
+        googlePayButton.isVisible = isReady
+    },
+    resultCallback = ::onGooglePayResult,
+)
+```
+
+The `readyCallback` fires after the SDK calls `isReadyToPay`. Show the button only when `isReady` is `true` — do not show a disabled button.
+
+## Add the Google Pay button
+
+Use only the official Google Pay button from the [Pay Button API](https://developers.google.com/pay/api/android/guides/brand-guidelines) or VINR's pre-built button component. Do not create a custom image or custom view as a substitute.
+
+```xml
+<!-- layout/activity_checkout.xml -->
+<com.vinr.android.ui.GooglePayButton
+    android:id="@+id/googlePayButton"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:visibility="gone"
+    app:buttonType="buy"
+    app:buttonTheme="dark" />
+```
+
+Available `buttonType` values: `buy`, `pay`, `checkout`, `subscribe`, `donate`, `book`, `order`, `plain`.
+
+## Present the Google Pay sheet
+
+Call `present()` from inside the button's click handler. Do not call it inside a coroutine or after an async operation — it must be called synchronously from the click event to avoid the Android pop-up blocker equivalent.
+
+```kotlin
+googlePayButton.setOnClickListener {
+    // Create a PaymentIntent or retrieve clientSecret from your server first
+    googlePayLauncher.present(clientSecret = "pi_..._secret_...")
+}
+```
+
+VINR creates the Google Pay payment sheet using your merchant account configuration (`allowedAuthMethods`, `allowedCardNetworks`). The customer selects a card, authenticates, and VINR submits the token.
+
+## Handle the result
+
+Implement the `resultCallback` to handle the outcome:
+
+```kotlin
+private fun onGooglePayResult(result: VinrGooglePayLauncher.Result) {
+    when (result) {
+        is VinrGooglePayLauncher.Result.Completed -> {
+            // Payment succeeded — trigger fulfillment from the payment.completed webhook,
+            // not from this callback alone (browser/app may close before webhook fires)
+            showOrderConfirmation()
+        }
+        is VinrGooglePayLauncher.Result.Failed -> {
+            // Payment declined or error
+            showError(result.error.localizedMessage)
+        }
+        VinrGooglePayLauncher.Result.Canceled -> {
+            // Customer dismissed the sheet — do not show an error
+            // Allow the customer to retry or choose another payment method
+        }
+    }
+}
+```
+
+<Callout type="info">
+Always confirm the final payment state from the `payment.completed` webhook on your server. The app may be backgrounded or killed before `Result.Completed` is delivered.
+</Callout>
+
+## PAN_ONLY and 3D Secure
+
+VINR handles PAN_ONLY credential step-up automatically on Android. If the payment requires a 3D Secure challenge, the SDK presents the challenge UI inside the app without any additional code on your side. Handle the result the same way regardless of credential type.
+
+See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) for the difference between `CRYPTOGRAM_3DS` and `PAN_ONLY`.
+
+## Testing
+
+Set `VinrGooglePayLauncher.Environment.Test` and use your sandbox publishable key (`pk_test_...`). In test mode:
+
+- `isReadyToPay` returns `true` regardless of enrolled cards.
+- No real card is charged.
+- Google provides a test card suite — see [Google's Android test card instructions](https://developers.google.com/pay/api/android/guides/resources/test-card-suite).
+
+Test both `CRYPTOGRAM_3DS` and `PAN_ONLY` scenarios before going live. See [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live) for the full scenario reference.
+
+## Going live
+
+Work through the [Go-live checklist](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/go-live-checklist) before releasing to production. Key Android-specific items:
+
+- Switch to `VinrGooglePayLauncher.Environment.Production` and your live publishable key.
+- Confirm with your VINR account manager that your account is approved for live payments.
+- Test an end-to-end live transaction on a real device before release.
+
+## See also
+
+<Cards>
+  <Card title="Authentication methods" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods" description="CRYPTOGRAM_3DS vs PAN_ONLY: security, SCA, and per-merchant configuration." />
+  <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live" description="Test both credential types before switching to production." />
+  <Card title="Go-live checklist" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/go-live-checklist" description="Step-by-step checklist before switching to production." />
+  <Card title="Button guidelines" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/button-guidelines" description="Google-compliant button styles, types, and sizing." />
+</Cards>

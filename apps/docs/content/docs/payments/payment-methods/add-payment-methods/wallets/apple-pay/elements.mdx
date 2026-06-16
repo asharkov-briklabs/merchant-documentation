@@ -1,0 +1,189 @@
+---
+title: "Apple Pay with Elements"
+description: "Add Apple Pay to your custom Elements-based checkout using the Express Checkout Element or Payment Element."
+priority: P0
+lastUpdated: "2026-06-15"
+---
+
+VINR Elements is the component library for building a custom checkout UI inside your own page. Adding Apple Pay through Elements requires no Apple Pay JS API code — the Express Checkout Element and Payment Element handle eligibility detection, merchant validation, and button rendering automatically.
+
+## Prerequisites
+
+- Apple Pay enabled on your VINR account (**Settings → Payment methods**).
+- All domains that display the Apple Pay button registered under **Settings → Payment method domains**. See [Register your domain](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay#register-your-domain-with-apple-pay).
+- VINR.js loaded on your page.
+
+## Integration options
+
+Two Elements support Apple Pay. Choose based on how much of the checkout UI you control:
+
+| Element | When to use |
+|---|---|
+| **Express Checkout Element** | You want a wallet-button-only row (Apple Pay, Google Pay, etc.) alongside or above a card form. Best for express checkout flows. |
+| **Payment Element** | You want a single all-in-one payment UI that shows all enabled payment methods, including Apple Pay for eligible sessions. |
+
+## Express Checkout Element
+
+The Express Checkout Element renders a row of wallet buttons — Apple Pay on Safari, Google Pay on Chrome, and any other configured wallets — without any eligibility detection code on your side.
+
+### 1. Initialize Elements
+
+Obtain a `clientSecret` from a server-side payment or setup intent, then initialize Elements.
+
+```javascript
+import { loadVinr } from '@vinr/sdk';
+
+const vinr = await loadVinr('YOUR_VINR_PUBLISHABLE_KEY');
+const elements = vinr.elements({ clientSecret: 'YOUR_CLIENT_SECRET' });
+```
+
+### 2. Mount the Express Checkout Element
+
+```javascript
+const expressCheckoutElement = elements.create('expressCheckout', {
+  // Optional: configure Apple Pay button appearance
+  applePay: {
+    buttonType: 'buy',      // 'buy' | 'check-out' | 'pay' | 'subscribe' | etc.
+    buttonStyle: 'black',   // 'black' | 'white' | 'white-outline'
+  },
+});
+
+expressCheckoutElement.mount('#express-checkout-element');
+```
+
+```html
+<div id="express-checkout-element"></div>
+```
+
+VINR calls `canMakePayment()` internally. The Apple Pay button renders only when the session is eligible — Safari with an active card in Wallet. No additional detection code is needed.
+
+### 3. Handle the payment
+
+Listen for the `confirm` event, which fires after the customer authenticates in the Apple Pay sheet.
+
+```javascript
+expressCheckoutElement.on('confirm', async (event) => {
+  const { error } = await vinr.confirmPayment({
+    elements,
+    confirmParams: {
+      return_url: 'https://yoursite.com/order/complete',
+    },
+  });
+
+  if (error) {
+    // Show error to customer
+    document.getElementById('error-message').textContent = error.message;
+  }
+  // On success, VINR redirects to return_url
+});
+```
+
+VINR handles merchant validation and token decryption server-side. Call `confirmPayment()` only after the customer has authenticated — never before.
+
+## Payment Element
+
+The Payment Element is a single component that renders all payment methods enabled on your account. Apple Pay appears automatically for eligible Safari sessions — no configuration required.
+
+### 1. Initialize Elements
+
+```javascript
+import { loadVinr } from '@vinr/sdk';
+
+const vinr = await loadVinr('YOUR_VINR_PUBLISHABLE_KEY');
+const elements = vinr.elements({ clientSecret: 'YOUR_CLIENT_SECRET' });
+```
+
+### 2. Mount the Payment Element
+
+```javascript
+const paymentElement = elements.create('payment');
+paymentElement.mount('#payment-element');
+```
+
+```html
+<div id="payment-element"></div>
+```
+
+Apple Pay is included automatically. In Safari with a card in Wallet, the payment sheet appears at the top of the Payment Element before the card form.
+
+### 3. Handle the payment
+
+```javascript
+const form = document.getElementById('payment-form');
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+
+  const { error } = await vinr.confirmPayment({
+    elements,
+    confirmParams: {
+      return_url: 'https://yoursite.com/order/complete',
+    },
+  });
+
+  if (error) {
+    document.getElementById('error-message').textContent = error.message;
+  }
+});
+```
+
+## Dynamic sheet updates
+
+To update shipping options, line items, or totals while the Apple Pay sheet is open, use the `shippingaddresschange`, `shippingoptionchange`, and `paymentmethodchange` events on the Express Checkout Element. See [Dynamic sheet updates](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/dynamic-updates) for the full event reference.
+
+## Recurring payments and merchant tokens
+
+To request a merchant token (MPAN) for recurring, deferred, or automatic reload payments, pass the `applePay` object with the appropriate request type when creating the element:
+
+```javascript
+const expressCheckoutElement = elements.create('expressCheckout', {
+  applePay: {
+    recurringPaymentRequest: {
+      paymentDescription: 'Monthly subscription',
+      managementURL: 'https://example.com/billing',
+      regularBilling: {
+        amount: 1000,
+        label: 'Standard plan',
+        recurringPaymentIntervalUnit: 'month',
+        recurringPaymentIntervalCount: 1,
+      },
+    },
+  },
+});
+```
+
+See [Merchant tokens](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/merchant-tokens) for all MPAN request types and the full parameter reference.
+
+<Callout type="warn">
+**Capability required — Recurring tier.** MPAN requests require the `apple_pay_recurring` capability on your VINR account. Contact your VINR account manager to enable it.
+</Callout>
+
+## iframes
+
+If you embed Elements in an iframe, the iframe origin must match the top-level page origin. For Safari 17+, you can use a cross-origin iframe if you add `allow="payment"` to the `<iframe>` element.
+
+```html
+<!-- Same-origin: works on all supported Safari versions -->
+<iframe src="https://yoursite.com/checkout"></iframe>
+
+<!-- Cross-origin: Safari 17+ only -->
+<iframe src="https://checkout.yoursite.com" allow="payment"></iframe>
+```
+
+## Non-Safari browsers
+
+Elements degrades automatically — on Chrome, Firefox, Edge, and other non-Safari browsers, the Apple Pay button is hidden. In the Express Checkout Element, Google Pay (or other configured wallets) appear instead. No fallback code is needed on your side.
+
+## Testing
+
+Use your VINR sandbox publishable key. VINR intercepts the Apple Pay token in test mode and returns a successful result without charging the real card. Open your checkout page in Safari on a real device with any real card saved to Wallet.
+
+See [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/test-and-go-live) for the full test scenario reference.
+
+## See also
+
+<Cards>
+  <Card title="Apple Pay overview" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay" description="Domain registration, eligibility, and integration methods." />
+  <Card title="Dynamic sheet updates" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/dynamic-updates" description="Recalculate shipping and totals in real time." />
+  <Card title="Merchant tokens" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/merchant-tokens" description="MPANs for recurring, deferred, and automatic reload payments." />
+  <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/apple-pay/test-and-go-live" description="Test Apple Pay in the sandbox and go live." />
+</Cards>

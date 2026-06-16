@@ -1,11 +1,11 @@
 ---
 title: Test & go live
-description: Test both Google Pay credential types in the sandbox and complete Google's production approval process.
+description: Test both Google Pay credential types in the sandbox before switching to production.
 priority: P1
 lastUpdated: "2026-06-09"
 ---
 
-Google Pay has two environments — `TEST` for development and `PRODUCTION` for live payments. You must complete Google's approval process before accepting real payments.
+Google Pay has two environments — `TEST` for development and `PRODUCTION` for live payments. Contact your VINR account manager to confirm your account is approved before switching to production.
 
 ## Testing in the TEST environment
 
@@ -53,14 +53,14 @@ You do not need any separate VINR Dashboard configuration for sandbox testing. T
 
 ## Going live
 
-Once you've finished testing, work through the [Go-live checklist](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/go-live-checklist) before switching to `PRODUCTION`. It covers account registration, auth method confirmation, environment switch, button compliance, checkout experience requirements, error handling, and webhook setup.
+Once you've finished testing, work through the [Go-live checklist](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/go-live-checklist) before switching to `PRODUCTION`. It covers account confirmation, auth method confirmation, environment switch, button compliance, checkout experience requirements, error handling, and webhook setup.
 
 ## Common issues
 
 | Symptom | Likely cause |
 |---|---|
 | Google Pay button does not appear | `isReadyToPay` returned false — check the browser console; in production, the domain may not be allowlisted |
-| Payment fails in production with `invalid_token` | `environment` still set to `TEST`, or merchant registration not yet approved |
+| Payment fails in production with `invalid_token` | `environment` still set to `TEST`, or account not yet approved for live payments — contact your VINR account manager |
 | PAN_ONLY payment shows unexpected `requires_action` | Expected — VINR's 3DS step-up triggered; ensure your integration handles this state |
 | Button rejected by Google review | Button style does not follow Google Pay brand guidelines |
 | `allowedAuthMethods` mismatch error | Your code specifies a method your VINR account is not configured for — confirm with your account manager |
