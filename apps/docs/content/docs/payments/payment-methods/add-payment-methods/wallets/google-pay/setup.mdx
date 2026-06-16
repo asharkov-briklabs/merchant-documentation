@@ -21,7 +21,8 @@ Using Google Pay requires acceptance of the [Google Pay API Terms of Service](ht
 
 1. Go to **Settings → Payment methods** in the VINR Dashboard.
 2. Toggle **Google Pay** to enabled.
-3. Copy your **VINR merchant ID** — you'll need it when configuring the Google Pay API.
+
+Your VINR API key is the only credential needed for the integration below.
 
 ## Integration
 
@@ -47,12 +48,11 @@ const paymentDataRequest = {
       type: 'PAYMENT_GATEWAY',
       parameters: {
         gateway: 'vinr',
-        gatewayMerchantId: 'YOUR_VINR_MERCHANT_ID',
+        gatewayMerchantId: 'YOUR_VINR_API_KEY',
       },
     },
   }],
   merchantInfo: {
-    merchantId: 'YOUR_GOOGLE_MERCHANT_ID', // available in the VINR Dashboard under Settings → Payment methods → Google Pay
     merchantName: 'Your Business Name',
   },
   transactionInfo: {
