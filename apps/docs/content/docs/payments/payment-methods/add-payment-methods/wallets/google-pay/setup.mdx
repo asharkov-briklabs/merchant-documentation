@@ -159,7 +159,14 @@ parameters: {
 },
 ```
 
-VINR does not require a billing address for authorization — only enable this if your integration needs it, as the additional data request adds a small amount of friction.
+| Parameter | Values | Description |
+|---|---|---|
+| `billingAddressRequired` | `true` / `false` | Whether to request a billing address. Off by default. |
+| `format` | `'MIN'` | Returns name, country code, and postal code only. |
+| `format` | `'FULL'` | Returns a full street address. Use only when explicitly required — it adds friction. |
+| `phoneNumberRequired` | `true` / `false` | Whether to request the customer's phone number alongside the address. Off by default. |
+
+VINR does not require a billing address for authorization — only enable these parameters if your fraud tooling or payment processor explicitly needs them.
 
 ## Button guidelines
 

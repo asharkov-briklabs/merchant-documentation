@@ -9,9 +9,11 @@ Google Pay allows customers to make payments in your app or website using any cr
 
 Google Pay is fully compatible with VINR's products and features (for example, recurring payments), allowing you to use it in place of a traditional payment form whenever possible. Use it to accept payments for physical goods, donations, subscriptions, and so on.
 
-## Google Pay terms
+## Google Pay terms and resources
 
-By integrating Google Pay, you agree to Google's [terms of service](https://payments.developers.google.com/terms/sellertos).
+By integrating Google Pay, you agree to Google's [Terms of Service](https://payments.developers.google.com/terms/sellertos) and must comply with the [Google Pay API Acceptable Use Policy](https://payments.developers.google.com/terms/aup).
+
+For technical reference, see the [Google Pay Web developer documentation](https://developers.google.com/pay/api/web/overview), the [Web integration checklist](https://developers.google.com/pay/api/web/guides/test-and-deploy/integration-checklist), and the [Web Brand Guidelines](https://developers.google.com/pay/api/web/guides/brand-guidelines).
 
 <Tabs items={["Payment method properties", "Business locations", "Product support"]}>
 <Tab value="Payment method properties">
@@ -70,6 +72,15 @@ Google Pay can return two types of credential depending on how the card was save
 - **`PAN_ONLY`** — the card was saved to the customer's Google account but never tokenised onto a device. VINR unconditionally routes these through its 3D Secure step-up engine. When the step-up passes the transaction becomes SCA-compliant and liability shifts to the issuer.
 
 Which methods are offered is configured per merchant account. See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) for the full SCA and liability breakdown.
+
+## Enable Google Pay
+
+Before Google Pay appears at checkout, toggle it on in the VINR Dashboard:
+
+1. Go to **Settings → Payment methods**.
+2. Toggle **Google Pay** to enabled.
+
+For hosted checkout and payment links, that's all that's needed — Google Pay appears automatically for eligible customers. For Elements or the direct API, continue to the relevant integration guide below.
 
 ## Integration paths
 

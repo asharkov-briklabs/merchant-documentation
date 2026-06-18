@@ -13,6 +13,7 @@ Use this checklist before switching your integration to the `PRODUCTION` environ
 
 - [ ] **Google Pay enabled in Dashboard.** In **Settings → Payment methods**, confirm Google Pay is toggled on for your VINR account. Required before Google Pay tokens are accepted in production.
 - [ ] **Account approved for live payments.** Confirm with your VINR account manager that your account has been approved for production Google Pay payments. VINR handles Google merchant registration on your behalf.
+- [ ] **Direct API: integration submitted to Google for review.** If you are using the direct Google Pay JS API integration, [publish your integration](https://developers.google.com/pay/api/web/guides/test-and-deploy/deploy-your-integration) via the Google Pay & Wallet Console before going live. This is required in addition to VINR account approval. Hosted checkout, Elements, and payment link integrations are exempt — VINR's existing merchant registration covers them.
 - [ ] **Merchant IDs populated in your integration.** Confirm both IDs are set correctly in your `paymentDataRequest`: `merchantInfo.merchantId` (your Google merchant ID, available in the VINR Dashboard under **Settings → Payment methods → Google Pay**) and `tokenizationSpecification.parameters.gatewayMerchantId` (your VINR merchant ID). Mixing these up is the most common cause of `invalid_token` errors in production.
 
 ---
@@ -71,6 +72,7 @@ Use this checklist before switching your integration to the `PRODUCTION` environ
 
 - [ ] **End-to-end test completed in production.** Run a live transaction using a real card after switching to `PRODUCTION`. Confirm the payment appears in the VINR Dashboard and the fulfillment webhook fires correctly.
 - [ ] **Google Pay mark added to checkout and marketing materials.** Inform customers you accept Google Pay using only the approved Google Pay mark. See [Button guidelines](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/button-guidelines).
+- [ ] **Google integration checklist reviewed.** Review Google's [Web integration checklist](https://developers.google.com/pay/api/web/guides/test-and-deploy/integration-checklist) and confirm all items are satisfied before requesting production access.
 
 ---
 
