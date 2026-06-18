@@ -55,6 +55,8 @@ You do not need any separate VINR Dashboard configuration for sandbox testing. T
 
 Once you've finished testing, work through the [Go-live checklist](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/go-live-checklist) before switching to `PRODUCTION`. It covers account confirmation, auth method confirmation, environment switch, button compliance, checkout experience requirements, error handling, and webhook setup.
 
+**Direct API integrations only:** Google requires you to [publish your integration](https://developers.google.com/pay/api/web/guides/test-and-deploy/deploy-your-integration) via the Google Pay & Wallet Console before you can accept live payments. This is separate from VINR account approval — both are required. Hosted checkout, Elements, and payment link integrations are exempt; VINR's existing merchant registration covers them.
+
 ## Common issues
 
 | Symptom | Likely cause |
