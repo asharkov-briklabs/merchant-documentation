@@ -1,8 +1,8 @@
 ---
 title: Set up Google Pay (API)
-description: Configure Google Pay on your VINR account and integrate directly with the Google Pay JavaScript API.
+description: Configure Google Pay™ on your VINR account and integrate directly with the Google Pay JavaScript API.
 priority: P0
-lastUpdated: "2026-06-09"
+lastUpdated: "2026-06-29"
 ---
 
 This page covers the direct API integration using the Google Pay JavaScript API in your own checkout UI. If you use a different integration path you may not need any of this code:
@@ -22,7 +22,7 @@ Using Google Pay requires acceptance of the [Google Pay API Terms of Service](ht
 1. Go to **Settings → Payment methods** in the VINR Dashboard.
 2. Toggle **Google Pay** to enabled.
 
-Your VINR API key is the only credential needed for the integration below.
+The integration below identifies you with two VINR values in the Google Pay request — the gateway ID `vinrpay` and your VINR account ID (see [Tokenization specification](#tokenization-specification)). Your VINR secret key is needed only server-side, when you create the payment.
 
 ## Integration
 
@@ -47,8 +47,8 @@ const paymentDataRequest = {
     tokenizationSpecification: {
       type: 'PAYMENT_GATEWAY',
       parameters: {
-        gateway: 'vinr',
-        gatewayMerchantId: 'YOUR_VINR_API_KEY',
+        gateway: 'vinrpay',                        // VINR's Google-registered gateway ID — constant
+        gatewayMerchantId: 'YOUR_VINR_ACCOUNT_ID', // your VINR account ID — not your API key
       },
     },
   }],
@@ -63,6 +63,30 @@ const paymentDataRequest = {
   },
 };
 ```
+
+### Tokenization specification
+
+The `tokenizationSpecification` object tells Google how to encrypt the payment token so that VINR can decrypt it. Set these values exactly:
+
+| Field | Value | Description |
+|---|---|---|
+| `type` | `'PAYMENT_GATEWAY'` | Google encrypts the token for VINR (your gateway) to decrypt. Do not use `'DIRECT'` — that requires merchant-side PCI DSS validation. |
+| `gateway` | `'vinrpay'` | VINR's gateway ID, registered with Google. This is a constant — use it verbatim. |
+| `gatewayMerchantId` | your VINR account ID | Identifies which VINR merchant account receives the payment. Assigned by VINR and available in the Dashboard — **this is not your API key**. |
+
+```javascript
+tokenizationSpecification: {
+  type: 'PAYMENT_GATEWAY',
+  parameters: {
+    gateway: 'vinrpay',
+    gatewayMerchantId: 'YOUR_VINR_ACCOUNT_ID',
+  },
+}
+```
+
+<Callout type="warn">
+Do not confuse `gatewayMerchantId` with `merchantInfo.merchantId`. `gatewayMerchantId` is your VINR account ID (assigned by VINR). `merchantInfo.merchantId` is your Google-assigned merchant ID from the [Google Pay & Wallet Console](https://pay.google.com/business/console), required only in the `PRODUCTION` environment. Mixing up these two values is the most common cause of `invalid_token` errors in production — see the [Go-live checklist](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/go-live-checklist).
+</Callout>
 
 ### 2. Check readiness and render the button
 
@@ -91,10 +115,11 @@ googlePayClient.isReadyToPay({
 
 ### 3. Send the token to your server
 
-Extract the encrypted token from the Google Pay response and POST it to your backend:
+Extract the encrypted token from `paymentData.paymentMethodData.tokenizationData.token` and POST it to your backend. As Google's documentation states, if you are using gateway tokenization, **pass this token to your server without modification** — do not decode, re-encode, strip, or log it.
 
 ```javascript
 async function sendTokenToServer(paymentData) {
+  // paymentData → paymentMethodData → tokenizationData → token
   const token = paymentData.paymentMethodData.tokenizationData.token;
 
   const response = await fetch('/your-checkout-endpoint', {
@@ -165,6 +190,8 @@ parameters: {
 | `format` | `'MIN'` | Returns name, country code, and postal code only. |
 | `format` | `'FULL'` | Returns a full street address. Use only when explicitly required — it adds friction. |
 | `phoneNumberRequired` | `true` / `false` | Whether to request the customer's phone number alongside the address. Off by default. |
+
+When `billingAddressRequired` is `true`, the returned address is available on the Google Pay response at `paymentData.paymentMethodData.info.billingAddress`.
 
 VINR does not require a billing address for authorization — only enable these parameters if your fraud tooling or payment processor explicitly needs them.
 
