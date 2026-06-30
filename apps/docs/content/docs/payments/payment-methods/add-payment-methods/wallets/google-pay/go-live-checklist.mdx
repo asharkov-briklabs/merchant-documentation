@@ -21,7 +21,7 @@ Use this checklist before switching your integration to the `PRODUCTION` environ
 ## 2. Authentication methods and card networks
 
 - [ ] **`allowedAuthMethods` confirmed with VINR.** Check with your VINR account manager which methods are enabled — `CRYPTOGRAM_3DS`, `PAN_ONLY`, or both. Your `allowedAuthMethods` array must match exactly. A mismatch causes a runtime error when the payment sheet loads. See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods).
-- [ ] **`allowedCardNetworks` confirmed with VINR.** Set `allowedCardNetworks` to only the networks enabled on your VINR account (`MASTERCARD` and/or `VISA`). Specifying an unsupported network — for example Amex or Discover — causes token decryption failures.
+- [ ] **`allowedCardNetworks` confirmed.** Set `allowedCardNetworks` to `['MASTERCARD', 'VISA']` — the networks VINR supports for Google Pay. Specifying an unsupported network — for example Amex or Discover — causes token decryption failures.
 
 ---
 
