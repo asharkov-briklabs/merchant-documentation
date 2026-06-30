@@ -1,8 +1,8 @@
 ---
 title: Set up Google Pay (API)
-description: Configure Google Pay™ on your VINR account and integrate directly with the Google Pay JavaScript API.
+description: Configure Google Pay on your VINR account and integrate directly with the Google Pay JavaScript API.
 priority: P0
-lastUpdated: "2026-06-29"
+lastUpdated: "2026-06-30"
 ---
 
 This page covers the direct API integration using the Google Pay JavaScript API in your own checkout UI. If you use a different integration path you may not need any of this code:
@@ -29,6 +29,8 @@ The integration below identifies you with two VINR values in the Google Pay requ
 ### 1. Configure the payment request
 
 Set `allowedAuthMethods` to the methods enabled on your VINR merchant account. Most accounts support both — see [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) for what each method means and how to request a configuration change.
+
+VINR supports **Visa** and **Mastercard** for Google Pay. Set `allowedCardNetworks` to `['MASTERCARD', 'VISA']` — other networks are not supported and including them causes the token to be rejected at checkout.
 
 ```javascript
 const googlePayClient = new google.payments.api.PaymentsClient({
@@ -63,6 +65,10 @@ const paymentDataRequest = {
   },
 };
 ```
+
+<Callout type="info">
+The request above is the minimal configuration. To also collect the billing address and customer email — which VINR includes with the payment — add the parameters shown under [Billing address](#billing-address) below.
+</Callout>
 
 ### Tokenization specification
 
@@ -137,63 +143,107 @@ async function sendTokenToServer(paymentData) {
 }
 ```
 
-### 4. Create the payment server-side
+### 4. Submit the token to VINR
 
-Pass the encrypted token to the VINR API. VINR decrypts it, identifies the credential type, and applies the appropriate risk and 3DS handling automatically.
-
-```javascript
-import { Vinr } from '@vinr/sdk';
-
-const vinr = new Vinr({ secretKey: process.env.VINR_SECRET_KEY });
-
-async function createPayment(googlePayToken, amount, currency) {
-  const payment = await vinr.payments.create({
-    amount,
-    currency,
-    payment_method: {
-      type: 'google_pay',
-      google_pay: {
-        token: googlePayToken,
-      },
-    },
-  });
-
-  return payment;
-}
-```
-
-If the payment returns `status: 'requires_action'`, a 3D Secure challenge was triggered. For PAN_ONLY transactions this is expected — VINR unconditionally routes them through the 3DS step-up engine. Handle it the same way as any 3DS-challenged card payment — see [Strong Customer Authentication](/docs/payments/strong-customer-authentication).
+From your backend, submit the Google Pay token to a VINR payment intent. This is a two-step, server-to-server flow: **create the intent**, then **process** it with the encrypted token. Your `X-Api-Key` is sent only from your server, never the browser.
 
 <Callout type="info">
-Always confirm the final payment state from the `payment.completed` webhook on your server, not the client-side response. The customer's browser may close before the redirect returns.
+The base URL below is the **sandbox** API (`https://edge.dev.briklabs.io`). Switch to your VINR production API base when you go live. `amount` is in the currency's minor units (`4500` = €45.00).
+</Callout>
+
+```bash
+# 1. Create a payment intent — returns its id
+curl --request POST \
+  --url https://edge.dev.briklabs.io/checkout/intent \
+  --header 'X-Api-Key: YOUR_VINR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "amount": 4500,
+    "currency": "EUR",
+    "customer": { "customerId": "cust_123", "email": "jane@example.com", "name": "Jane Doe" },
+    "configId": "YOUR_CHECKOUT_CONFIG_ID"
+  }'
+# → { "id": "INTENT_ID", "amount": 4500, "currency": "EUR", ... }
+```
+
+```bash
+# 2. Process the intent with the Google Pay token — pass it unmodified
+curl --request POST \
+  --url https://edge.dev.briklabs.io/checkout/intent/INTENT_ID/process \
+  --header 'X-Api-Key: YOUR_VINR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "paymentMethod": {
+      "type": "googlePay",
+      "googlePay": { "encryptedToken": "GOOGLE_PAY_TOKEN" }
+    },
+    "billingDetails": {
+      "name": "Jane Doe",
+      "email": "jane@example.com",
+      "phone": "+35988123456",
+      "address": {
+        "line1": "1 Vitosha Blvd",
+        "city": "Sofia",
+        "postalCode": "1000",
+        "country": "BG"
+      }
+    },
+    "contactInfo": { "email": "jane@example.com" }
+  }'
+```
+
+`GOOGLE_PAY_TOKEN` is the value of `paymentData.paymentMethodData.tokenizationData.token` from Step 3 — sent through unaltered. VINR decrypts it, identifies the credential type (`PAN_ONLY` or `CRYPTOGRAM_3DS`), and applies the appropriate risk and 3DS handling automatically.
+
+### 5. Handle the 3D Secure challenge (if required)
+
+If the process response contains `nextAction.type === "challenge"`, a 3D Secure step-up is required. This is expected for `PAN_ONLY` credentials — VINR routes them through its 3DS engine automatically (see [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods)). After the shopper completes the challenge, confirm the payment with the `threeDSServerTransID` returned in `nextAction`:
+
+```bash
+curl --request POST \
+  --url https://edge.dev.briklabs.io/checkout/intent/INTENT_ID/confirm \
+  --header 'X-Api-Key: YOUR_VINR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{ "threeDSServerTransID": "VALUE_FROM_nextAction" }'
+```
+
+<Callout type="info">
+Always confirm the final payment state from the `payment.completed` webhook on your server, not the client-side response — the customer's browser may close before the redirect returns.
 </Callout>
 
 ## Billing address
 
-By default, Google Pay does not return a billing address. If your payment processor or fraud tooling requires one, add `billingAddressRequired: true` to the card parameters:
+VINR's hosted checkout requests a **full** billing address (with phone number) and the customer's email, and we recommend you do the same so you can supply complete billing details when you submit the payment. Set `billingAddressRequired: true` with `format: 'FULL'` on the card parameters, and `emailRequired: true` at the top level of the request:
 
 ```javascript
-parameters: {
-  allowedAuthMethods: ['CRYPTOGRAM_3DS', 'PAN_ONLY'],
-  allowedCardNetworks: ['MASTERCARD', 'VISA'],
-  billingAddressRequired: true,
-  billingAddressParameters: {
-    format: 'MIN',           // 'MIN' (name, country, postal code) or 'FULL' (full address)
-    phoneNumberRequired: false,
-  },
-},
+const paymentDataRequest = {
+  apiVersion: 2,
+  apiVersionMinor: 0,
+  emailRequired: true, // request the customer's email (top-level field)
+  allowedPaymentMethods: [{
+    type: 'CARD',
+    parameters: {
+      allowedAuthMethods: ['CRYPTOGRAM_3DS', 'PAN_ONLY'],
+      allowedCardNetworks: ['MASTERCARD', 'VISA'],
+      billingAddressRequired: true,
+      billingAddressParameters: {
+        format: 'FULL',          // 'FULL' (full street address) or 'MIN' (name, country, postal code)
+        phoneNumberRequired: true,
+      },
+    },
+    // tokenizationSpecification: { ... }  // see Tokenization specification above
+  }],
+  // merchantInfo, transactionInfo: { ... }
+};
 ```
 
-| Parameter | Values | Description |
+| Parameter | Recommended | Description |
 |---|---|---|
-| `billingAddressRequired` | `true` / `false` | Whether to request a billing address. Off by default. |
-| `format` | `'MIN'` | Returns name, country code, and postal code only. |
-| `format` | `'FULL'` | Returns a full street address. Use only when explicitly required — it adds friction. |
-| `phoneNumberRequired` | `true` / `false` | Whether to request the customer's phone number alongside the address. Off by default. |
+| `billingAddressRequired` | `true` | Request a billing address. VINR's checkout sets this to `true`. |
+| `billingAddressParameters.format` | `'FULL'` | `'FULL'` returns the full street address; `'MIN'` returns only name, country code, and postal code. VINR uses `'FULL'`. |
+| `billingAddressParameters.phoneNumberRequired` | `true` | Also request the customer's phone number. VINR sets this to `true`. |
+| `emailRequired` | `true` | Request the customer's email. Set on the `PaymentDataRequest` itself — **not** inside `billingAddressParameters`. |
 
-When `billingAddressRequired` is `true`, the returned address is available on the Google Pay response at `paymentData.paymentMethodData.info.billingAddress`.
-
-VINR does not require a billing address for authorization — only enable these parameters if your fraud tooling or payment processor explicitly needs them.
+When these are set, the billing address is returned on the Google Pay response at `paymentData.paymentMethodData.info.billingAddress` and the email at `paymentData.email`. Pass these along as the billing details when you submit the payment to VINR.
 
 ## Button guidelines
 
