@@ -25,6 +25,15 @@ All authentication method handling — including the unconditional 3DS step-up f
 
 That's all that's required for hosted checkout. Google Pay will appear at checkout for eligible customers immediately.
 
+VINR sets Google Pay's `tokenizationSpecification` for you. Unlike some Google Pay integrations, these values cannot be overridden — hosted checkout does not accept merchant-supplied configuration for them:
+
+| Property | Value |
+|---|---|
+| `gateway` | `vinrpay` |
+| `gatewayMerchantId` | your VINR account ID |
+
+See [Set up Google Pay (API)](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup#tokenization-specification) for the full tokenization details.
+
 <Callout type="info">
 By using Google Pay through VINR's hosted checkout, you agree to the [Google Pay API Terms of Service](https://payments.developers.google.com/terms/sellertos) and must comply with the [Google Pay API Acceptable Use Policy](https://payments.developers.google.com/terms/aup). These apply to all merchants using Google Pay, regardless of integration path.
 </Callout>
@@ -56,6 +65,7 @@ Listen for the `payment.completed` webhook to fulfil the order. Do not rely on t
 
 <Cards>
   <Card title="Authentication methods" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods" description="CRYPTOGRAM_3DS vs PAN_ONLY: security, SCA, and per-merchant configuration." />
+  <Card title="Set up Google Pay (API)" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup" description="Direct API integration and the full tokenization specification reference." />
   <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live" description="Test Google Pay in the sandbox before switching to production." />
   <Card title="How Checkout works" href="/docs/payments/payment-page/how-checkout-works" description="Sessions, states, and the payment lifecycle through VINR hosted checkout." />
 </Cards>

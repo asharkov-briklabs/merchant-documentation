@@ -71,6 +71,15 @@ googlePayElement.on('completed', async (event) => {
 
 VINR handles all 3DS challenges and the PAN_ONLY step-up automatically. If a challenge is required, the customer completes it in a modal managed by VINR Elements before the redirect fires.
 
+The `GooglePayElement` sets Google Pay's `tokenizationSpecification` internally. These values are not configurable through the element:
+
+| Property | Value |
+|---|---|
+| `gateway` | `vinrpay` |
+| `gatewayMerchantId` | your VINR account ID |
+
+See [Set up Google Pay (API)](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup#tokenization-specification) for the full tokenization details.
+
 ## Showing Google Pay alongside card fields
 
 Mount the `GooglePayElement` and `CardElement` (or `PaymentElement`) in the same Elements instance. VINR renders the wallet button only when the device is eligible, so the layout degrades gracefully for customers who cannot use Google Pay.
