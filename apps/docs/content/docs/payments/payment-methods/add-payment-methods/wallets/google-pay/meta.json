@@ -1,12 +1,11 @@
 {
-  "title": "Google Pay",
+  "title": "Google Pay™",
   "pages": [
     "best-practices",
     "authentication-methods",
     "hosted-checkout",
     "payment-links",
     "elements",
-    "android",
     "setup",
     "button-guidelines",
     "dynamic-updates",

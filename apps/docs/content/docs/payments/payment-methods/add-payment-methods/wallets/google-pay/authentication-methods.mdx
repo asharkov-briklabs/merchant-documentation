@@ -2,44 +2,59 @@
 title: Authentication methods
 description: Understand CRYPTOGRAM_3DS and PAN_ONLY credentials, how VINR handles each, and how to configure them per merchant.
 priority: P0
-lastUpdated: "2026-06-29"
+lastUpdated: "2026-07-01"
 ---
 
-Google Pay™ can return two types of payment credential depending on how the customer's card was saved. The type affects SCA compliance liability and whether a 3D Secure step-up is required. VINR handles both; the behaviour is automatic and controlled by your merchant account configuration.
+Google Pay™ can return two types of payment credential depending on how the customer's card was saved, and the type determines both whether a 3D Secure step-up is required and who bears fraud liability. VINR handles both; the behaviour is automatic and controlled by your merchant account configuration.
 
 ## The two credential types
 
-### CRYPTOGRAM_3DS
+Think of the two credential types the same way you would think of a network token versus a raw PAN in any other wallet integration: one credential carries its own proof of device possession and authentication (and therefore its own liability shift), the other is a card number that still needs to go through your normal authentication path before liability shifts.
 
-The customer's card was tokenised onto their device (a DPAN — Device Primary Account Number). When the customer pays, Google generates a one-time cryptographic token tied to that specific transaction.
+### CRYPTOGRAM_3DS — device token, liability shift, no 3DS
+
+The customer's card was tokenised onto their device (a DPAN — Device Primary Account Number). When the customer pays, Google generates a one-time cryptographic token tied to that specific transaction, along with an ECI (Electronic Commerce Indicator) value describing how the token was authenticated.
 
 - The card was identity-verified by the issuer when it was added to the wallet.
 - The transaction carries device-possession proof (biometric or PIN).
 - **Already satisfies SCA.** No additional 3D Secure challenge is needed.
-- **Liability shift applies** from the moment the payment is processed.
+- **Liability shift applies on success** — determined by the ECI value returned with the cryptogram, not assumed unconditionally.
 
-CRYPTOGRAM_3DS transactions flow straight through VINR's authorization pipeline without a 3DS step-up.
+CRYPTOGRAM_3DS transactions flow straight through VINR's authorization pipeline without a 3DS step-up. VINR maps the ECI to an authentication result as follows:
 
-### PAN_ONLY
+| ECI value | Authentication result | Liability shift | Notes |
+|---|---|---|---|
+| `02`, `05` | Fully authenticated (`Y`) | Yes | Strongest outcome — cardholder authenticated |
+| `06`, `01` | Attempted (`A`) | Yes | Authentication was attempted; still eligible per scheme rules |
+| `00`, `07` | Informational only (`I`) | Depends on scheme/exemption | Recorded with a trusted-recurring/risk-based (`TRA`) exemption |
+| Any other value | Not authenticated (`N`) | No | Treat as a standard unauthenticated card transaction |
 
-The customer saved their card to their Google Account (for example, via Chrome autofill) but it was never tokenised onto a device. Google returns the actual card number (a FPAN — Funding Primary Account Number) and expiry.
+<Callout type="warn">
+The ECI is optional in Google's payload for `CRYPTOGRAM_3DS` credentials. If Google omits it, VINR cannot compute a liability outcome for that transaction. This is a known edge case — verify current handling with your VINR contact before relying on liability shift being guaranteed for every `CRYPTOGRAM_3DS` payment.
+</Callout>
+
+### PAN_ONLY — raw card, 3DS applied automatically
+
+The customer saved their card to their Google Account (for example, via Chrome autofill) but it was never tokenised onto a device. Google returns the actual card number (a FPAN — Funding Primary Account Number) and expiry, with no cryptogram and no ECI.
 
 - Functionally equivalent to the customer typing their card number into a form.
 - No cryptogram, no device-possession proof.
 - **Does not satisfy SCA on its own.**
-- **No inherent liability shift** fraud liability stays with the merchant/acquirer unless the transaction is authenticated.
+- **No inherent liability shift** — fraud liability stays with the merchant/acquirer unless the transaction is authenticated.
 
-VINR unconditionally routes PAN_ONLY transactions through its risk and 3D Secure step-up engine, exactly as it would a manually entered card. When 3DS passes, the transaction becomes SCA-compliant and liability-shift eligible. You do not implement this logic it runs on the VINR platform automatically.
+VINR unconditionally routes every PAN_ONLY transaction through its 3D Secure step-up engine, exactly as it would a manually entered card. When 3DS passes, the transaction becomes SCA-compliant and liability shifts to the issuer. You do not implement this logic — it runs on the VINR platform automatically, for every PAN_ONLY transaction, with no merchant-facing setting to skip it.
 
 <Callout type="warn">
-The 3DS step-up on PAN_ONLY is platform-enforced and cannot be disabled, regardless of merchant configuration. A merchant can control which auth methods are offered — not whether VINR's risk checks run.
+The 3DS step-up on PAN_ONLY is platform-enforced and cannot be disabled, regardless of merchant configuration. A merchant can control which auth methods are offered (see [Per-merchant configuration](#per-merchant-configuration)) — not whether VINR's risk checks run on the credentials it receives.
 </Callout>
 
 ## SCA and liability at a glance
 
 | Credential | SCA compliant? | Liability shift? | VINR action |
 |---|---|---|---|
-| CRYPTOGRAM_3DS | Yes | Yes — inherent | Process directly |
+| CRYPTOGRAM_3DS (ECI `02`/`05`/`06`/`01`) | Yes | Yes | Process directly, no 3DS step-up |
+| CRYPTOGRAM_3DS (ECI `00`/`07`) | Partial (risk-exemption based) | Depends on exemption | Process directly, no 3DS step-up |
+| CRYPTOGRAM_3DS (any other ECI, or ECI missing) | No | No | Processed as an unauthenticated transaction — verify this with VINR |
 | PAN_ONLY (without step-up) | No | No | Theoretical only; not a reachable state in production |
 | PAN_ONLY (after VINR 3DS step-up passes) | Yes | Yes | Route through 3DS engine |
 | PAN_ONLY (3DS step-up fails) | No | No | Decline |
@@ -54,7 +69,7 @@ VINR's platform unconditionally routes every PAN_ONLY transaction through the 3D
 
 ## Supported card networks and availability
 
-VINR supports Visa and Mastercard with Google Pay. Both networks support both authentication methods globally — there are no country of settlement restrictions for either credential type.
+VINR supports Visa and Mastercard with Google Pay, and both authentication methods (`PAN_ONLY` and `CRYPTOGRAM_3DS`). Confirm the card networks, authentication methods, and settlement currencies enabled for your account and region with your VINR account manager.
 
 American Express, Discover, and JCB are not supported via Google Pay on VINR. Do not include them in `allowedCardNetworks` — specifying an unsupported network causes token decryption failures at checkout.
 
@@ -88,20 +103,22 @@ Maximises Google Pay availability. Customers whose card is not device-tokenised 
 "allowedAuthMethods": ["CRYPTOGRAM_3DS"]
 ```
 
-Every Google Pay transaction is device authenticated and liability shifted by definition. The Google Pay button will not appear for customers who only have a PAN_ONLY card saved. Those checkouts are lost. Use this configuration for higher-risk merchant categories where the additional assurance outweighs the conversion cost.
+Every Google Pay transaction is device-tokenised, and liability shifts on the ECI values that indicate authentication (see the table above). The Google Pay button will not appear for customers who only have a PAN_ONLY card saved. Those checkouts are lost. Use this configuration for higher-risk merchant categories where the additional assurance outweighs the conversion cost.
 
 </Tab>
 </Tabs>
 
 ## What you see as a developer
 
-From your integration's perspective, both credential types produce the same outcome: an encrypted Google Pay token that you pass to VINR. You never inspect the token or branch on credential type in your code. VINR decrypts, identifies the type, and applies the appropriate handling invisibly.
+From your integration's perspective, both credential types produce the same outcome: an encrypted Google Pay token that you pass to VINR unmodified. You never inspect the token or branch on credential type in your code. VINR decrypts it, identifies the credential type, and applies the appropriate handling invisibly.
 
-The resulting payment object is identical for both types. The `payment_method.card.wallet.type` field is `google_pay` in both cases.
+<Callout type="warn">
+The exact field VINR returns on the payment object / webhook to mark a completed payment as Google Pay (as opposed to a typed-in card) is being confirmed. Verify the response and webhook shape with your VINR contact before building reconciliation or reporting logic that depends on it — see [Disputes and refunds](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/disputes-and-refunds).
+</Callout>
 
-### Handling requires_action
+### Handling the 3D Secure challenge
 
-If a PAN_ONLY transaction triggers a 3DS challenge, the payment will briefly enter `requires_action` status — the same flow as any 3DS-challenged card payment. VINR handles the challenge automatically in the hosted checkout and Elements integrations. In a custom API integration, handle `requires_action` as you would for any card payment. See [Strong Customer Authentication](/docs/payments/strong-customer-authentication) for details.
+If a PAN_ONLY transaction triggers a 3DS step-up, the process response carries `nextAction.type === "challenge"` — the same shape as any 3DS-challenged card payment. VINR handles the challenge automatically in the hosted checkout and Elements integrations. In a custom API integration, handle the challenge the same way you would for any card payment — see [Set up Google Pay](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup#5-handle-the-3d-secure-challenge-if-required) and [Strong Customer Authentication](/docs/payments/strong-customer-authentication) for details.
 
 ## See also
 

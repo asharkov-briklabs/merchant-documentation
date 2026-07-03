@@ -2,7 +2,7 @@
 title: Google Pay™ with Elements
 description: Add a Google Pay button to your custom Elements-based checkout with minimal setup.
 priority: P0
-lastUpdated: "2026-06-30"
+lastUpdated: "2026-07-01"
 ---
 
 <Callout type="warn">
@@ -15,7 +15,7 @@ VINR Elements is the component library for building a custom checkout UI inside 
 
 - Google Pay enabled on your VINR merchant account (**Settings → Payment methods**).
 - VINR Elements loaded on your page.
-- Acceptance of Google's terms: using Google Pay requires agreement to the [Google Pay API Terms of Service](https://payments.developers.google.com/terms/sellertos) and compliance with the [Google Pay API Acceptable Use Policy](https://payments.developers.google.com/terms/aup).
+- Acceptance of Google's terms: to use Google Pay you **must** accept the [Google Pay API Terms of Service](https://payments.developers.google.com/terms/sellertos) and **must** comply with the [Google Pay API Acceptable Use Policy](https://payments.developers.google.com/terms/aup).
 
 ## Integration
 
@@ -71,14 +71,17 @@ googlePayElement.on('completed', async (event) => {
 
 VINR handles all 3DS challenges and the PAN_ONLY step-up automatically. If a challenge is required, the customer completes it in a modal managed by VINR Elements before the redirect fires.
 
-The `GooglePayElement` sets Google Pay's `tokenizationSpecification` internally. These values are not configurable through the element:
+The `GooglePayElement` sets Google Pay's `tokenizationSpecification` and billing address requirements internally. These values are not configurable through the element:
 
 | Property | Value |
 |---|---|
 | `gateway` | `vinrpay` |
 | `gatewayMerchantId` | your VINR account ID |
+| `billingAddressRequired` | `true` |
+| `billingAddressParameters.format` | `FULL` |
+| `billingAddressParameters.phoneNumberRequired` | `true` |
 
-See [Set up Google Pay (API)](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup#tokenization-specification) for the full tokenization details.
+See [Set up Google Pay (API)](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup#tokenization-specification) for the full tokenization details and [billing address](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup#billing-address) requirements.
 
 ## Showing Google Pay alongside card fields
 
@@ -97,9 +100,27 @@ googlePayElement.mount('#google-pay-button');
 Place the Google Pay button on visual parity with your card input — not smaller or hidden. Google's brand guidelines require wallet buttons to receive equal prominence with other payment methods.
 </Callout>
 
+## Content Security Policy
+
+Every VINR Element — including the `GooglePayElement` — renders inside an `<iframe>` served from VINR's domain, not yours. If your page sends a `Content-Security-Policy` header, the browser blocks that iframe unless you explicitly allow it.
+
+- Add the VINR Elements iframe origin (the `secureFormsUrl` value provided to you during onboarding) to your `frame-src` directive (and `child-src`, for older browsers):
+
+  ```
+  frame-src 'self' https://elements.vinr.com;
+  child-src 'self' https://elements.vinr.com;
+  ```
+
+- `@vinr/elements` is an npm package that you bundle into your own JavaScript — it is not loaded from a remote `<script>` tag, so it does not require a `script-src` allowance.
+- Data moves between your page and the iframe over `postMessage`, not `fetch`/`XHR`, so the Google Pay handshake itself does not require a `connect-src` change.
+
+<Callout type="warn">
+The exact iframe origin differs between VINR's sandbox and production environments and is assigned to you during onboarding. Confirm the correct value with your VINR contact before updating your CSP — do not guess or hardcode a domain.
+</Callout>
+
 ## Testing
 
-Set the `environment` to `TEST` by using your VINR sandbox publishable key. In test mode VINR passes `TEST` to the Google Pay client internally no configuration change is needed.
+Point your integration at your VINR **sandbox** account. In test mode, VINR passes `TEST` to the Google Pay client internally — no Google Pay environment configuration is needed on your side.
 
 See [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live) for the test card reference covering both `CRYPTOGRAM_3DS` and `PAN_ONLY` scenarios.
 

@@ -14,7 +14,7 @@ This page covers the direct API integration using the Google Pay JavaScript API 
 | VINR Elements | [Google Pay with Elements](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/elements) — minimal setup |
 
 <Callout type="info">
-Using Google Pay requires acceptance of the [Google Pay API Terms of Service](https://payments.developers.google.com/terms/sellertos) and compliance with the [Google Pay API Acceptable Use Policy](https://payments.developers.google.com/terms/aup). See also the [Google Pay Web developer documentation](https://developers.google.com/pay/api/web/overview), [Web integration checklist](https://developers.google.com/pay/api/web/guides/test-and-deploy/integration-checklist), and [Web Brand Guidelines](https://developers.google.com/pay/api/web/guides/brand-guidelines).
+To use Google Pay, you **must** accept the [Google Pay API Terms of Service](https://payments.developers.google.com/terms/sellertos) and **must** comply with the [Google Pay API Acceptable Use Policy](https://payments.developers.google.com/terms/aup). See also the [Google Pay Web developer documentation](https://developers.google.com/pay/api/web/overview), [Web integration checklist](https://developers.google.com/pay/api/web/guides/test-and-deploy/integration-checklist), and [Web Brand Guidelines](https://developers.google.com/pay/api/web/guides/brand-guidelines).
 </Callout>
 
 ## Enable Google Pay in the Dashboard
@@ -91,7 +91,7 @@ tokenizationSpecification: {
 ```
 
 <Callout type="warn">
-Do not confuse `gatewayMerchantId` with `merchantInfo.merchantId`. `gatewayMerchantId` is your VINR account ID (assigned by VINR). `merchantInfo.merchantId` is your Google-assigned merchant ID from the [Google Pay & Wallet Console](https://pay.google.com/business/console), required only in the `PRODUCTION` environment. Mixing up these two values is the most common cause of `invalid_token` errors in production — see the [Go-live checklist](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/go-live-checklist).
+Do not confuse `gatewayMerchantId` with `merchantInfo.merchantId`. `gatewayMerchantId` is your VINR account ID (assigned by VINR). `merchantInfo.merchantId` is your Google-assigned merchant ID — VINR provisions this for you during onboarding and you'll find it in the VINR Dashboard; it is required only in the `PRODUCTION` environment. Mixing up these two values is the most common cause of `invalid_token` errors in production — see the [Go-live checklist](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/go-live-checklist).
 </Callout>
 
 ### 2. Check readiness and render the button
@@ -196,7 +196,13 @@ curl --request POST \
 
 ### 5. Handle the 3D Secure challenge (if required)
 
-If the process response contains `nextAction.type === "challenge"`, a 3D Secure step-up is required. This is expected for `PAN_ONLY` credentials — VINR routes them through its 3DS engine automatically (see [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods)). After the shopper completes the challenge, confirm the payment with the `threeDSServerTransID` returned in `nextAction`:
+If the process response contains `nextAction.type === "challenge"`, a 3D Secure step-up is required. This is expected for `PAN_ONLY` credentials — VINR routes them through its 3DS engine automatically (see [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods)).
+
+<Callout type="warn">
+When the shopper completes the challenge, the card issuer's ACS redirects their browser back to a VINR-hosted page — not a URL on your own domain. If you are integrating directly against the Google Pay API on your own checkout page (rather than using VINR's hosted checkout or Elements), you cannot currently host your own challenge-completion page or receive this redirect on your domain. Contact your VINR account manager before relying on this flow for a fully custom integration.
+</Callout>
+
+Once the challenge completes, confirm the payment with the `threeDSServerTransID` returned in `nextAction`:
 
 ```bash
 curl --request POST \
@@ -212,7 +218,7 @@ Always confirm the final payment state from the `payment.completed` webhook on y
 
 ## Billing address
 
-VINR's hosted checkout requests a **full** billing address (with phone number) and the customer's email, and we recommend you do the same so you can supply complete billing details when you submit the payment. Set `billingAddressRequired: true` with `format: 'FULL'` on the card parameters, and `emailRequired: true` at the top level of the request:
+VINR's hosted checkout requests a **full** billing address (with phone number) and the customer's email, and we recommend you do the same so you can supply complete billing details when you submit the payment. Set `billingAddressRequired: true` with `format: 'FULL'` on the card parameters, and `emailRequired: true` at the top level of the request. For more details, see Google's [`BillingAddressParameters` reference](https://developers.google.com/pay/api/web/reference/request-objects#BillingAddressParameters):
 
 ```javascript
 const paymentDataRequest = {

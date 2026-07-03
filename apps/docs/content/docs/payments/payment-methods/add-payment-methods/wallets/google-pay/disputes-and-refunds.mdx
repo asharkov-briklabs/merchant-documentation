@@ -1,17 +1,19 @@
 ---
 title: Disputes and refunds
-description: Liability shift, chargeback handling, and refunds for Google Pay payments.
+description: Liability shift, chargeback handling, and refunds for Google Pay™ payments.
 priority: P1
-lastUpdated: "2026-06-29"
+lastUpdated: "2026-07-01"
 ---
 
 ## Liability shift and fraud protection
 
-The fraud liability outcome of a Google Pay™ transaction depends on the credential type. CRYPTOGRAM_3DS payments carry inherent liability shift from the moment they are processed. PAN_ONLY payments gain liability shift only if VINR's 3D Secure step-up passes.
+The fraud liability outcome of a Google Pay™ transaction depends on the credential type. CRYPTOGRAM_3DS payments carry liability shift when the ECI (Electronic Commerce Indicator) returned with the cryptogram indicates the cardholder was authenticated. PAN_ONLY payments gain liability shift only if VINR's 3D Secure step-up passes. See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) for the full ECI-to-liability mapping.
 
 | Credential | SCA compliant? | Fraud liability |
 |---|---|---|
-| CRYPTOGRAM_3DS | Yes — device-authenticated | Issuer bears fraud liability |
+| CRYPTOGRAM_3DS — ECI `02`/`05`/`06`/`01` | Yes | Issuer bears fraud liability |
+| CRYPTOGRAM_3DS — ECI `00`/`07` | Partial (risk-exemption based) | Depends on exemption — verify with VINR |
+| CRYPTOGRAM_3DS — any other ECI, or ECI missing | No | Merchant/acquirer bears fraud liability |
 | PAN_ONLY — 3DS step-up passes | Yes | Issuer bears fraud liability |
 | PAN_ONLY — 3DS step-up fails | N/A | Not applicable — VINR declines; payment never completes |
 
@@ -23,24 +25,17 @@ Liability shift covers fraud chargebacks. It does not remove a dispute from card
 
 Google Pay payments are card payments on the VINR platform. If a customer disputes a transaction through their bank, VINR creates a `dispute` object and the standard dispute lifecycle applies — evidence submission, deadlines, outcomes, and fees all work the same as for any card payment. See [Disputes](/docs/payments/payment-operations/disputes) for the full lifecycle, how to submit evidence, and how to keep your dispute rate low.
 
-To identify a Google Pay payment in a dispute:
-
-```json
-{
-  "payment_method": {
-    "type": "card",
-    "card": {
-      "wallet": {
-        "type": "google_pay"
-      }
-    }
-  }
-}
-```
+<Callout type="warn">
+The exact field VINR returns on the payment object, dispute object, or webhook to identify a payment as Google Pay (as opposed to a typed-in card) is being confirmed. Do not assume a specific field shape (for example, a `card.wallet.type` value) — verify the real response and webhook structure with your VINR contact before building reconciliation, reporting, or evidence-gathering logic that depends on it.
+</Callout>
 
 ### Evidence strategy by credential type
 
-The credential type affects the strength of evidence you can provide for "fraudulent" or "unrecognized" disputes:
+The credential type affects the strength of evidence you can provide for fraud-related disputes:
+
+<Callout type="warn">
+The dispute-reason labels below are illustrative categories, not VINR's exact reason codes. Confirm the real dispute-reason values VINR returns before mapping them in your systems.
+</Callout>
 
 - **CRYPTOGRAM_3DS** — the one-time cryptogram and device authentication are strong counter-evidence for fraud claims. The cardholder actively authenticated on their device using biometrics or a PIN.
 - **PAN_ONLY after 3DS step-up** — the 3DS authentication record provides liability shift and is valid counter-evidence. Include the authentication reference in your dispute evidence bundle.
@@ -67,7 +62,7 @@ Refunding a payment that is already disputed does not resolve the dispute and ca
 ## Preventing disputes
 
 - **Clear billing descriptors** — set a recognizable statement descriptor so customers identify the charge. "Unrecognized" is the most preventable dispute type.
-- **3D Secure** — VINR routes PAN_ONLY transactions through 3DS automatically and CRYPTOGRAM_3DS is pre-authenticated. Both credential paths provide SCA compliance and dispute protection when authentication succeeds.
+- **3D Secure** — VINR routes PAN_ONLY transactions through 3DS automatically, and CRYPTOGRAM_3DS carries its own device authentication. Both credential paths provide SCA compliance and dispute protection when authentication succeeds — see [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) for when CRYPTOGRAM_3DS liability shift does and doesn't apply.
 - **Prompt fulfillment and tracking** — keep shipping and delivery data on hand to rebut "product not received" claims.
 - **Easy cancellation for subscriptions** — cancellation friction is the primary driver of `subscription_canceled` disputes.
 

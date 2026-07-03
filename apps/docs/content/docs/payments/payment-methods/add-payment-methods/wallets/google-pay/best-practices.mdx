@@ -1,8 +1,8 @@
 ---
 title: Best practices
-description: Improve conversion and maintain your Google Pay integration.
+description: Improve conversion and maintain your Google Pay™ integration.
 priority: P1
-lastUpdated: "2026-06-29"
+lastUpdated: "2026-07-01"
 ---
 
 ## Show the button where it has impact
@@ -12,23 +12,31 @@ Add the Google Pay™ button to product detail pages, cart pages, and search res
 - Show the button only after the customer has selected all required product options (size, colour, quantity). Never show it in a disabled state, hide it until the action is ready.
 - If you already show an express checkout button, replace or accompany it with Google Pay rather than adding a confusingly similar control next to it.
 
-<Callout type="warning">
+<Callout type="warn">
 Do not gate the Google Pay button behind a sign-in wall or require account creation before checkout.
 </Callout>
 
+## Check eligibility before rendering the button
+
+Always call `isReadyToPay()` and wait for the result before you add the Google Pay button to the page. Never render a disabled or greyed-out button while the check is pending, and never show the button to a customer whose browser or account doesn't support Google Pay — hide it entirely instead.
+
+- If `isReadyToPay()` returns `true`, render the button and consider surfacing it prominently — see below.
+- If it returns `false`, fall back to your standard card form. Do not show the Google Pay button in any state.
+- **Hosted Checkout, Payment Links, and Elements** run this check for you automatically; the button only ever appears when eligible. A custom API integration must call `isReadyToPay()` itself — see [Check eligibility before rendering the button](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay#check-eligibility-before-rendering-the-button) in the overview.
+
 ## Give Google Pay visual parity
 
-<Callout type="warning">
+<Callout type="warn">
 Google's brand guidelines require the Google Pay button to receive equal visual prominence with other third-party payment methods — not smaller, not positioned lower on screen than Apple Pay or other wallet buttons.
 </Callout>
 
-VINR's Elements renders all available wallet buttons at equal size automatically. If you build a custom layout, apply the same dimensions and vertical positioning to each wallet button. See [Button guidelines](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/button-guidelines) for sizing minimums.
+VINR's Elements renders all available wallet buttons at equal size automatically. If you build a custom layout, apply the same dimensions and vertical positioning to each wallet button. Use the Google Pay JS API's `createButton()` (or VINR's pre-built button component) rather than a custom image — it returns a pre-styled, brand-compliant button automatically. See [Button guidelines](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/button-guidelines) for sizing minimums.
 
 ## Default to Google Pay for eligible sessions
 
-If `isReadyToPay()` returns `true`, pre-select or surface Google Pay prominently. Customers who have a Google Pay-eligible card enrolled convert at a higher rate when Google Pay is the default option. If it returns `false`, fall back to your standard card form — do not show the Google Pay button.
+Once `isReadyToPay()` has confirmed eligibility, surface Google Pay prominently rather than tucking it behind other options. Customers who have a Google Pay-eligible card enrolled convert at a higher rate when Google Pay is offered as a default option alongside — not below — your standard card form.
 
-For returning customers who previously completed a Google Pay payment, default to Google Pay in the payment method selector on their next checkout. Elements does this automatically across wallets, no explicit defaulting logic is needed when using VINR's hosted products.
+For returning customers who previously completed a Google Pay payment, default to Google Pay in the payment method selector on their next checkout. Elements does this automatically across wallets — no explicit defaulting logic is needed when using VINR's hosted products.
 
 ## Remove pre-checkout friction
 
@@ -38,12 +46,12 @@ For returning customers who previously completed a Google Pay payment, default t
 
 ## Handle both credential types gracefully
 
-`PAN_ONLY` transactions trigger VINR's 3DS step-up, which briefly moves the payment into `requires_action`. Your integration must handle this state smoothly:
+`PAN_ONLY` transactions trigger VINR's 3DS step-up, which returns `nextAction.type === "challenge"` on the process response. Your integration must handle this smoothly:
 
 - **Elements and hosted checkout** — handled automatically; no code needed.
-- **Direct API integration** — handle `requires_action` as you would for any 3DS-challenged card payment.
+- **Direct API integration** — handle the challenge the same way you would for any 3DS-challenged card payment. See [Set up Google Pay](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup#5-handle-the-3d-secure-challenge-if-required).
 
-Test both `CRYPTOGRAM_3DS` and `PAN_ONLY` scenarios before going live. See [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live) for the test card reference covering both types.
+Test both `CRYPTOGRAM_3DS` and `PAN_ONLY` scenarios in the sandbox before going live — in `TEST` mode `isReadyToPay` returns `true` regardless of enrolled cards, so you don't need a real device to exercise both paths. See [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live) for the test card reference covering both types.
 
 ## Keep your account configuration current
 

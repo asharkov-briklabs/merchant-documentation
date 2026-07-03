@@ -1,136 +1,41 @@
 ---
 title: Dynamic checkout updates
-description: Update totals, shipping options, and offers in real time while the Google Pay payment sheet is open.
+description: Real-time price, shipping, and offer updates inside the Google Pay™ payment sheet are not currently supported by VINR.
 priority: P1
-lastUpdated: "2026-06-29"
+lastUpdated: "2026-07-01"
 ---
 
-Google Pay™'s `paymentDataCallbacks` let you recalculate the order total shipping options and line items while the payment sheet is open before the customer authenticates. This applies to direct API integrations. Elements and hosted checkout handle supported recalculations automatically.
-
 <Callout type="warn">
-**Callback contract.** Every callback must resolve — return a result or throw — before the customer can proceed. A callback that never returns freezes the payment sheet indefinitely. Add timeouts to any network calls inside callbacks and always return a result, even on error.
+**Dynamic price and shipping updates are not currently supported.** Google Pay™'s `onPaymentDataChanged` callback — used with the `SHIPPING_ADDRESS`, `SHIPPING_OPTION`, and `OFFER` `callbackIntents` for real-time shipping cost, tax, or promo-code recalculation inside the Google Pay sheet — is **not implemented** in VINR's Google Pay integration. Do not configure `onPaymentDataChanged` expecting VINR to process it. (VINR does use the separate `onPaymentAuthorized` callback internally to acknowledge the payment result before the sheet closes — that is handled for you and requires no configuration; see [VINR's current behavior](#vinrs-current-behavior).) If in-sheet recalculation is a requirement for your integration, contact your VINR account manager before you build against it.
 </Callout>
 
-## Set up callbacks
+## What this feature normally does
 
-Declare `paymentDataCallbacks` in the `PaymentsClient` constructor and add `callbackIntents` to your `paymentDataRequest`. Every intent you declare must have a corresponding handler declaring an intent without a handler causes the sheet to stall.
+Google's Google Pay API supports registering callbacks in `PaymentsClient` so a merchant can recalculate the order total, shipping options, or applied offers while the payment sheet is still open — before the customer authenticates. This is documented by Google as three related capabilities:
 
-```javascript
-const googlePayClient = new google.payments.api.PaymentsClient({
-  environment: 'PRODUCTION',
-  paymentDataCallbacks: {
-    onPaymentDataChanged: onPaymentDataChanged,
-  },
-});
+- **Authorize Payments** (`onPaymentAuthorized`) — acknowledge authorization status before the sheet closes. *(VINR uses this one internally — it is not something you configure. The two below are the ones that are not supported.)*
+- **Dynamic price updates** (`onPaymentDataChanged` with `SHIPPING_ADDRESS` / `SHIPPING_OPTION`) — recompute totals as the customer picks a shipping address or option.
+- **Promo codes / offers** (`onPaymentDataChanged` with `OFFER`) — validate a redemption code and adjust the total.
 
-const paymentDataRequest = {
-  apiVersion: 2,
-  apiVersionMinor: 0,
-  callbackIntents: ['SHIPPING_ADDRESS', 'SHIPPING_OPTION'],
-  shippingAddressRequired: true,
-  shippingAddressParameters: {
-    phoneNumberRequired: false,
-  },
-  shippingOptionRequired: true,
-  // ...allowedPaymentMethods, merchantInfo, transactionInfo
-};
-```
+See Google's own [Web integration tutorial](https://developers.google.com/pay/api/web/guides/tutorial) for the full mechanics of these callbacks (`paymentDataCallbacks`, `callbackIntents`, `PaymentDataRequestUpdate`, `PaymentDataError`).
 
-## Shipping address change
+## VINR's current behavior
 
-`onPaymentDataChanged` fires with `callbackTrigger: 'SHIPPING_ADDRESS'` when the customer selects or changes their address. Google provides a **redacted** address postal code administrative area locality and country only. Use this to compute shipping cost and tax without the full address.
+VINR's Google Pay integration uses a fixed-total flow: the payment sheet is configured with a final `transactionInfo.totalPrice`, the customer authenticates, and the resulting encrypted token is submitted to VINR. VINR **does** register `onPaymentAuthorized` internally (in Hosted Checkout and Payment Links) to acknowledge the authorization result before the sheet closes — this is handled for you and needs no configuration. VINR does **not** register `onPaymentDataChanged`, so real-time price, shipping, and offer recalculation inside the sheet is not available, and the hosted surfaces do not expose `callbackIntents` for you to configure.
 
-```javascript
-async function onPaymentDataChanged(intermediatePaymentData) {
-  const { callbackTrigger, shippingAddress } = intermediatePaymentData;
+Practical implications:
 
-  if (callbackTrigger === 'INITIALIZE' || callbackTrigger === 'SHIPPING_ADDRESS') {
-    const shippingOptions = await fetchShippingOptions(shippingAddress);
+- **Show the final price before the sheet opens.** Resolve shipping cost, tax, and any discounts in your own checkout UI first, and pass the confirmed total into the Google Pay request. Do not rely on the payment sheet to recalculate the total for you.
+- **Shipping selection happens outside the Google Pay sheet.** Collect the shipping method the same way you would for a card payment, before the customer taps the Google Pay button.
 
-    if (shippingOptions.length === 0) {
-      return {
-        error: {
-          reason: 'SHIPPING_ADDRESS_UNSERVICEABLE',
-          message: "We don't deliver to this address.",
-          intent: 'SHIPPING_ADDRESS',
-        },
-      };
-    }
+## If you need this
 
-    return {
-      newShippingOptionParameters: {
-        defaultSelectedOptionId: shippingOptions[0].id,
-        shippingOptions,
-      },
-      newTransactionInfo: calculateTotal(shippingOptions[0]),
-    };
-  }
-
-  return {};
-}
-```
-
-The `INITIALIZE` trigger fires when the sheet first opens. Handle it the same as `SHIPPING_ADDRESS` to pre-populate shipping options immediately.
-
-## Shipping option change
-
-`callbackTrigger: 'SHIPPING_OPTION'` fires when the customer switches between shipping tiers. Return an updated `transactionInfo` reflecting the new cost.
-
-```javascript
-if (callbackTrigger === 'SHIPPING_OPTION') {
-  const { shippingOptionData } = intermediatePaymentData;
-
-  return {
-    newTransactionInfo: calculateTotal(shippingOptionData),
-  };
-}
-```
-
-## Returning errors to the sheet
-
-Return an `error` object to display an inline message and block the customer from proceeding with an unserviceable selection.
-
-```javascript
-return {
-  error: {
-    reason: 'SHIPPING_ADDRESS_UNSERVICEABLE',
-    message: "We don't deliver to this country.",
-    intent: 'SHIPPING_ADDRESS',
-  },
-};
-```
-
-| Error reason | When to use |
-|---|---|
-| `SHIPPING_ADDRESS_UNSERVICEABLE` | Address is outside your delivery area |
-| `SHIPPING_OPTION_INVALID` | Selected shipping option is no longer available |
-| `OFFER_INVALID` | Applied offer code is invalid or expired |
-| `PAYMENT_DATA_INVALID` | Generic — use only when no more specific reason applies |
-
-## transactionInfo format reference
-
-Return updated `transactionInfo` in any callback that changes the total. `displayItems` are optional but recommended — they appear as an itemized breakdown in the sheet.
-
-```javascript
-const transactionInfo = {
-  totalPriceStatus: 'FINAL',      // 'FINAL' | 'ESTIMATED'
-  totalPrice: '45.00',            // string, decimal format
-  currencyCode: 'EUR',
-  countryCode: 'BG',
-  displayItems: [
-    { label: 'Subtotal', type: 'SUBTOTAL', price: '38.00' },
-    { label: 'Shipping', type: 'LINE_ITEM', price: '5.00'  },
-    { label: 'Tax',      type: 'TAX',       price: '2.00'  },
-  ],
-};
-```
-
-Use `totalPriceStatus: 'ESTIMATED'` while shipping or tax is not yet resolved — for example, before the customer selects an address. Switch to `'FINAL'` once all amounts are confirmed. The `totalPriceStatus` at the time the customer authenticates determines what is charged.
+If your business requires in-sheet recalculation (for example, address-dependent shipping tiers or promo codes redeemed at the moment of payment), contact your VINR account manager to discuss options. Do not implement Google's callback intents against a VINR Direct API integration and assume the resulting token will be handled correctly — this path is unconfirmed and untested with VINR's backend.
 
 ## See also
 
 <Cards>
-  <Card title="Set up Google Pay (API)" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup" description="The base integration that dynamic updates build on." />
-  <Card title="Go-live checklist" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/go-live-checklist" description="Callback compliance is a go-live checklist item." />
+  <Card title="Set up Google Pay (API)" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup" description="The supported integration: a fixed final total resolved before the payment sheet opens." />
+  <Card title="Go-live checklist" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/go-live-checklist" description="Verify your integration before accepting live payments." />
   <Card title="Google Pay overview" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay" description="Integration paths and credential type overview." />
 </Cards>
