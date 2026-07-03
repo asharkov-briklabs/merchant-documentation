@@ -1,11 +1,11 @@
 ---
-title: Google Pay in hosted checkout
+title: Google Pay™ in hosted checkout
 description: Google Pay works automatically in VINR's hosted checkout — no additional code required.
 priority: P0
-lastUpdated: "2026-06-30"
+lastUpdated: "2026-07-01"
 ---
 
-When Google Pay is enabled on your VINR merchant account it appears automatically in the VINR hosted checkout for every eligible browser and device. You do not write any Google Pay specific code VINR renders the button handles the payment sheet interaction processes the token and runs 3D Secure where needed.
+When Google Pay is enabled on your VINR merchant account, it appears automatically in VINR's hosted checkout for every eligible browser and device. You do not write any Google Pay-specific code — VINR renders the button, handles the payment sheet interaction, processes the token, and runs 3D Secure where needed.
 
 ## How it works
 
@@ -25,8 +25,20 @@ All authentication method handling — including the unconditional 3DS step-up f
 
 That's all that's required for hosted checkout. Google Pay will appear at checkout for eligible customers immediately.
 
+VINR sets Google Pay's `tokenizationSpecification` and billing address requirements for you. Unlike some Google Pay integrations, these values cannot be overridden — hosted checkout does not accept merchant-supplied configuration for them:
+
+| Property | Value |
+|---|---|
+| `gateway` | `vinrpay` |
+| `gatewayMerchantId` | your VINR account ID |
+| `billingAddressRequired` | `true` |
+| `billingAddressParameters.format` | `FULL` |
+| `billingAddressParameters.phoneNumberRequired` | `true` |
+
+See [Set up Google Pay (API)](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup#tokenization-specification) for the full tokenization details and [billing address](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup#billing-address) requirements.
+
 <Callout type="info">
-By using Google Pay through VINR's hosted checkout, you agree to the [Google Pay API Terms of Service](https://payments.developers.google.com/terms/sellertos) and must comply with the [Google Pay API Acceptable Use Policy](https://payments.developers.google.com/terms/aup). These apply to all merchants using Google Pay, regardless of integration path.
+When you use Google Pay through VINR's hosted checkout, you **must** accept the [Google Pay API Terms of Service](https://payments.developers.google.com/terms/sellertos) and **must** comply with the [Google Pay API Acceptable Use Policy](https://payments.developers.google.com/terms/aup). These apply to all merchants using Google Pay, regardless of integration path.
 </Callout>
 
 <Callout type="info">
@@ -35,20 +47,11 @@ VINR handles Google merchant registration on your behalf. Contact your VINR acco
 
 ## Verifying the payment
 
-The payment object produced by a Google Pay hosted checkout session is identical in structure to any other card payment. Identify it by:
+The payment object produced by a Google Pay hosted checkout session settles like any other card payment.
 
-```json
-{
-  "payment_method": {
-    "type": "card",
-    "card": {
-      "wallet": {
-        "type": "google_pay"
-      }
-    }
-  }
-}
-```
+<Callout type="warn">
+**Identifying a Google Pay payment in the response / webhook:** the exact field VINR returns to mark a completed payment as Google Pay is being confirmed. Verify the payment-object / webhook shape with your VINR contact before building reconciliation or reporting logic on it.
+</Callout>
 
 Listen for the `payment.completed` webhook to fulfil the order. Do not rely on the redirect alone — the browser may close before it fires.
 
@@ -56,6 +59,7 @@ Listen for the `payment.completed` webhook to fulfil the order. Do not rely on t
 
 <Cards>
   <Card title="Authentication methods" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods" description="CRYPTOGRAM_3DS vs PAN_ONLY: security, SCA, and per-merchant configuration." />
+  <Card title="Set up Google Pay (API)" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup" description="Direct API integration and the full tokenization specification reference." />
   <Card title="Test & go live" href="/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live" description="Test Google Pay in the sandbox before switching to production." />
   <Card title="How Checkout works" href="/docs/payments/payment-page/how-checkout-works" description="Sessions, states, and the payment lifecycle through VINR hosted checkout." />
 </Cards>

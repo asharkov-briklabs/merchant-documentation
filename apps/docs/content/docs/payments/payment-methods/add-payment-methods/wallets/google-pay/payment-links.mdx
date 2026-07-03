@@ -1,18 +1,22 @@
 ---
-title: Google Pay in payment links
-description: Google Pay™ is available automatically in VINR payment links when enabled on your account.
+title: Google Pay™ in payment links
+description: Google Pay can appear in VINR payment links when enabled on your account — subject to a known platform limitation.
 priority: P1
-lastUpdated: "2026-06-29"
+lastUpdated: "2026-07-01"
 ---
 
-Payment links use the same VINR hosted checkout as a full checkout session. When Google Pay is enabled on your merchant account it appears automatically in every payment link for eligible browsers and devices no code changes are required.
+Payment links use the same VINR hosted checkout as a full checkout session. When Google Pay is enabled on your merchant account it can appear in a payment link for eligible browsers and devices, with no code changes required.
+
+<Callout type="warn">
+**Known limitation:** some payment links do not currently expose Google Pay even when it is enabled on your account and the customer's device is eligible. This depends on how the link's checkout configuration is resolved internally and is a known platform gap VINR is addressing — it is not something you can configure or work around from your side. Do not assume Google Pay will always appear on every payment link; verify it on your specific links before relying on it, and contact your VINR account manager if you need it guaranteed for a given link.
+</Callout>
 
 ## How it works
 
-A payment link opens a hosted checkout page. VINR checks `isReadyToPay` against your merchant account configuration and shows the Google Pay button if the customer's device is eligible. The entire token exchange 3D Secure handling and authorization run on the VINR platform your link requires no Google Pay specific configuration. Credential types (`CRYPTOGRAM_3DS`, `PAN_ONLY`, or both) are set at the account level and apply to all payment links — you cannot configure auth methods per link.
+A payment link opens a hosted checkout page. VINR checks `isReadyToPay` against your merchant account configuration and shows the Google Pay button if the customer's device is eligible and the link's configuration exposes Google Pay (see the limitation above). The entire token exchange, 3D Secure handling, and authorization run on the VINR platform — your link requires no Google Pay-specific configuration. Credential types (`CRYPTOGRAM_3DS`, `PAN_ONLY`, or both) are set at the account level and apply to all payment links — you cannot configure auth methods per link.
 
 ```
-customer opens link → VINR hosted checkout → Google Pay button (if eligible) → payment.completed webhook
+customer opens link → VINR hosted checkout → Google Pay button (if eligible and exposed on this link) → payment.completed webhook
 ```
 
 ## Enable Google Pay
@@ -23,12 +27,16 @@ Enable Google Pay once in the Dashboard and it applies to all your payment links
 2. Toggle **Google Pay** to enabled.
 
 <Callout type="info">
+When you use Google Pay through VINR payment links, you **must** accept the [Google Pay API Terms of Service](https://payments.developers.google.com/terms/sellertos) and **must** comply with the [Google Pay API Acceptable Use Policy](https://payments.developers.google.com/terms/aup). These apply to all merchants using Google Pay, regardless of integration path.
+</Callout>
+
+<Callout type="info">
 VINR handles Google merchant registration on your behalf. Contact your VINR account manager to confirm your account is approved for live payments before going live.
 </Callout>
 
 ## Reusable vs one-time links
 
-Google Pay works identically in both link types. Each time a customer pays via a reusable link a fresh payment is created and the Google Pay flow runs from scratch. There is no stored token or recurring authorization each payment is a new customer-present transaction.
+Google Pay works identically in both link types, where available (see the known limitation above). Each time a customer pays via a reusable link, a fresh payment is created and the Google Pay flow runs from scratch. There is no stored token or recurring authorization — each payment is a new customer-present transaction.
 
 ## Testing
 
@@ -39,7 +47,7 @@ To test Google Pay in a payment link:
 3. Complete a payment using the Google Pay test card sheet.
 4. Verify that `payment.completed` fires on your webhook endpoint.
 
-Test both credential scenarios if your account has both enabled — see [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live) for the full test card reference.
+Test both credential scenarios if your account has both enabled — see [Test & go live](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/test-and-go-live) for the full test card reference. If the Google Pay button doesn't appear on a specific sandbox link even though your device and account are eligible, this may be the known limitation described above rather than a configuration error on your end.
 
 ## See also
 

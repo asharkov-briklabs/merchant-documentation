@@ -2,14 +2,14 @@
 title: Test & go live
 description: Test both Google Pay™ credential types in the sandbox before switching to production.
 priority: P1
-lastUpdated: "2026-06-29"
+lastUpdated: "2026-07-01"
 ---
 
-Google Pay has two environments — `TEST` for development and `PRODUCTION` for live payments. Contact your VINR account manager to confirm your account is approved before switching to production.
+Google Pay™ has two environments — `TEST` for development and `PRODUCTION` for live payments. Contact your VINR account manager to confirm your account is approved before switching to production.
 
 ## Testing in the TEST environment
 
-In the VINR sandbox, Google Pay tokens are processed as `TEST` environment tokens automatically. For a direct API integration, set `environment: 'TEST'` in the `PaymentsClient` constructor. Elements and hosted checkout set this automatically when you use a sandbox publishable key.
+In the VINR sandbox, Google Pay tokens are processed as `TEST` environment tokens automatically. For a direct API integration, set `environment: 'TEST'` in the `PaymentsClient` constructor. Elements and hosted checkout set this automatically whenever you are working in a VINR sandbox account — no separate Google Pay configuration is needed.
 
 In `TEST` mode:
 
@@ -45,7 +45,7 @@ Use a test card configured as a PAN_ONLY credential (card saved to Google Accoun
 | Declined by issuer | Payment fails with a decline code |
 | Customer cancels | Sheet dismissed; checkout recovers |
 
-VINR's 3DS step-up on PAN_ONLY is automatic. You do not implement or trigger it — verify only that your UI handles the `requires_action` → `succeeded` transition (Elements and hosted checkout manage this for you; custom API integrations must handle `requires_action` the same way as any card payment).
+VINR's 3DS step-up on PAN_ONLY is automatic. You do not implement or trigger it — verify only that your integration handles the `nextAction.type === "challenge"` step-up and confirms the payment (Elements and hosted checkout manage this for you; custom API integrations must complete the 3DS challenge the same way as any card payment).
 
 <Callout type="info">
 You do not need any separate VINR Dashboard configuration for sandbox testing. The VINR sandbox accepts Google Pay `TEST` tokens out of the box.
@@ -55,15 +55,15 @@ You do not need any separate VINR Dashboard configuration for sandbox testing. T
 
 Once you've finished testing, work through the [Go-live checklist](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/go-live-checklist) before switching to `PRODUCTION`. It covers account confirmation, auth method confirmation, environment switch, button compliance, checkout experience requirements, error handling, and webhook setup.
 
-**Direct API integrations only:** Google requires you to [publish your integration](https://developers.google.com/pay/api/web/guides/test-and-deploy/deploy-your-integration) via the Google Pay & Wallet Console before you can accept live payments. This is separate from VINR account approval — both are required. Hosted checkout, Elements, and payment link integrations are exempt; VINR's existing merchant registration covers them.
+**Direct API integrations only:** Google requires you to [request production access](https://developers.google.com/pay/api/web/guides/test-and-deploy/request-prod-access) via the [Google Pay & Wallet Console](https://pay.google.com/business/console) before you can accept live payments. This is separate from VINR account approval — both are required. Hosted checkout, Elements, and payment link integrations are exempt; VINR's existing merchant registration covers them.
 
 ## Common issues
 
 | Symptom | Likely cause |
 |---|---|
 | Google Pay button does not appear | `isReadyToPay` returned false — check the browser console; in production, the domain may not be allowlisted |
-| Payment fails in production with `invalid_token` | `environment` still set to `TEST`, or account not yet approved for live payments — contact your VINR account manager |
-| PAN_ONLY payment shows unexpected `requires_action` | Expected — VINR's 3DS step-up triggered; ensure your integration handles this state |
+| Payment fails in production with `invalid_token` | `environment` still set to `TEST`, `merchantInfo.merchantId` / `gatewayMerchantId` mixed up, or account not yet approved for live payments — contact your VINR account manager |
+| PAN_ONLY payment returns `nextAction.type: "challenge"` | Expected — VINR's 3DS step-up triggered; complete the challenge like any 3DS card payment |
 | Button rejected by Google review | Button style does not follow Google Pay brand guidelines |
 | `allowedAuthMethods` mismatch error | Your code specifies a method your VINR account is not configured for — confirm with your account manager |
 

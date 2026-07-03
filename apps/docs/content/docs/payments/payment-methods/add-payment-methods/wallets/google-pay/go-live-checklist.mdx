@@ -2,7 +2,7 @@
 title: Go-live checklist
 description: Verify your Google Pay™ integration before accepting live payments on VINR.
 priority: P1
-lastUpdated: "2026-06-29"
+lastUpdated: "2026-07-01"
 ---
 
 Use this checklist before switching your integration to the `PRODUCTION` environment. Walk through each section — missing any item is a common reason for live payments to silently fail.
@@ -11,10 +11,10 @@ Use this checklist before switching your integration to the `PRODUCTION` environ
 
 ## 1. Account and registration
 
-- [ ] **Google Pay enabled in Dashboard.** In **Settings → Payment methods**, confirm Google Pay is toggled on for your VINR account. Required before Google Pay tokens are accepted in production.
+- [ ] **Google Pay™ enabled in Dashboard.** In **Settings → Payment methods**, confirm Google Pay is toggled on for your VINR account. Required before Google Pay tokens are accepted in production.
 - [ ] **Account approved for live payments.** Confirm with your VINR account manager that your account has been approved for production Google Pay payments. VINR handles Google merchant registration on your behalf.
-- [ ] **Direct API: integration submitted to Google for review.** If you are using the direct Google Pay JS API integration, [publish your integration](https://developers.google.com/pay/api/web/guides/test-and-deploy/deploy-your-integration) via the Google Pay & Wallet Console before going live. This is required in addition to VINR account approval. Hosted checkout, Elements, and payment link integrations are exempt — VINR's existing merchant registration covers them.
-- [ ] **Merchant IDs populated in your integration.** Confirm both IDs are set correctly in your `paymentDataRequest`: `merchantInfo.merchantId` (your Google merchant ID, available in the VINR Dashboard under **Settings → Payment methods → Google Pay**) and `tokenizationSpecification.parameters.gatewayMerchantId` (your VINR merchant ID). Mixing these up is the most common cause of `invalid_token` errors in production.
+- [ ] **Direct API: production access requested from Google.** If you are using the direct Google Pay JS API integration, [request production access](https://developers.google.com/pay/api/web/guides/test-and-deploy/request-prod-access) via the [Google Pay & Wallet Console](https://pay.google.com/business/console) before going live. This is required in addition to VINR account approval. Hosted checkout, Elements, and payment link integrations are exempt — VINR's existing merchant registration covers them.
+- [ ] **Merchant IDs populated in your integration.** Confirm both IDs are set correctly in your `paymentDataRequest`: `merchantInfo.merchantId` (your Google-assigned merchant ID — VINR provisions this for you during onboarding and it is available in the VINR Dashboard; required only in `PRODUCTION`) and `tokenizationSpecification.parameters.gatewayMerchantId` (your VINR account ID — not your API key). Mixing these up is the most common cause of `invalid_token` errors in production. See [Tokenization specification](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup#tokenization-specification).
 
 ---
 
@@ -27,7 +27,7 @@ Use this checklist before switching your integration to the `PRODUCTION` environ
 
 ## 3. Environment switch
 
-- [ ] **`PaymentsClient` set to `PRODUCTION`.** For direct API integrations, update the `PaymentsClient` constructor to `environment: 'PRODUCTION'`. For Elements and hosted checkout, no code change is needed — switch to your production publishable key and VINR handles the environment automatically.
+- [ ] **`PaymentsClient` set to `PRODUCTION`.** For direct API integrations, update the `PaymentsClient` constructor to `environment: 'PRODUCTION'`. For Elements and hosted checkout, no code change is needed — once your VINR account is approved for live payments and you are operating in your production VINR account, VINR handles the environment switch automatically.
 
 ---
 
@@ -44,7 +44,7 @@ Use this checklist before switching your integration to the `PRODUCTION` environ
 
 - [ ] **`loadPaymentData()` called synchronously in the click handler.** Call `loadPaymentData()` directly inside the button's click handler — not after an `await` or inside a `.then()`. Deferring the call breaks user-activation and causes pop-up blockers to intercept the payment sheet in most browsers. See [Set up Google Pay](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/setup).
 - [ ] **Final price confirmed before processing.** The customer must see the final order total before the payment is submitted. If the amount changes based on data returned from the Google Pay sheet (for example, shipping cost derived from the shipping address), show a confirmation step with the final price before calling your server-side payment creation endpoint.
-- [ ] **`PAN_ONLY` `requires_action` handled.** PAN_ONLY transactions enter `requires_action` when VINR's 3DS step-up triggers. Elements and hosted checkout handle this automatically. For direct API integrations, confirm your server handles `requires_action` identically to any 3DS card payment. See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) and [Strong Customer Authentication](/docs/payments/strong-customer-authentication).
+- [ ] **`PAN_ONLY` 3DS challenge handled.** PAN_ONLY transactions return `nextAction.type === "challenge"` when VINR's 3DS step-up triggers. Elements and hosted checkout handle this automatically. For direct API integrations, confirm your server completes the challenge and confirms the payment, identically to any 3DS card payment. See [Authentication methods](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/authentication-methods) and [Strong Customer Authentication](/docs/payments/strong-customer-authentication).
 
 ---
 
@@ -61,10 +61,9 @@ Use this checklist before switching your integration to the `PRODUCTION` environ
 
 ---
 
-## 8. Dynamic checkout updates (if applicable)
+## 8. Dynamic checkout updates
 
-- [ ] **`callbackIntents` matches your callback implementations.** Every intent listed in `callbackIntents` must have a corresponding handler in `paymentDataCallbacks`. Declaring an intent without a handler causes the payment sheet to stall indefinitely.
-- [ ] **All callbacks resolve promptly.** Add timeouts to any network calls made inside callbacks — a callback that hangs will freeze the payment sheet for the customer. See [Dynamic updates](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/dynamic-updates).
+- [ ] **No Google Pay dynamic-update callbacks.** VINR does not support Google Pay's callback-based dynamic price, shipping, or offer updates (`onPaymentDataChanged`). No action is needed here for standard integrations. If your checkout relies on real-time shipping or promo-code recalculation inside the Google Pay sheet, contact your VINR account manager before going live — see [Dynamic checkout updates](/docs/payments/payment-methods/add-payment-methods/wallets/google-pay/dynamic-updates).
 
 ---
 
